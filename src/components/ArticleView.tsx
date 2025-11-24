@@ -88,12 +88,19 @@ export default function ArticleView({ article, settings, onClose, onDelete }: Ar
                 // Open summary window with the new summary
                 const ipcRenderer = (window as any).ipcRenderer;
                 if (ipcRenderer) {
-                    await ipcRenderer.invoke('create-summary-window', {
+                    console.log('ArticleView: Creating summary window with data:', {
+                        summaryLength: result.length,
+                        articleTitle: article.title,
+                        articleId: article.id,
+                        theme: settings.theme
+                    });
+                    const response = await ipcRenderer.invoke('create-summary-window', {
                         summary: result,
                         articleTitle: article.title,
                         articleId: article.id,
                         theme: settings.theme // Pass current theme
                     });
+                    console.log('ArticleView: Summary window creation response:', response);
                 }
             } else {
                 // Show inline summary

@@ -214,12 +214,15 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
     // Load the summary page
     if (VITE_DEV_SERVER_URL) {
       await summaryWindow.loadURL(`${VITE_DEV_SERVER_URL}#/summary/${articleId}?theme=${theme}`);
+      summaryWindow.webContents.openDevTools(); // Open DevTools for debugging
     } else {
       const indexPath = app.isPackaged
         ? path.join(process.resourcesPath, 'app.asar', 'dist', 'index.html')
         : path.join(__dirname, '../dist/index.html');
       await summaryWindow.loadFile(indexPath, { hash: `/summary/${articleId}?theme=${theme}` });
+      summaryWindow.webContents.openDevTools(); // Open DevTools for debugging
     }
+
 
     // Send data immediately after page loads
     summaryWindow.webContents.on('did-finish-load', () => {
