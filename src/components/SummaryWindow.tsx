@@ -47,11 +47,13 @@ export default function SummaryWindow() {
 
         console.log('SummaryWindow: Article ID from hash:', articleId);
 
-        // Listen for summary updates from main process
+        // Listen for summary updates from main process (legacy method)
         if (ipcRenderer) {
             console.log('SummaryWindow: IPC renderer found, registering listener');
+
+            // Method 1: Listen for push updates
             ipcRenderer.on('update-summary', (_event: any, data: SummaryData) => {
-                console.log('SummaryWindow: Received summary update:', data);
+                console.log('SummaryWindow: Received summary update via send:', data);
                 setSummaryData(data);
 
                 // Apply theme if provided (update it)
@@ -62,22 +64,58 @@ export default function SummaryWindow() {
                 }
             });
 
-            // Initial request for data
+            // Method 2: Pull data using invoke (more reliable)
+            const fetchData = async () => {
+                try {
+                    console.log('SummaryWindow: Fetching data via invoke for article:', articleId);
+                    const result = await ipcRenderer.invoke('get-summary-data', articleId);
+
+                    if (result.success && result.data) {
+                        console.log('SummaryWindow: Successfully fetched data via invoke');
+                        setSummaryData(result.data);
+
+                        if (result.data.theme) {
+                            document.documentElement.setAttribute('data-theme', result.data.theme);
+                            setDebugInfo(prev => `${prev}, InvokeTheme: ${result.data.theme}`);
+                        }
+                    } else {
+                        console.log('SummaryWindow: No data available yet, will retry');
+                    }
+                } catch (error) {
+                    console.error('SummaryWindow: Error fetching data:', error);
+                }
+            };
+
+            // Try to fetch immediately
+            fetchData();
+
+            // Also send ready signal (legacy method)
             console.log('SummaryWindow: Sending ready signal to main process for article:', articleId);
             ipcRenderer.send('summary-window-ready', articleId);
 
-            // Retry mechanism: if data doesn't arrive in 1s, ask again
+            // Retry mechanism: if data doesn't arrive, keep trying
+            let retryCount = 0;
+            const maxRetries = 10;
             const retryInterval = setInterval(() => {
-                if (!summaryData) {
-                    console.log('SummaryWindow: Retrying data request for article:', articleId);
+                if (!summaryData && retryCount < maxRetries) {
+                    console.log(`SummaryWindow: Retry ${retryCount + 1}/${maxRetries} - fetching data`);
+                    fetchData();
                     ipcRenderer.send('summary-window-ready', articleId);
+                    retryCount++;
                 } else {
                     clearInterval(retryInterval);
+                    if (retryCount >= maxRetries && !summaryData) {
+                        console.error('SummaryWindow: Failed to load data after max retries');
+                    }
                 }
-            }, 1000);
+            }, 500);
 
-            // Clear interval after 5 seconds to stop retrying
-            setTimeout(() => clearInterval(retryInterval), 5000);
+            // Clear interval after timeout
+            setTimeout(() => clearInterval(retryInterval), 6000);
+
+            return () => {
+                clearInterval(retryInterval);
+            };
         } else {
             console.error('SummaryWindow: IPC renderer not available!');
         }

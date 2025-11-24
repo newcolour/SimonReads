@@ -118,11 +118,27 @@ ipcMain.handle('send-daily-email', async (event, { articles, emailSettings, appS
   }
 });
 
+
 // Track multiple summary windows by article ID
 const summaryWindows = new Map<string, BrowserWindow>();
 const pendingSummaryData = new Map<string, { summary: string; articleTitle: string; articleId: string; theme: string }>();
 
-// Listen for ready signal from summary window
+// Handle request for summary data (invoke/handle pattern - more reliable)
+ipcMain.handle('get-summary-data', async (event, articleId: string) => {
+  console.log('Main: Received get-summary-data request for article:', articleId);
+  const data = pendingSummaryData.get(articleId);
+
+  if (data) {
+    console.log('Main: Returning summary data for article:', articleId);
+    // Don't delete yet - window might request again
+    return { success: true, data };
+  } else {
+    console.log('Main: No pending data found for article:', articleId);
+    return { success: false, error: 'No data available' };
+  }
+});
+
+// Legacy listener for backward compatibility
 ipcMain.on('summary-window-ready', (event, articleId: string) => {
   console.log('Main: Received ready signal from summary window for article:', articleId);
   const data = pendingSummaryData.get(articleId);
@@ -131,7 +147,6 @@ ipcMain.on('summary-window-ready', (event, articleId: string) => {
   if (data && window && !window.isDestroyed()) {
     console.log('Main: Sending pending summary data immediately for article:', articleId);
     window.webContents.send('update-summary', data);
-    pendingSummaryData.delete(articleId); // Clear after sending
   }
 });
 
@@ -149,6 +164,7 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
     // Store the data for when window is ready
     const data = { summary, articleTitle, articleId, theme };
     pendingSummaryData.set(articleId, data);
+    console.log('Main: Stored pending summary data for article:', articleId);
 
     // Check if window for this article already exists
     const existingWindow = summaryWindows.get(articleId);
@@ -156,7 +172,6 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
       console.log('Main: Summary window for this article already exists, focusing');
       existingWindow.focus();
       existingWindow.webContents.send('update-summary', data);
-      pendingSummaryData.delete(articleId);
       return { success: true };
     }
 
@@ -206,6 +221,21 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
       await summaryWindow.loadFile(indexPath, { hash: `/summary/${articleId}?theme=${theme}` });
     }
 
+    // Send data immediately after page loads
+    summaryWindow.webContents.on('did-finish-load', () => {
+      console.log('Main: Summary window finished loading for article:', articleId);
+      const currentData = pendingSummaryData.get(articleId);
+      if (currentData) {
+        console.log('Main: Sending summary data via did-finish-load');
+        // Wait a bit for React to mount
+        setTimeout(() => {
+          if (!summaryWindow.isDestroyed()) {
+            summaryWindow.webContents.send('update-summary', currentData);
+          }
+        }, 100);
+      }
+    });
+
     // Also send via dom-ready as a fallback
     summaryWindow.webContents.on('dom-ready', () => {
       console.log('Main: Summary window DOM ready for article:', articleId);
@@ -215,8 +245,6 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
         if (currentWindow && !currentWindow.isDestroyed() && currentData) {
           console.log('Main: Sending summary data via dom-ready fallback for article:', articleId);
           currentWindow.webContents.send('update-summary', currentData);
-          // Do NOT delete pending data here - wait for explicit ready signal
-          // pendingSummaryData.delete(articleId);
         }
       }, 300);
     });
