@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
-import { Article, AppSettings } from './types';
-import { summarizeArticle } from './summaryService';
-import { generateNewspaperPDF } from './pdfService';
+import { Article, AppSettings } from '../src/types';
+import { summarizeArticle } from '../src/summaryService';
+import { generateNewspaperPDF } from '../src/pdfService';
 import * as fs from 'fs';
 import * as path from 'path';
 

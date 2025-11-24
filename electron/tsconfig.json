@@ -3,7 +3,7 @@
         "target": "ESNext",
         "module": "commonjs",
         "outDir": "../dist-electron",
-        "rootDir": ".",
+        "rootDir": "..",
         "strict": true,
         "esModuleInterop": true,
         "moduleResolution": "node"
@@ -12,6 +12,10 @@
         "main.ts",
         "preload.ts",
         "emailScheduler.ts",
-        "emailService.ts"
+        "emailService.ts",
+        "../src/types.ts",
+        "../src/summaryService.ts",
+        "../src/pdfService.ts",
+        "../src/aiService.js"
     ]
 }
