@@ -17,7 +17,7 @@ export default function SummaryWindow() {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const isReadingAloudRef = useRef(false);
 
-    const [debugInfo, setDebugInfo] = useState<string>('');
+
 
     // Use useLayoutEffect to apply theme before painting
     useLayoutEffect(() => {
@@ -32,7 +32,6 @@ export default function SummaryWindow() {
 
         console.log('SummaryWindow: Applying theme from URL:', theme);
         document.documentElement.setAttribute('data-theme', theme);
-        setDebugInfo(`Theme: ${theme}, ID: ${idPart.split('?')[0]}`);
     }, []);
 
     useEffect(() => {
@@ -60,7 +59,6 @@ export default function SummaryWindow() {
                 if (data.theme) {
                     console.log('SummaryWindow: Applying theme from data:', data.theme);
                     document.documentElement.setAttribute('data-theme', data.theme);
-                    setDebugInfo(prev => `${prev}, DataTheme: ${data.theme}`);
                 }
             });
 
@@ -76,7 +74,6 @@ export default function SummaryWindow() {
 
                         if (result.data.theme) {
                             document.documentElement.setAttribute('data-theme', result.data.theme);
-                            setDebugInfo(prev => `${prev}, InvokeTheme: ${result.data.theme}`);
                         }
                     } else {
                         console.log('SummaryWindow: No data available yet, will retry');
@@ -178,19 +175,7 @@ export default function SummaryWindow() {
                     <Loader size={32} className="spin" />
                     <p>Loading summary...</p>
                 </div>
-                {/* Debug Info Overlay for loading state */}
-                <div style={{
-                    position: 'fixed',
-                    bottom: 0,
-                    right: 0,
-                    padding: '4px',
-                    fontSize: '10px',
-                    opacity: 0.5,
-                    pointerEvents: 'none',
-                    color: 'var(--text-muted)'
-                }}>
-                    {debugInfo}
-                </div>
+
             </div>
         );
     }
@@ -235,19 +220,7 @@ export default function SummaryWindow() {
                 </ReactMarkdown>
             </div>
 
-            {/* Debug Info Overlay */}
-            <div style={{
-                position: 'fixed',
-                bottom: 0,
-                right: 0,
-                padding: '4px',
-                fontSize: '10px',
-                opacity: 0.5,
-                pointerEvents: 'none',
-                color: 'var(--text-muted)'
-            }}>
-                {debugInfo}
-            </div>
+
         </div>
     );
 }
