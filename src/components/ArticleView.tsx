@@ -55,13 +55,33 @@ export default function ArticleView({ article, settings, onClose, onDelete }: Ar
             if (summaryMode === 'popup') {
                 // Open popup window
                 const ipcRenderer = (window as any).ipcRenderer;
+                console.log('ArticleView: Opening existing summary in popup, ipcRenderer available:', !!ipcRenderer);
+
                 if (ipcRenderer) {
-                    await ipcRenderer.invoke('create-summary-window', {
-                        summary,
-                        articleTitle: article.title,
-                        articleId: article.id,
-                        theme: settings.theme // Pass current theme
-                    });
+                    try {
+                        console.log('ArticleView: Creating summary window with existing summary:', {
+                            summaryLength: summary.length,
+                            articleTitle: article.title,
+                            articleId: article.id,
+                            theme: settings.theme
+                        });
+                        const response = await ipcRenderer.invoke('create-summary-window', {
+                            summary,
+                            articleTitle: article.title,
+                            articleId: article.id,
+                            theme: settings.theme
+                        });
+                        console.log('ArticleView: Summary window creation response:', response);
+
+                        if (!response || !response.success) {
+                            alert('Failed to create summary window: ' + (response?.error || 'Unknown error'));
+                        }
+                    } catch (error: any) {
+                        console.error('ArticleView: Error creating summary window:', error);
+                        alert('Error creating summary window: ' + error.message);
+                    }
+                } else {
+                    alert('Summary window not available. IPC renderer not found. Try inline mode instead (right-click the summarize button).');
                 }
             } else {
                 // Toggle inline summary
@@ -87,20 +107,33 @@ export default function ArticleView({ article, settings, onClose, onDelete }: Ar
             if (summaryMode === 'popup') {
                 // Open summary window with the new summary
                 const ipcRenderer = (window as any).ipcRenderer;
+                console.log('ArticleView: Opening new summary in popup, ipcRenderer available:', !!ipcRenderer);
+
                 if (ipcRenderer) {
-                    console.log('ArticleView: Creating summary window with data:', {
-                        summaryLength: result.length,
-                        articleTitle: article.title,
-                        articleId: article.id,
-                        theme: settings.theme
-                    });
-                    const response = await ipcRenderer.invoke('create-summary-window', {
-                        summary: result,
-                        articleTitle: article.title,
-                        articleId: article.id,
-                        theme: settings.theme // Pass current theme
-                    });
-                    console.log('ArticleView: Summary window creation response:', response);
+                    try {
+                        console.log('ArticleView: Creating summary window with data:', {
+                            summaryLength: result.length,
+                            articleTitle: article.title,
+                            articleId: article.id,
+                            theme: settings.theme
+                        });
+                        const response = await ipcRenderer.invoke('create-summary-window', {
+                            summary: result,
+                            articleTitle: article.title,
+                            articleId: article.id,
+                            theme: settings.theme
+                        });
+                        console.log('ArticleView: Summary window creation response:', response);
+
+                        if (!response || !response.success) {
+                            alert('Failed to create summary window: ' + (response?.error || 'Unknown error'));
+                        }
+                    } catch (error: any) {
+                        console.error('ArticleView: Error creating summary window:', error);
+                        alert('Error creating summary window: ' + error.message);
+                    }
+                } else {
+                    alert('Summary window not available. IPC renderer not found. Try inline mode instead (right-click the summarize button).');
                 }
             } else {
                 // Show inline summary
