@@ -109,7 +109,7 @@ ipcMain.handle('send-daily-email', async (event, { articles, emailSettings, appS
   try {
     // Use require instead of dynamic import to avoid TypeScript rootDir issues
     // The emailService will be bundled and available at runtime
-    const emailService = require('../dist/emailService');
+    const emailService = require('./emailService');
     await emailService.sendDailyNewsreelEmail(articles, emailSettings, appSettings);
     return { success: true };
   } catch (error) {
@@ -233,7 +233,7 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
 
 ipcMain.handle('test-email-connection', async (event, emailSettings) => {
   try {
-    const emailService = require('../dist/emailService');
+    const emailService = require('./emailService');
     const result = await emailService.testEmailConnection(emailSettings);
     return { success: result };
   } catch (error) {

@@ -11,6 +11,7 @@
     "include": [
         "main.ts",
         "preload.ts",
-        "emailScheduler.ts"
+        "emailScheduler.ts",
+        "emailService.ts"
     ]
 }
