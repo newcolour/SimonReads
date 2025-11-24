@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from 'date-fns';
+import { Headphones, Video } from 'lucide-react';
 import { Article } from '../types';
 import './ArticleList.css';
 
@@ -40,14 +41,29 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                         >
                             {!article.isRead && <div className="unread-marker"></div>}
                             {selectedArticleIds.has(article.id) && <div className="multi-select-marker">✓</div>}
-                            <h4 className="article-title">{article.title}</h4>
+                            <h4 className="article-title">
+                                {article.mediaType === 'audio' && (
+                                    <span className="media-badge audio" title="Audio Podcast">
+                                        <Headphones size={14} />
+                                    </span>
+                                )}
+                                {article.mediaType === 'video' && (
+                                    <span className="media-badge video" title="Video Podcast">
+                                        <Video size={14} />
+                                    </span>
+                                )}
+                                {article.title}
+                            </h4>
                             <div className="article-meta">
                                 {article.creator && (
                                     <span className="article-creator">{article.creator}</span>
                                 )}
+                                {article.duration && (
+                                    <span className="article-duration">• {article.duration}</span>
+                                )}
                                 {article.pubDate && (
                                     <span className="article-date">
-                                        {formatDistanceToNow(article.pubDate, { addSuffix: true })}
+                                        {article.duration ? '• ' : ''}{formatDistanceToNow(article.pubDate, { addSuffix: true })}
                                     </span>
                                 )}
                             </div>

@@ -115,6 +115,40 @@ function parseRSSFeed(xml: Document, feedId: string): Article[] {
         // Ensure ID is unique per feed by prefixing with feedId if using raw GUID
         const guid = guidContent ? `${feedId}-${guidContent}` : fallbackId;
 
+        // Podcast/Media support: Extract enclosure (audio/video)
+        const enclosureElement = item.querySelector('enclosure');
+        let enclosure = undefined;
+        let mediaType: 'article' | 'audio' | 'video' = 'article';
+
+        if (enclosureElement) {
+            const enclosureUrl = enclosureElement.getAttribute('url');
+            const enclosureType = enclosureElement.getAttribute('type');
+            const enclosureLength = enclosureElement.getAttribute('length');
+
+            if (enclosureUrl && enclosureType) {
+                enclosure = {
+                    url: enclosureUrl,
+                    type: enclosureType,
+                    length: enclosureLength ? parseInt(enclosureLength) : undefined
+                };
+
+                // Determine media type from MIME type
+                if (enclosureType.startsWith('audio/')) {
+                    mediaType = 'audio';
+                } else if (enclosureType.startsWith('video/')) {
+                    mediaType = 'video';
+                }
+            }
+        }
+
+        // Extract iTunes duration (common in podcasts)
+        const duration = item.querySelector('duration')?.textContent ||
+            item.getElementsByTagNameNS('http://www.itunes.com/dtds/podcast-1.0.dtd', 'duration')[0]?.textContent;
+
+        // Extract episode artwork (iTunes image)
+        const itunesImage = item.getElementsByTagNameNS('http://www.itunes.com/dtds/podcast-1.0.dtd', 'image')[0]?.getAttribute('href');
+        const image = itunesImage || undefined;
+
         articles.push({
             id: guid,
             feedId,
@@ -126,6 +160,11 @@ function parseRSSFeed(xml: Document, feedId: string): Article[] {
             contentSnippet: description?.replace(/<[^>]*>/g, '').slice(0, 200),
             guid: guidContent || fallbackId, // Keep original GUID for reference if needed
             isRead: false,
+            // Podcast fields
+            mediaType,
+            enclosure,
+            duration,
+            image
         });
     });
 

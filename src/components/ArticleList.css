@@ -145,3 +145,28 @@
     font-size: 14px;
     font-weight: bold;
 }
+
+.media-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+    padding: 4px;
+    border-radius: 4px;
+    vertical-align: middle;
+}
+
+.media-badge.audio {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.media-badge.video {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.article-duration {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+}

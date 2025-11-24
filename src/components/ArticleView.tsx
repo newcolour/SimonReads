@@ -6,6 +6,7 @@ import DOMPurify from 'dompurify';
 import { Article, AppSettings } from '../types';
 import { summarizeArticle } from '../summaryService';
 import Chat from './Chat';
+import PodcastPlayer from './PodcastPlayer';
 import './ArticleView.css';
 
 interface ArticleViewProps {
@@ -281,6 +282,17 @@ export default function ArticleView({ article, settings, onClose, onDelete }: Ar
                             )}
 
                             <div className="title-divider"></div>
+
+                            {/* Podcast Player - show if article has audio/video enclosure */}
+                            {article.enclosure && article.mediaType && article.mediaType !== 'article' && (
+                                <PodcastPlayer
+                                    url={article.enclosure.url}
+                                    type={article.mediaType}
+                                    title={article.title}
+                                    duration={article.duration}
+                                    artwork={article.image}
+                                />
+                            )}
 
                             {sanitizedContent ? (
                                 <div

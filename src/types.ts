@@ -6,6 +6,14 @@ export interface Feed {
     lastFetched?: Date;
 }
 
+export interface MediaEnclosure {
+    url: string;
+    type: string; // MIME type (e.g., 'audio/mpeg', 'video/mp4')
+    length?: number; // File size in bytes
+}
+
+export type MediaType = 'article' | 'audio' | 'video';
+
 export interface Article {
     id: string;
     feedId: string;
@@ -18,6 +26,11 @@ export interface Article {
     guid?: string;
     isoDate?: string;
     isRead: boolean;
+    // Podcast/Media support
+    mediaType?: MediaType; // Type of content
+    enclosure?: MediaEnclosure; // Audio/video file
+    duration?: string; // Episode duration (e.g., "1:23:45")
+    image?: string; // Episode artwork URL
 }
 
 export type Theme = 'dark' | 'light' | 'sepia' | 'black';
