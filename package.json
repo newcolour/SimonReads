@@ -9,7 +9,7 @@
     "name": "Simone Bianco",
     "email": "simone@example.com"
   },
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && ./build-electron.sh && vite build && electron-builder --mac --arm64",
