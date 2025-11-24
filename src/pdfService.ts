@@ -15,11 +15,24 @@ export async function generateNewspaperPDF(
     settings: AppSettings
 ): Promise<void> {
     try {
+        // Validate inputs
+        if (!articles || articles.length === 0) {
+            throw new Error('No articles provided for PDF generation');
+        }
+
+        console.log(`Starting PDF generation for ${articles.length} articles`);
+
         // Step 1: Rank articles by importance
         const rankedArticles = await rankArticlesByImportance(articles, settings);
+        console.log(`Ranked ${rankedArticles.length} articles`);
+
+        if (rankedArticles.length === 0) {
+            throw new Error('No articles could be ranked');
+        }
 
         // Step 2: Extract images from articles
         await extractArticleImages(rankedArticles);
+        console.log('Images extracted');
 
         // Step 3: Small delay to ensure images are fully loaded
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -59,14 +72,23 @@ export async function generateNewspaperPDF(
 
         // Layout articles in newspaper style (NYT-inspired)
         const targetLanguage = settings.summaryLanguage || 'English';
+        console.log('Starting layout generation...');
         yPosition = await layoutNewspaperArticles(pdf, rankedArticles, margin, contentWidth, yPosition, pageHeight, targetLanguage);
+        console.log('Layout complete');
 
         // Save the PDF
         const filename = `SimonDailyNews_${today.toISOString().split('T')[0]}.pdf`;
+        console.log(`Saving PDF as ${filename}`);
         pdf.save(filename);
+        console.log('PDF generation complete');
     } catch (error) {
         console.error('PDF generation failed:', error);
-        throw new Error(`Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // Provide more specific error message
+        if (error instanceof Error) {
+            throw new Error(`PDF generation failed: ${error.message}`);
+        } else {
+            throw new Error('PDF generation failed due to an unknown error');
+        }
     }
 }
 

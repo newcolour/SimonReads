@@ -37,7 +37,10 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
     }, []);
 
     useEffect(() => {
-        generateNewsreel();
+        // Don't regenerate if we're exporting a PDF - prevent race conditions
+        if (!isExportingPdf) {
+            generateNewsreel();
+        }
     }, [articles]);
 
     const generateNewsreel = async () => {
@@ -337,11 +340,16 @@ This topic-based approach allows for richer summaries than individual article su
         if (!summary || !isDailyNewsreel) return;
 
         setIsExportingPdf(true);
+
+        // Create a stable copy of articles to prevent race conditions
+        // if the articles array is modified during export
+        const articlesCopy = [...articles];
+
         try {
-            await generateNewspaperPDF(articles, settings);
+            await generateNewspaperPDF(articlesCopy, settings);
         } catch (error) {
             console.error('PDF export failed:', error);
-            alert('Failed to export PDF. Please try again.');
+            alert(`Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
         } finally {
             setIsExportingPdf(false);
         }
