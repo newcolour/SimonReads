@@ -183,6 +183,13 @@ async function addTopStory(
     pageHeight: number
 ): Promise<number> {
     const article = ranked.article;
+
+    // Validate that article exists
+    if (!article) {
+        console.error('Article is undefined in ranked data, skipping');
+        return yPosition;
+    }
+
     let currentY = yPosition;
 
     // Check if we need a new page before starting
@@ -323,6 +330,13 @@ async function addRegularArticle(
     pageHeight: number
 ): Promise<number> {
     const article = ranked.article;
+
+    // Validate that article exists
+    if (!article) {
+        console.error('Article is undefined in ranked data, skipping');
+        return 0;
+    }
+
     let localY = yPosition;
     const bottomMargin = 20;
 
@@ -498,13 +512,47 @@ Respond in JSON format:
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             const result = JSON.parse(jsonMatch ? jsonMatch[0] : '{}');
 
-            return result.rankings.map((r: any) => ({
-                article: articles[r.index],
-                importance: r.importance,
-                summary: r.summary,
-                translatedTitle: r.translatedTitle,
-                language: r.language
-            })).sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
+            if (!result.rankings || !Array.isArray(result.rankings)) {
+                console.error('Invalid AI response format, using fallback');
+                throw new Error('Invalid AI response');
+            }
+
+            // Filter and validate rankings
+            const validRankings = result.rankings
+                .filter((r: any) => {
+                    // Validate that index is valid
+                    if (typeof r.index !== 'number' || r.index < 0 || r.index >= articles.length) {
+                        console.warn(`Invalid article index ${r.index}, skipping`);
+                        return false;
+                    }
+                    // Validate that article exists
+                    if (!articles[r.index]) {
+                        console.warn(`Article at index ${r.index} is undefined, skipping`);
+                        return false;
+                    }
+                    // Validate required fields
+                    if (!r.summary || !r.importance) {
+                        console.warn(`Missing required fields for article ${r.index}, skipping`);
+                        return false;
+                    }
+                    return true;
+                })
+                .map((r: any) => ({
+                    article: articles[r.index],
+                    importance: r.importance,
+                    summary: r.summary,
+                    translatedTitle: r.translatedTitle || articles[r.index].title,
+                    language: r.language
+                }))
+                .sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
+
+            if (validRankings.length === 0) {
+                console.error('No valid rankings from AI, using fallback');
+                throw new Error('No valid rankings');
+            }
+
+            console.log(`AI ranked ${validRankings.length} out of ${articles.length} articles`);
+            return validRankings;
         } else if (provider === 'openai') {
             const model = settings.openaiModel || 'gpt-4o-mini';
             response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -522,13 +570,44 @@ Respond in JSON format:
             const data = await response.json();
             const result = JSON.parse(data.choices?.[0]?.message?.content || '{}');
 
-            return result.rankings.map((r: any) => ({
-                article: articles[r.index],
-                importance: r.importance,
-                summary: r.summary,
-                translatedTitle: r.translatedTitle,
-                language: r.language
-            })).sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
+            if (!result.rankings || !Array.isArray(result.rankings)) {
+                console.error('Invalid OpenAI response format, using fallback');
+                throw new Error('Invalid AI response');
+            }
+
+            // Filter and validate rankings
+            const validRankings = result.rankings
+                .filter((r: any) => {
+                    if (typeof r.index !== 'number' || r.index < 0 || r.index >= articles.length) {
+                        console.warn(`Invalid article index ${r.index}, skipping`);
+                        return false;
+                    }
+                    if (!articles[r.index]) {
+                        console.warn(`Article at index ${r.index} is undefined, skipping`);
+                        return false;
+                    }
+                    if (!r.summary || !r.importance) {
+                        console.warn(`Missing required fields for article ${r.index}, skipping`);
+                        return false;
+                    }
+                    return true;
+                })
+                .map((r: any) => ({
+                    article: articles[r.index],
+                    importance: r.importance,
+                    summary: r.summary,
+                    translatedTitle: r.translatedTitle || articles[r.index].title,
+                    language: r.language
+                }))
+                .sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
+
+            if (validRankings.length === 0) {
+                console.error('No valid rankings from OpenAI, using fallback');
+                throw new Error('No valid rankings');
+            }
+
+            console.log(`OpenAI ranked ${validRankings.length} out of ${articles.length} articles`);
+            return validRankings;
         }
     } catch (error) {
         console.error('AI ranking failed, using fallback:', error);
