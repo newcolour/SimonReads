@@ -43,7 +43,7 @@ export default function SummaryWindow() {
         // Extract article ID
         const hash = window.location.hash;
         const idPart = hash.split('/')[2] || 'unknown';
-        const articleId = idPart.split('?')[0];
+        const articleId = decodeURIComponent(idPart.split('?')[0]);
 
         console.log('SummaryWindow: Article ID from hash:', articleId);
 
