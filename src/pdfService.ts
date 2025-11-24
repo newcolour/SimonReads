@@ -5,6 +5,7 @@ interface RankedArticle {
     article: Article;
     importance: number;
     summary: string;
+    translatedTitle?: string;
     imageUrl?: string;
     language?: string;
 }
@@ -168,12 +169,13 @@ async function addTopStory(
         currentY = 20;
     }
 
-    // Title (large, bold, NYT-style, Serif)
+    // Title (use translated title if available, otherwise original)
     pdf.setFont('times', 'bold');
-    pdf.setFontSize(22); // Slightly larger for serif
+    pdf.setFontSize(22);
     pdf.setTextColor(0, 0, 0);
 
-    const titleLines = pdf.splitTextToSize(article.title, contentWidth);
+    const displayTitle = ranked.translatedTitle || article.title;
+    const titleLines = pdf.splitTextToSize(displayTitle, contentWidth);
 
     // Make title clickable
     const titleHeight = titleLines.length * 9;
@@ -184,28 +186,26 @@ async function addTopStory(
 
     // Language indicator (if different from target)
     if (ranked.language && ranked.language.toLowerCase() !== targetLanguage.toLowerCase()) {
-        pdf.setFont('helvetica', 'italic'); // Keep metadata sans-serif
+        pdf.setFont('helvetica', 'italic');
         pdf.setFontSize(9);
         pdf.setTextColor(100, 100, 100);
-        pdf.text(`(original article in ${ranked.language})`, margin, currentY);
+        pdf.text(`(Translated from ${ranked.language})`, margin, currentY);
         currentY += 5;
     }
 
-    // Embed actual image if available with aspect ratio preservation
+    // Embed actual image if available
     if (ranked.imageUrl) {
         try {
-            // Get image dimensions to preserve aspect ratio
             const img = new Image();
-            img.crossOrigin = 'anonymous'; // Enable CORS
+            img.crossOrigin = 'anonymous';
             img.src = ranked.imageUrl;
 
-            // Wait for image to load with timeout
             const imageLoaded = await Promise.race([
                 new Promise<boolean>((resolve) => {
                     img.onload = () => resolve(true);
                     img.onerror = () => resolve(false);
                 }),
-                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)) // 3 second timeout
+                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000))
             ]);
 
             if (imageLoaded && img.width && img.height && img.complete) {
@@ -216,7 +216,6 @@ async function addTopStory(
                 let imageWidth = maxWidth;
                 let imageHeight = maxWidth / aspectRatio;
 
-                // If height exceeds max, scale down
                 if (imageHeight > maxHeight) {
                     imageHeight = maxHeight;
                     imageWidth = maxHeight * aspectRatio;
@@ -228,16 +227,14 @@ async function addTopStory(
                     currentY = 20;
                 }
 
-                // Center image if it's narrower than max width
                 const xOffset = margin + (maxWidth - imageWidth) / 2;
 
-                // Try to add image, catch any jsPDF errors
                 try {
                     pdf.addImage(ranked.imageUrl, 'JPEG', xOffset, currentY, imageWidth, imageHeight);
                     currentY += imageHeight + 5;
 
                     // Image caption
-                    pdf.setFont('helvetica', 'italic'); // Metadata sans-serif
+                    pdf.setFont('helvetica', 'italic');
                     pdf.setFontSize(8);
                     pdf.setTextColor(120, 120, 120);
                     const caption = `Source: ${new URL(article.link).hostname}`;
@@ -245,39 +242,35 @@ async function addTopStory(
                     currentY += 5;
                 } catch (pdfError) {
                     console.error('Failed to add image to PDF:', pdfError);
-                    // Continue without image
                 }
-            } else {
-                console.log('Image failed to load or timed out:', ranked.imageUrl);
             }
         } catch (error) {
             console.error('Failed to process image:', error);
         }
     }
 
-    // Summary (3 paragraphs, NYT-style, Serif)
-    pdf.setFont('times', 'roman'); // 'roman' is normal for Times
-    const fontSize = 11; // Slightly larger for readability
+    // Summary - render complete summary with proper page breaks
+    pdf.setFont('times', 'roman');
+    const fontSize = 11;
     pdf.setFontSize(fontSize);
     pdf.setTextColor(30, 30, 30);
 
     const paragraphs = ranked.summary.split('\n\n');
-    const lineHeight = fontSize * 0.3527; // Convert pt to mm (1pt = 0.3527mm)
-    const lineSpacing = 1.4; // Line spacing multiplier
+    const lineHeight = fontSize * 0.3527;
+    const lineSpacing = 1.4;
 
     for (const paragraph of paragraphs) {
         if (paragraph.trim()) {
             const paragraphLines = pdf.splitTextToSize(paragraph.trim(), contentWidth);
-            const paragraphHeight = paragraphLines.length * lineHeight * lineSpacing + 3;
 
-            // Check if paragraph fits on current page
-            if (currentY + paragraphHeight > pageHeight - 20) {
-                pdf.addPage();
-                currentY = 20;
-            }
-
-            // Render each line with proper spacing
+            // Render each line, adding pages as needed
             for (let i = 0; i < paragraphLines.length; i++) {
+                // Check if we need a new page
+                if (currentY + (lineHeight * lineSpacing) > pageHeight - 20) {
+                    pdf.addPage();
+                    currentY = 20;
+                }
+
                 pdf.text(paragraphLines[i], margin, currentY);
                 currentY += lineHeight * lineSpacing;
             }
@@ -287,7 +280,7 @@ async function addTopStory(
 
     currentY += 5;
 
-    // Thin separator line (NYT-style)
+    // Separator line
     if (currentY + 10 < pageHeight - 20) {
         pdf.setDrawColor(220, 220, 220);
         pdf.setLineWidth(0.2);
@@ -311,17 +304,18 @@ async function addRegularArticle(
     let localY = yPosition;
     const bottomMargin = 20;
 
-    // Title (medium, bold, NYT-style, Serif)
+    // Title (use translated title if available)
     pdf.setFont('times', 'bold');
     pdf.setFontSize(14);
     pdf.setTextColor(0, 0, 0);
 
-    const titleLines = pdf.splitTextToSize(article.title, columnWidth);
+    const displayTitle = ranked.translatedTitle || article.title;
+    const titleLines = pdf.splitTextToSize(displayTitle, columnWidth);
     const titleHeight = titleLines.length * 6;
 
     // Check if title fits
     if (localY + titleHeight > pageHeight - bottomMargin) {
-        return localY - yPosition; // Stop rendering if no space
+        return localY - yPosition;
     }
 
     pdf.textWithLink(titleLines.join('\n'), xPosition, localY, {
@@ -329,16 +323,16 @@ async function addRegularArticle(
     });
     localY += titleHeight + 2;
 
-    // Language indicator (if different from target)
+    // Language indicator
     if (ranked.language && ranked.language.toLowerCase() !== targetLanguage.toLowerCase()) {
-        pdf.setFont('helvetica', 'italic'); // Metadata sans-serif
+        pdf.setFont('helvetica', 'italic');
         pdf.setFontSize(7);
         pdf.setTextColor(100, 100, 100);
-        pdf.text(`(original in ${ranked.language})`, xPosition, localY);
+        pdf.text(`(Translated from ${ranked.language})`, xPosition, localY);
         localY += 3;
     }
 
-    // Embed actual image if available with aspect ratio preservation
+    // Embed image if available
     if (ranked.imageUrl) {
         try {
             const img = new Image();
@@ -361,16 +355,13 @@ async function addRegularArticle(
                 let imageWidth = maxWidth;
                 let imageHeight = maxWidth / aspectRatio;
 
-                // If height exceeds max, scale down
                 if (imageHeight > maxHeight) {
                     imageHeight = maxHeight;
                     imageWidth = maxHeight * aspectRatio;
                 }
 
-                // Center image if narrower than column
                 const xOffset = xPosition + (maxWidth - imageWidth) / 2;
 
-                // Check if image fits
                 if (localY + imageHeight < pageHeight - bottomMargin) {
                     try {
                         pdf.addImage(ranked.imageUrl, 'JPEG', xOffset, localY, imageWidth, imageHeight);
@@ -385,33 +376,28 @@ async function addRegularArticle(
         }
     }
 
-    // Summary (3 paragraphs, condensed for column, Serif)
+    // Summary - render as much as possible without truncating
     pdf.setFont('times', 'roman');
     const fontSize = 10;
     pdf.setFontSize(fontSize);
     pdf.setTextColor(40, 40, 40);
 
     const paragraphs = ranked.summary.split('\n\n');
-    const maxParagraphs = 3;
-    const displayParagraphs = paragraphs.slice(0, maxParagraphs);
-    const lineHeight = fontSize * 0.3527; // Convert pt to mm
-    const lineSpacing = 1.4; // Slightly tighter for columns
+    const lineHeight = fontSize * 0.3527;
+    const lineSpacing = 1.4;
 
-    for (const paragraph of displayParagraphs) {
+    for (const paragraph of paragraphs) {
         if (paragraph.trim()) {
             const paragraphLines = pdf.splitTextToSize(paragraph.trim(), columnWidth);
-            const maxLines = 4;
-            const displayLines = paragraphLines.slice(0, maxLines);
 
-            // Check if paragraph fits
-            const paragraphHeight = displayLines.length * lineHeight * lineSpacing;
-            if (localY + paragraphHeight > pageHeight - bottomMargin) {
-                break; // Stop rendering paragraphs if we run out of space
-            }
+            // Render lines until we run out of space
+            for (let i = 0; i < paragraphLines.length; i++) {
+                if (localY + (lineHeight * lineSpacing) > pageHeight - bottomMargin) {
+                    // Stop if no space left
+                    return localY - yPosition;
+                }
 
-            // Render each line with proper spacing
-            for (let i = 0; i < displayLines.length; i++) {
-                pdf.text(displayLines[i], xPosition, localY);
+                pdf.text(paragraphLines[i], xPosition, localY);
                 localY += lineHeight * lineSpacing;
             }
             localY += 2; // Space between paragraphs
@@ -454,8 +440,9 @@ async function rankArticlesByImportance(
 
 For each article:
 1. Assign an importance score (1-10)
-2. Provide a 3-paragraph summary in ${targetLanguage} (each paragraph should be 2-3 sentences, covering: main story, context/background, and implications/significance)
-3. Detect the original language of the article
+2. Translate the article title to ${targetLanguage} (keep it concise and accurate to the original meaning)
+3. Provide a complete 3-paragraph summary in ${targetLanguage} (each paragraph should be 2-3 sentences, covering: main story, context/background, and implications/significance)
+4. Detect the original language of the article
 
 Articles:
 ${articlesInfo}
@@ -466,6 +453,7 @@ Respond in JSON format:
     {
       "index": 0,
       "importance": 8,
+      "translatedTitle": "Translated title in ${targetLanguage}",
       "summary": "Paragraph 1: Main story details...\\n\\nParagraph 2: Background and context...\\n\\nParagraph 3: Implications and significance...",
       "language": "English" (or "Italian", "Spanish", etc.)
     },
@@ -492,6 +480,7 @@ Respond in JSON format:
                 article: articles[r.index],
                 importance: r.importance,
                 summary: r.summary,
+                translatedTitle: r.translatedTitle,
                 language: r.language
             })).sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
         } else if (provider === 'openai') {
@@ -515,6 +504,7 @@ Respond in JSON format:
                 article: articles[r.index],
                 importance: r.importance,
                 summary: r.summary,
+                translatedTitle: r.translatedTitle,
                 language: r.language
             })).sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
         }
