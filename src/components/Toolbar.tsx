@@ -65,6 +65,20 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
             timeHorizon: tempSettings.emailTimeHorizon
         };
 
+        // Validate required fields
+        if (!emailSettings.smtpHost) {
+            alert('❌ Please enter SMTP Host\n\nFor Gmail: smtp.gmail.com\nFor Outlook: smtp-mail.outlook.com');
+            return;
+        }
+        if (!emailSettings.smtpUser) {
+            alert('❌ Please enter SMTP Username (your email address)');
+            return;
+        }
+        if (!emailSettings.smtpPassword) {
+            alert('❌ Please enter SMTP Password (or App Password for Gmail)');
+            return;
+        }
+
         try {
             console.log('🔍 Testing email connection...');
             console.log('Settings:', emailSettings);
@@ -78,8 +92,10 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
 
             console.log('📤 Invoking test-email-connection...');
             const result = await ipcRenderer.invoke('test-email-connection', emailSettings);
-            console.log('📥 Result received:', result);
-
+            console.log('📥 Result received:', JSON.stringify(result, null, 2));
+            console.log('Result type:', typeof result);
+            console.log('Result.success:', result?.success);
+            console.log('Result.error:', result?.error);
             if (result?.success) {
                 alert('✅ Email connection successful!');
             } else {
