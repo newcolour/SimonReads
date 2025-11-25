@@ -631,12 +631,19 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                         checked={tempSettings.emailSmtpSecure}
                                         onChange={(e) => setTempSettings({
                                             ...tempSettings,
-                                            emailSmtpSecure: e.target.checked
+                                            emailSmtpSecure: e.target.checked,
+                                            // Auto-switch port: 465 for SSL, 587 for STARTTLS
+                                            emailSmtpPort: e.target.checked ? 465 : 587
                                         })}
                                         style={{ marginRight: '8px' }}
                                     />
-                                    Use SSL/TLS
+                                    Use SSL/TLS (Direct SSL)
                                 </label>
+                                <div style={{ fontSize: '11px', color: '#888', marginTop: '4px', marginLeft: '24px' }}>
+                                    {tempSettings.emailSmtpSecure
+                                        ? '✓ Port 465 (Direct SSL)'
+                                        : '✓ Port 587 (STARTTLS)'}
+                                </div>
                             </div>
 
                             <div className="setting-group">
