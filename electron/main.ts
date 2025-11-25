@@ -277,12 +277,23 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
 });
 
 ipcMain.handle('test-email-connection', async (event, emailSettings) => {
+  console.log('Testing email connection with settings:', {
+    host: emailSettings.smtpHost,
+    port: emailSettings.smtpPort,
+    secure: emailSettings.smtpSecure,
+    user: emailSettings.smtpUser
+  });
+
   try {
     const emailService = require('./emailService');
+    console.log('Email service loaded:', typeof emailService.testEmailConnection);
+
     const result = await emailService.testEmailConnection(emailSettings);
+    console.log('Test result:', result);
     return { success: result };
   } catch (error) {
     console.error('Failed to test email connection:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : '');
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 });

@@ -227,7 +227,15 @@ export function validateEmailSettings(settings: EmailSettings): string | null {
 }
 
 export async function testEmailConnection(settings: EmailSettings): Promise<boolean> {
+    console.log('testEmailConnection called with:', {
+        host: settings.smtpHost,
+        port: settings.smtpPort,
+        secure: settings.smtpSecure,
+        user: settings.smtpUser
+    });
+
     try {
+        console.log('Creating nodemailer transporter...');
         const transporter = nodemailer.createTransport({
             host: settings.smtpHost,
             port: settings.smtpPort,
@@ -238,10 +246,16 @@ export async function testEmailConnection(settings: EmailSettings): Promise<bool
             }
         });
 
+        console.log('Verifying connection...');
         await transporter.verify();
+        console.log('✅ Connection verified successfully');
         return true;
     } catch (error) {
-        console.error('Email connection test failed:', error);
-        return false;
+        console.error('❌ Email connection test failed:', error);
+        console.error('Error details:', {
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : ''
+        });
+        throw error; // Throw error instead of returning false so we get the error message
     }
 }
