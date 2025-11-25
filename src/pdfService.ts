@@ -279,7 +279,7 @@ async function addTopStory(
     }
 
     // Summary - render complete summary with proper page breaks
-    pdf.setFont('times', 'roman');
+    pdf.setFont('times', 'normal');
     const fontSize = 11;
     pdf.setFontSize(fontSize);
     pdf.setTextColor(30, 30, 30);
@@ -413,7 +413,7 @@ async function addRegularArticle(
     }
 
     // Summary - render as much as possible without truncating
-    pdf.setFont('times', 'roman');
+    pdf.setFont('times', 'normal');
     const fontSize = 10;
     pdf.setFontSize(fontSize);
     pdf.setTextColor(40, 40, 40);
