@@ -25,6 +25,10 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const articleMapRef = useRef<Map<string, Article>>(new Map());
 
+    // Cache to avoid regenerating when articles haven't changed
+    const lastArticleHashRef = useRef<string>('');
+    const cachedSummaryRef = useRef<string | null>(null);
+
     useEffect(() => {
         return () => {
             if (audioRef.current) {
@@ -39,9 +43,24 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
     useEffect(() => {
         // Don't regenerate if we're exporting a PDF - prevent race conditions
         if (!isExportingPdf) {
-            generateNewsreel();
+            // Create a hash of article IDs to detect changes
+            const articleHash = articles.map(a => a.id).sort().join('|');
+
+            // Check if articles have changed
+            if (articleHash !== lastArticleHashRef.current) {
+                console.log('📰 Articles changed, generating new newsreel...');
+                lastArticleHashRef.current = articleHash;
+                cachedSummaryRef.current = null; // Invalidate cache
+                generateNewsreel();
+            } else if (cachedSummaryRef.current) {
+                console.log('✅ Using cached newsreel (no new articles)');
+                setSummary(cachedSummaryRef.current);
+            } else {
+                // First time or cache miss
+                generateNewsreel();
+            }
         }
-    }, [articles]);
+    }, [articles, isExportingPdf]);
 
     const generateNewsreel = async () => {
         if (articles.length === 0) return;
@@ -141,6 +160,7 @@ This topic-based approach allows for richer summaries than individual article su
 
             const result = await summarizeArticle(combinedContent, settings.geminiApiKey || '', settings, instruction);
             setSummary(result);
+            cachedSummaryRef.current = result; // Cache the result
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -149,6 +169,8 @@ This topic-based approach allows for richer summaries than individual article su
     };
 
     const handleRegenerate = () => {
+        console.log('🔄 Force regenerating newsreel...');
+        cachedSummaryRef.current = null; // Clear cache to force regeneration
         generateNewsreel();
     };
 
