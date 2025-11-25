@@ -22,7 +22,7 @@ function App() {
     const [settings, setSettings] = useState<AppSettings>({
         autoRefreshInterval: 0,
         retentionPeriod: 30,
-        theme: 'dark',
+        theme: 'system',
         font: 'system-ui',
         fontSize: 'medium',
         summaryTone: 'neutral',
@@ -102,7 +102,29 @@ function App() {
 
     // Apply theme and font settings
     useEffect(() => {
-        document.documentElement.setAttribute('data-theme', settings.theme);
+        // Determine the actual theme to apply
+        let actualTheme = settings.theme;
+
+        if (settings.theme === 'system') {
+            // Detect OS theme preference
+            const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            actualTheme = darkModeQuery.matches ? 'dark' : 'light';
+
+            // Listen for OS theme changes
+            const handleThemeChange = (e: MediaQueryListEvent) => {
+                const newTheme = e.matches ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', newTheme);
+            };
+
+            darkModeQuery.addEventListener('change', handleThemeChange);
+
+            // Cleanup listener on unmount or theme change
+            return () => {
+                darkModeQuery.removeEventListener('change', handleThemeChange);
+            };
+        }
+
+        document.documentElement.setAttribute('data-theme', actualTheme);
         document.documentElement.style.setProperty('--app-font', settings.font);
 
         const fontSizes = {
