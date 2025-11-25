@@ -635,6 +635,9 @@ function App() {
                     {showDailyNewsreel ? (
                         <Newsreel
                             articles={articles.filter(a => {
+                                // Exclude podcasts (audio/video) from newsreel
+                                if (a.mediaType === 'audio' || a.mediaType === 'video') return false;
+
                                 if (!a.pubDate) return false;
                                 const hoursAgo = (Date.now() - new Date(a.pubDate).getTime()) / (1000 * 60 * 60);
                                 return hoursAgo <= settings.dailyNewsreelTimeHorizon;
