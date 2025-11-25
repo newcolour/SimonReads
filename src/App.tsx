@@ -102,28 +102,59 @@ function App() {
 
     // Apply theme and font settings
     useEffect(() => {
+        console.log('Theme useEffect triggered. Current theme setting:', settings.theme);
+
         // Determine the actual theme to apply
         let actualTheme = settings.theme;
 
         if (settings.theme === 'system') {
-            // Detect OS theme preference
-            const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-            actualTheme = darkModeQuery.matches ? 'dark' : 'light';
+            const ipcRenderer = (window as any).ipcRenderer;
 
-            // Listen for OS theme changes
-            const handleThemeChange = (e: MediaQueryListEvent) => {
-                const newTheme = e.matches ? 'dark' : 'light';
-                document.documentElement.setAttribute('data-theme', newTheme);
-            };
+            if (ipcRenderer) {
+                // Use Electron's nativeTheme API
+                console.log('Using Electron nativeTheme API');
 
-            darkModeQuery.addEventListener('change', handleThemeChange);
+                // Get initial theme
+                ipcRenderer.invoke('get-system-theme').then((theme: string) => {
+                    console.log('Initial system theme:', theme);
+                    document.documentElement.setAttribute('data-theme', theme);
+                }).catch((err: any) => console.error('Failed to get system theme:', err));
 
-            // Cleanup listener on unmount or theme change
-            return () => {
-                darkModeQuery.removeEventListener('change', handleThemeChange);
-            };
+                // Listen for system theme changes
+                const handleSystemThemeChange = (_event: any, theme: string) => {
+                    console.log('System theme changed:', theme);
+                    document.documentElement.setAttribute('data-theme', theme);
+                };
+
+                ipcRenderer.on('system-theme-changed', handleSystemThemeChange);
+
+                // Cleanup
+                return () => {
+                    ipcRenderer.removeListener('system-theme-changed', handleSystemThemeChange);
+                };
+            } else {
+                // Fallback to CSS media query
+                console.log('Using CSS media query fallback');
+                const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                actualTheme = darkModeQuery.matches ? 'dark' : 'light';
+
+                console.log('  - Dark mode?', darkModeQuery.matches, '→', actualTheme);
+
+                const handleThemeChange = (e: MediaQueryListEvent) => {
+                    const newTheme = e.matches ? 'dark' : 'light';
+                    console.log('CSS theme changed:', newTheme);
+                    document.documentElement.setAttribute('data-theme', newTheme);
+                };
+
+                darkModeQuery.addEventListener('change', handleThemeChange);
+
+                return () => {
+                    darkModeQuery.removeEventListener('change', handleThemeChange);
+                };
+            }
         }
 
+        console.log('Setting theme to:', actualTheme);
         document.documentElement.setAttribute('data-theme', actualTheme);
         document.documentElement.style.setProperty('--app-font', settings.font);
 

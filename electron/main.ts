@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { setupEmailScheduler, updateSchedule, stopScheduler } from './emailScheduler';
@@ -117,6 +117,20 @@ ipcMain.handle('send-daily-email', async (event, { articles, emailSettings, appS
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 });
+
+// System theme IPC handler
+ipcMain.handle('get-system-theme', () => {
+  return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+});
+
+// Listen for system theme changes
+nativeTheme.on('updated', () => {
+  if (win) {
+    const theme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+    win.webContents.send('system-theme-changed', theme);
+  }
+});
+
 
 
 // Track multiple summary windows by article ID
