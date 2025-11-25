@@ -260,6 +260,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     value={tempSettings.theme}
                                     onChange={e => setTempSettings({ ...tempSettings, theme: e.target.value as any })}
                                 >
+                                    <option value="system">System</option>
                                     <option value="dark">Dark</option>
                                     <option value="light">Light</option>
                                     <option value="sepia">Sepia</option>
