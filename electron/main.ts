@@ -40,6 +40,12 @@ ipcMain.on('write-data-sync', (event, arg) => {
   event.returnValue = true;
 });
 
+// Simple ping handler for testing IPC
+ipcMain.handle('ping', async () => {
+  console.log('🏓 Ping received!');
+  return 'pong';
+});
+
 import * as googleTTS from 'google-tts-api';
 
 // TTS Proxy Handler

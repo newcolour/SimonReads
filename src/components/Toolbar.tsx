@@ -66,13 +66,27 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
         };
 
         try {
-            const result = await (window as any).ipcRenderer?.invoke('test-email-connection', emailSettings);
+            console.log('🔍 Testing email connection...');
+            console.log('Settings:', emailSettings);
+
+            const ipcRenderer = (window as any).ipcRenderer;
+            if (!ipcRenderer) {
+                console.error('❌ ipcRenderer not available');
+                alert('❌ Electron IPC not available');
+                return;
+            }
+
+            console.log('📤 Invoking test-email-connection...');
+            const result = await ipcRenderer.invoke('test-email-connection', emailSettings);
+            console.log('📥 Result received:', result);
+
             if (result?.success) {
                 alert('✅ Email connection successful!');
             } else {
                 alert(`❌ Connection failed: ${result?.error || 'Unknown error'}`);
             }
         } catch (error) {
+            console.error('❌ Exception during email test:', error);
             alert(`❌ Error: ${error instanceof Error ? error.message : String(error)}`);
         }
     };
