@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { Loader, LogIn, Newspaper, X, Trash2, Globe, BookOpen, Brain, MessageCircle } from 'lucide-react';
+import { Loader, LogIn, Newspaper, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
@@ -28,6 +28,7 @@ interface ArticleViewProps {
     settings: AppSettings;
     onClose: () => void;
     onDelete: (articleId: string) => void;
+    onToggleSaved?: (articleId: string) => void;
 }
 
 const getPublicationStyle = (feedTitle: string, theme: string) => {
@@ -76,7 +77,7 @@ const getPublicationStyle = (feedTitle: string, theme: string) => {
     return style;
 };
 
-export default function ArticleView({ article, feed, settings, onClose, onDelete }: ArticleViewProps) {
+export default function ArticleView({ article, feed, settings, onClose, onDelete, onToggleSaved }: ArticleViewProps) {
     const feedTitle = feed?.title || article?.feedTitle;
     console.log('ArticleView render:', {
         articleId: article?.id,
@@ -323,7 +324,9 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                     } else {
                         // Generic selectors for other sites
                         contentElement =
+                            doc.querySelector('.story__text') || // Repubblica.it
                             doc.querySelector('.story-body') ||
+                            doc.querySelector('.story') || // Repubblica.it fallback
                             doc.querySelector('article') ||
                             doc.querySelector('[role="main"]') ||
                             doc.querySelector('main') ||
@@ -609,8 +612,9 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
         ? getPublicationColors(feedTitle, article.link)
         : null;
 
-    // Check if we're in dark mode
-    const isDarkMode = settings.theme === 'dark' || settings.theme === 'black' ||
+    // Check if we're in dark mode (includes all dark-based themes)
+    const darkThemes = ['dark', 'black', 'sorcerer', 'nord', 'dracula', 'gruvbox', 'tokyo-night', 'solarized-dark'];
+    const isDarkMode = darkThemes.includes(settings.theme) ||
         (settings.theme === 'system' && window.matchMedia &&
             window.matchMedia('(prefers-color-scheme: dark)').matches);
 
@@ -723,6 +727,15 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                         >
                             <Trash2 size={18} />
                         </button>
+                        {onToggleSaved && (
+                            <button
+                                className={`action-btn ${article.isSaved ? 'active' : ''}`}
+                                onClick={() => onToggleSaved(article.id)}
+                                data-tooltip={article.isSaved ? "Remove from Saved" : "Save Article"}
+                            >
+                                <Star size={18} fill={article.isSaved ? 'currentColor' : 'none'} />
+                            </button>
+                        )}
                         <button
                             className="action-btn"
                             onClick={() => {

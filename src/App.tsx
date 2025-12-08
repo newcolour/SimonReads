@@ -633,6 +633,14 @@ function App() {
         storage.saveArticles(updatedArticles);
     };
 
+    const handleToggleSaved = (articleId: string) => {
+        const updatedArticles = articles.map(a =>
+            a.id === articleId ? { ...a, isSaved: !a.isSaved } : a
+        );
+        setArticles(updatedArticles);
+        storage.saveArticles(updatedArticles);
+    };
+
     const handleClearAllData = () => {
         // Clear storage first
         storage.saveFeeds([]);
@@ -658,6 +666,9 @@ function App() {
         if (selectedFeedId === 'read') {
             // Show only read articles in the "Read Articles" view
             filtered = filtered.filter(a => a.isRead);
+        } else if (selectedFeedId === 'saved') {
+            // Show only saved articles in the "Saved Articles" view
+            filtered = filtered.filter(a => a.isSaved);
         } else {
             // Show all articles (including read) in normal views
             if (selectedFeedId) {
@@ -884,9 +895,10 @@ function App() {
                         selectedArticleIds={selectedArticleIds}
                         onSelectArticle={handleSelectArticle}
                         onToggleRead={handleToggleRead}
+                        onToggleSaved={handleToggleSaved}
                         onDeleteArticle={handleDeleteArticle}
-                        title={!selectedFeedId ? 'All Articles' : selectedFeedId === 'read' ? 'Read Articles' : feeds.find(f => f.id === selectedFeedId)?.title || 'Articles'}
-                        icon={!selectedFeedId ? undefined : selectedFeedId === 'read' ? undefined : feeds.find(f => f.id === selectedFeedId)?.icon}
+                        title={!selectedFeedId ? 'All Articles' : selectedFeedId === 'read' ? 'Read Articles' : selectedFeedId === 'saved' ? 'Saved Articles' : feeds.find(f => f.id === selectedFeedId)?.title || 'Articles'}
+                        icon={!selectedFeedId ? undefined : selectedFeedId === 'read' || selectedFeedId === 'saved' ? undefined : feeds.find(f => f.id === selectedFeedId)?.icon}
                         onBack={() => setMobileView('feeds')}
                     />
                 </div>
@@ -928,6 +940,7 @@ function App() {
                                 setMobileView('articles');
                             }}
                             onDelete={handleDeleteArticle}
+                            onToggleSaved={handleToggleSaved}
                         />
                     )}
                 </div>

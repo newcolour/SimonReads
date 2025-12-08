@@ -165,22 +165,22 @@
 
 /* Sorcerer - Magical theme inspired by Simon the Sorcerer */
 [data-theme="sorcerer"] {
-  --bg-primary: rgba(45, 20, 70, 0.92);
-  /* Deep mystical purple */
-  --bg-secondary: rgba(60, 30, 90, 0.85);
+  --bg-primary: rgba(30, 12, 50, 0.95);
+  /* Deeper mystical purple */
+  --bg-secondary: rgba(45, 20, 70, 0.92);
   /* Rich purple */
-  --bg-tertiary: rgba(75, 45, 110, 0.8);
+  --bg-tertiary: rgba(60, 30, 90, 0.88);
   /* Lighter magical purple */
-  --bg-hover: rgba(90, 55, 130, 0.9);
+  --bg-hover: rgba(75, 45, 110, 0.9);
   /* Enchanted purple hover */
-  --border-color: rgba(180, 120, 255, 0.3);
-  /* Magical violet border */
-  --text-primary: #f5e6ff;
-  /* Soft lavender white */
-  --text-secondary: #d4b5ff;
-  /* Light mystical purple */
-  --text-muted: #9d7bc7;
-  /* Muted purple */
+  --border-color: rgba(160, 100, 220, 0.4);
+  /* More visible violet border */
+  --text-primary: #ffffff;
+  /* Pure white for maximum contrast */
+  --text-secondary: #e8d4ff;
+  /* Brighter lavender */
+  --text-muted: #b794d6;
+  /* More readable muted purple */
   --accent-primary: #ffd700;
   /* Magical gold */
   --accent-hover: #ffed4e;

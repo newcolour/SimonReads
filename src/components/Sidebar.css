@@ -369,6 +369,10 @@
     opacity: 0;
 }
 
+.saved-count {
+    background: #f59e0b;
+}
+
 /* Context Menu */
 .context-menu {
     background: var(--bg-tertiary);

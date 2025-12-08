@@ -176,6 +176,15 @@
     color: #ef4444;
 }
 
+.saved-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+    color: #f59e0b;
+    vertical-align: middle;
+}
+
 .article-duration {
     font-variant-numeric: tabular-nums;
     color: var(--text-muted);

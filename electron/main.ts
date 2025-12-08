@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, net } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme, net, session } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { setupEmailScheduler, updateSchedule, stopScheduler } from './emailScheduler';
@@ -514,14 +514,23 @@ ipcMain.handle('test-email-connection', async (event, emailSettings) => {
 
 
 ipcMain.handle('fetch-url', async (event, url) => {
-  return new Promise((resolve) => {
-    try {
-      console.log(`Fetching URL content: ${url}`);
+  try {
+    console.log(`Fetching URL content: ${url}`);
 
+    // Get cookies from the default session for this URL
+    const cookies = await session.defaultSession.cookies.get({ url });
+    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+
+    if (cookieHeader) {
+      console.log(`Including ${cookies.length} cookies for ${new URL(url).hostname}`);
+    }
+
+    return new Promise((resolve) => {
       const request = net.request({
         method: 'GET',
         url: url,
-        redirect: 'follow'
+        redirect: 'follow',
+        session: session.defaultSession // Use the default session for cookie handling
       });
 
       // Set browser-like headers
@@ -536,6 +545,11 @@ ipcMain.handle('fetch-url', async (event, url) => {
       request.setHeader('Sec-Fetch-Site', 'none');
       request.setHeader('Sec-Fetch-User', '?1');
       request.setHeader('Connection', 'keep-alive');
+
+      // Include cookies in the request
+      if (cookieHeader) {
+        request.setHeader('Cookie', cookieHeader);
+      }
 
       let responseData = '';
 
@@ -564,17 +578,17 @@ ipcMain.handle('fetch-url', async (event, url) => {
         });
       });
 
-      request.on('error', (error) => {
+      request.on('error', (error: Error) => {
         console.error(`Request error for ${url}:`, error);
         resolve({ success: false, error: error.message });
       });
 
       request.end();
-    } catch (error) {
-      console.error(`Error fetching URL ${url}:`, error);
-      resolve({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  });
+    });
+  } catch (error) {
+    console.error(`Error fetching URL ${url}:`, error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
 });
 
 process.env.DIST = path.join(__dirname, '../dist');

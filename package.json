@@ -120,7 +120,7 @@
       ],
       "category": "Network;News",
       "maintainer": "Simone Bianco <simone@example.com>",
-      "icon": "public/icon.png",
+      "icon": "build/icons",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "nsis": {

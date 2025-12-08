@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder } from 'lucide-react';
+import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
 import FeedDiscovery from './FeedDiscovery';
 import './Sidebar.css';
@@ -453,6 +453,17 @@ export default function Sidebar({
                 >
                     <CheckCircle size={16} />
                     <span className="feed-title">Read Articles</span>
+                </div>
+
+                <div
+                    className={`feed-item ${selectedFeedId === 'saved' ? 'active' : ''}`}
+                    onClick={() => onSelectFeed('saved')}
+                >
+                    <Star size={16} />
+                    <span className="feed-title">Saved Articles</span>
+                    {articles.filter(a => a.isSaved).length > 0 && (
+                        <span className="unread-count saved-count">{articles.filter(a => a.isSaved).length}</span>
+                    )}
                 </div>
 
                 {sortedFeeds.map((feed, index) => {

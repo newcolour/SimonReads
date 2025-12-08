@@ -28,6 +28,7 @@ export interface Article {
     guid?: string;
     isoDate?: string;
     isRead: boolean;
+    isSaved?: boolean; // Favorite/saved articles
     // Podcast/Media support
     mediaType?: MediaType; // Type of content
     enclosure?: MediaEnclosure; // Audio/video file

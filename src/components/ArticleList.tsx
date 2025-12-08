@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle } from 'lucide-react';
+import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star } from 'lucide-react';
 import { Article } from '../types';
 import './ArticleList.css';
 
@@ -20,13 +20,14 @@ interface ArticleListProps {
     selectedArticleIds: Set<string>;
     onSelectArticle: (article: Article, ctrlKey: boolean) => void;
     onToggleRead?: (articleId: string) => void;
+    onToggleSaved?: (articleId: string) => void;
     onDeleteArticle?: (articleId: string) => void;
     title?: string;
     icon?: string;
     onBack?: () => void;
 }
 
-export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onDeleteArticle, title = 'Articles', icon, onBack }: ArticleListProps) {
+export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack }: ArticleListProps) {
     const [contextMenu, setContextMenu] = useState<{ show: boolean; x: number; y: number; article: Article | null }>({
         show: false,
         x: 0,
@@ -131,6 +132,13 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
         }
     };
 
+    const handleToggleSaved = () => {
+        if (contextMenu.article && onToggleSaved) {
+            onToggleSaved(contextMenu.article.id);
+            closeContextMenu();
+        }
+    };
+
     const handleDelete = () => {
         if (contextMenu.article && onDeleteArticle) {
             if (confirm(`Delete "${contextMenu.article.title}"?`)) {
@@ -216,6 +224,11 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                                         <Video size={14} />
                                     </span>
                                 )}
+                                {article.isSaved && (
+                                    <span className="saved-badge" title="Saved">
+                                        <Star size={14} fill="currentColor" />
+                                    </span>
+                                )}
                                 {cleanTitle(article.title)}
                             </h4>
                             <div className="article-meta">
@@ -263,6 +276,10 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                     <div className="context-menu-item" onClick={handleToggleRead}>
                         {contextMenu.article.isRead ? <Circle size={14} /> : <CheckCircle size={14} />}
                         <span>{contextMenu.article.isRead ? 'Mark as Unread' : 'Mark as Read'}</span>
+                    </div>
+                    <div className="context-menu-item" onClick={handleToggleSaved}>
+                        <Star size={14} fill={contextMenu.article.isSaved ? 'currentColor' : 'none'} />
+                        <span>{contextMenu.article.isSaved ? 'Remove from Saved' : 'Save Article'}</span>
                     </div>
                     <div className="context-menu-divider"></div>
                     <div className="context-menu-item" onClick={handleOpenInBrowser}>
