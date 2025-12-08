@@ -124,7 +124,7 @@
 .rate-btn {
     background: transparent;
     border: none;
-    color: var(--text-primary);
+    color: var(--icon-color);
     cursor: pointer;
     padding: 8px;
     border-radius: 8px;

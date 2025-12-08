@@ -12,6 +12,10 @@
   /* macOS Blue */
   --accent-hover: #0077ed;
   --accent-light: rgba(10, 132, 255, 0.15);
+  --icon-color: #0a84ff;
+  /* Icon color - defaults to accent */
+  --badge-bg: #0a84ff;
+  /* Badge background - defaults to accent */
   --glass-blur: 20px;
 }
 
@@ -28,6 +32,10 @@
   --accent-primary: #007aff;
   --accent-hover: #0062cc;
   --accent-light: rgba(0, 122, 255, 0.1);
+  --icon-color: #4a4a4a;
+  /* Dark grey icons for light theme */
+  --badge-bg: #4a4a4a;
+  /* Dark grey badges for light theme */
 }
 
 /* Sepia Theme */
@@ -43,6 +51,8 @@
   --accent-primary: #8b6914;
   --accent-hover: #6b4f0a;
   --accent-light: rgba(139, 105, 20, 0.15);
+  --icon-color: #8b6914;
+  --badge-bg: #8b6914;
 }
 
 /* Black Theme - Pure black for OLED displays (macOS liquid dark style) */
@@ -58,7 +68,131 @@
   --accent-primary: #0a84ff;
   --accent-hover: #0077ed;
   --accent-light: rgba(10, 132, 255, 0.12);
+  --icon-color: #0a84ff;
+  --badge-bg: #0a84ff;
   --glass-blur: 30px;
+}
+
+/* Nord Theme - Cool, arctic-inspired palette */
+[data-theme="nord"] {
+  --bg-primary: rgba(46, 52, 64, 0.9);
+  --bg-secondary: rgba(59, 66, 82, 0.7);
+  --bg-tertiary: rgba(67, 76, 94, 0.7);
+  --bg-hover: rgba(76, 86, 106, 0.8);
+  --border-color: rgba(129, 161, 193, 0.2);
+  --text-primary: #eceff4;
+  --text-secondary: #d8dee9;
+  --text-muted: #81a1c1;
+  --accent-primary: #88c0d0;
+  --accent-hover: #5e81ac;
+  --accent-light: rgba(136, 192, 208, 0.15);
+  --icon-color: #88c0d0;
+  --badge-bg: #88c0d0;
+  --glass-blur: 25px;
+}
+
+/* Solarized Dark - Classic developer theme */
+[data-theme="solarized-dark"] {
+  --bg-primary: rgba(0, 43, 54, 0.9);
+  --bg-secondary: rgba(7, 54, 66, 0.7);
+  --bg-tertiary: rgba(88, 110, 117, 0.3);
+  --bg-hover: rgba(101, 123, 131, 0.4);
+  --border-color: rgba(147, 161, 161, 0.2);
+  --text-primary: #fdf6e3;
+  --text-secondary: #93a1a1;
+  --text-muted: #586e75;
+  --accent-primary: #268bd2;
+  --accent-hover: #2aa198;
+  --accent-light: rgba(38, 139, 210, 0.15);
+  --icon-color: #268bd2;
+  --badge-bg: #268bd2;
+  --glass-blur: 20px;
+}
+
+/* Dracula - Popular purple-based dark theme */
+[data-theme="dracula"] {
+  --bg-primary: rgba(40, 42, 54, 0.9);
+  --bg-secondary: rgba(68, 71, 90, 0.7);
+  --bg-tertiary: rgba(98, 114, 164, 0.3);
+  --bg-hover: rgba(68, 71, 90, 0.8);
+  --border-color: rgba(98, 114, 164, 0.3);
+  --text-primary: #f8f8f2;
+  --text-secondary: #bd93f9;
+  --text-muted: #6272a4;
+  --accent-primary: #ff79c6;
+  --accent-hover: #bd93f9;
+  --accent-light: rgba(255, 121, 198, 0.15);
+  --icon-color: #ff79c6;
+  --badge-bg: #ff79c6;
+  --glass-blur: 25px;
+}
+
+/* Gruvbox - Retro warm theme */
+[data-theme="gruvbox"] {
+  --bg-primary: rgba(40, 40, 40, 0.9);
+  --bg-secondary: rgba(60, 56, 54, 0.7);
+  --bg-tertiary: rgba(80, 73, 69, 0.7);
+  --bg-hover: rgba(102, 92, 84, 0.8);
+  --border-color: rgba(168, 153, 132, 0.2);
+  --text-primary: #ebdbb2;
+  --text-secondary: #d5c4a1;
+  --text-muted: #a89984;
+  --accent-primary: #fe8019;
+  --accent-hover: #d65d0e;
+  --accent-light: rgba(254, 128, 25, 0.15);
+  --icon-color: #fe8019;
+  --badge-bg: #fe8019;
+  --glass-blur: 20px;
+}
+
+/* Tokyo Night - Modern dark theme with purple accents */
+[data-theme="tokyo-night"] {
+  --bg-primary: rgba(26, 27, 38, 0.9);
+  --bg-secondary: rgba(36, 40, 59, 0.7);
+  --bg-tertiary: rgba(52, 59, 88, 0.7);
+  --bg-hover: rgba(65, 72, 104, 0.8);
+  --border-color: rgba(86, 95, 137, 0.3);
+  --text-primary: #c0caf5;
+  --text-secondary: #a9b1d6;
+  --text-muted: #565f89;
+  --accent-primary: #7aa2f7;
+  --accent-hover: #bb9af7;
+  --accent-light: rgba(122, 162, 247, 0.15);
+  --icon-color: #7aa2f7;
+  --badge-bg: #7aa2f7;
+  --glass-blur: 25px;
+}
+
+/* Sorcerer - Magical theme inspired by Simon the Sorcerer */
+[data-theme="sorcerer"] {
+  --bg-primary: rgba(45, 20, 70, 0.92);
+  /* Deep mystical purple */
+  --bg-secondary: rgba(60, 30, 90, 0.85);
+  /* Rich purple */
+  --bg-tertiary: rgba(75, 45, 110, 0.8);
+  /* Lighter magical purple */
+  --bg-hover: rgba(90, 55, 130, 0.9);
+  /* Enchanted purple hover */
+  --border-color: rgba(180, 120, 255, 0.3);
+  /* Magical violet border */
+  --text-primary: #f5e6ff;
+  /* Soft lavender white */
+  --text-secondary: #d4b5ff;
+  /* Light mystical purple */
+  --text-muted: #9d7bc7;
+  /* Muted purple */
+  --accent-primary: #ffd700;
+  /* Magical gold */
+  --accent-hover: #ffed4e;
+  /* Bright golden glow */
+  --accent-light: rgba(255, 215, 0, 0.2);
+  /* Golden shimmer */
+  --icon-color: #ffd700;
+  /* Golden icons */
+  --badge-bg: #ffd700;
+  /* Golden badges */
+  --glass-blur: 30px;
+  /* Extra mystical blur */
 }
 
 * {

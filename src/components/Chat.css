@@ -59,7 +59,7 @@
     background: transparent;
     border: none;
     border-radius: 6px;
-    color: var(--text-muted);
+    color: var(--icon-color);
     cursor: pointer;
     display: flex;
     align-items: center;

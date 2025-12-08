@@ -31,7 +31,7 @@
 
 .article-count {
     font-size: 12px;
-    background: var(--accent-primary);
+    background: var(--badge-bg);
     color: white;
     padding: 4px 10px;
     border-radius: 12px;
@@ -41,7 +41,7 @@
 .close-btn {
     background: transparent;
     border: 1px solid var(--border-color);
-    color: var(--text-secondary);
+    color: var(--icon-color);
     padding: 8px;
     border-radius: 6px;
     cursor: pointer;
@@ -73,7 +73,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
-    color: var(--text-secondary);
+    color: var(--icon-color);
     cursor: pointer;
     transition: all 0.2s;
 }

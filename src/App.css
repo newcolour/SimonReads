@@ -3,6 +3,11 @@
     flex-direction: column;
     height: 100vh;
     width: 100vw;
+    /* Safe area insets for mobile devices */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 .app-content {
@@ -62,5 +67,70 @@
     to {
         opacity: 1;
         transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* Right-aligned tooltip for elements near the right edge */
+[data-tooltip-align="right"]:hover::after {
+    left: auto;
+    right: 0;
+    transform: none;
+    animation: tooltipFadeInRight 0.2s ease-out;
+}
+
+@keyframes tooltipFadeInRight {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Mobile Responsive Layout */
+@media (max-width: 768px) {
+    .app-content {
+        position: relative;
+    }
+
+    /* Hide resize handles on mobile */
+    .resize-handle {
+        display: none !important;
+    }
+
+    /* Default: hide all panes */
+    .app-content>div {
+        display: none !important;
+    }
+
+    /* Show only the sidebar (feeds) by default */
+    .app-content[data-mobile-view="feeds"]>div:first-child {
+        display: flex !important;
+        width: 100% !important;
+    }
+
+    /* Show only the article list when in articles view */
+    .app-content[data-mobile-view="articles"]>div:nth-child(3) {
+        display: flex !important;
+        width: 100% !important;
+    }
+
+    /* Show only the article view when viewing an article */
+    .app-content[data-mobile-view="article"]>div:nth-child(5) {
+        display: flex !important;
+        width: 100% !important;
+    }
+
+    /* Ensure all visible panes are full width */
+    .app-content>div {
+        flex-shrink: 0;
+    }
+
+    /* Hide toolbar left padding on mobile (no macOS traffic lights) */
+    .toolbar {
+        padding-left: 16px !important;
     }
 }

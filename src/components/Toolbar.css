@@ -31,7 +31,7 @@
 .settings-btn {
     background: transparent;
     border: 1px solid var(--border-color);
-    color: var(--text-primary);
+    color: var(--icon-color);
     padding: 8px;
     border-radius: 6px;
     cursor: pointer;
@@ -61,7 +61,7 @@
     align-items: center;
     gap: 6px;
     padding: 8px 14px;
-    background: linear-gradient(135deg, var(--accent-primary), rgba(168, 85, 247, 0.9));
+    background: var(--accent-primary);
     border: none;
     border-radius: 8px;
     color: white;
@@ -69,15 +69,46 @@
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .newsreel-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    filter: brightness(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .newsreel-btn span {
     font-size: 13px;
+}
+
+/* Light theme: make newsreel button grey to match other toolbar buttons */
+[data-theme="light"] .newsreel-btn {
+    background: #6b7280;
+    color: white;
+}
+
+[data-theme="light"] .newsreel-btn:hover {
+    background: #4b5563;
+}
+
+.mark-all-read-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--icon-color);
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.mark-all-read-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
 }
 
 .spinning {

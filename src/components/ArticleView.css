@@ -23,6 +23,23 @@
     background: var(--bg-secondary);
 }
 
+.publication-title {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.publication-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+    object-fit: contain;
+}
+
 .view-mode-toggle {
     display: flex;
     gap: 4px;
@@ -56,7 +73,7 @@
     padding: 8px;
     border: 1px solid var(--border-color);
     background: transparent;
-    color: var(--text-secondary);
+    color: var(--icon-color);
     border-radius: 6px;
     cursor: pointer;
     display: flex;
@@ -192,9 +209,86 @@
     padding: 0;
 }
 
+/* Figure and caption styles */
+.article-content figure {
+    margin: 24px 0;
+    padding: 0;
+}
+
+.article-content figure img {
+    margin: 0;
+    display: block;
+}
+
+.article-content figcaption {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 8px;
+    padding: 0 4px;
+    line-height: 1.4;
+    font-family: var(--app-font);
+}
+
+/* Common caption class patterns */
+.article-content .caption,
+.article-content .image-caption,
+.article-content .photo-caption,
+.article-content .wp-caption-text,
+.article-content .media-caption {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 8px;
+    margin-bottom: 16px;
+    line-height: 1.4;
+    font-family: var(--app-font);
+}
+
+/* Image credit/source */
+.article-content .image-credit,
+.article-content .photo-credit,
+.article-content .image-source {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-top: 4px;
+    font-family: var(--app-font);
+}
+
+/* Ensure images in figures don't have extra margin */
+.article-content figure>img {
+    margin: 0;
+}
+
+/* Style for image containers */
+.article-content .image-container,
+.article-content .wp-caption {
+    margin: 24px 0;
+}
+
+.article-content .image-container img,
+.article-content .wp-caption img {
+    margin: 0;
+}
+
 .no-content {
     color: var(--text-muted);
     font-style: italic;
+}
+
+.loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-muted);
+    gap: 12px;
+}
+
+.loading-content p {
+    font-size: 0.95em;
 }
 
 .webview {
@@ -220,7 +314,7 @@
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    color: var(--text-primary);
+    color: var(--icon-color);
     cursor: pointer;
     font-size: 0.9em;
     transition: all 0.2s;
@@ -250,7 +344,7 @@
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    color: var(--text-primary);
+    color: var(--icon-color);
     cursor: pointer;
     font-size: 0.9em;
     transition: all 0.2s;
@@ -384,7 +478,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
-    color: var(--text-secondary);
+    color: var(--icon-color);
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -414,7 +508,7 @@
     background: transparent;
     border: none;
     border-radius: 6px;
-    color: var(--text-secondary);
+    color: var(--icon-color);
     cursor: pointer;
     transition: all 0.2s;
 }

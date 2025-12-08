@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { Sparkles, Volume2, RotateCw, Loader } from 'lucide-react';
+import { Sparkles, Volume2, RotateCw, Loader, Pause, Play } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { AppSettings } from '../types';
 import '../index.css'; // Import theme variables
 import './SummaryWindow.css';
 
@@ -9,28 +10,35 @@ interface SummaryData {
     summary: string;
     articleTitle: string;
     theme?: string;
+    settings?: AppSettings;
 }
 
 export default function SummaryWindow() {
     const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
     const [isReadingAloud, setIsReadingAloud] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [playbackRate, setPlaybackRate] = useState(1.0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const isReadingAloudRef = useRef(false);
-
-
 
     // Use useLayoutEffect to apply theme before painting
     useLayoutEffect(() => {
         const hash = window.location.hash;
-        const idPart = hash.split('/')[2] || 'unknown';
+        console.log('SummaryWindow: Full URL hash:', hash);
 
-        // Parse theme from URL
+        // Parse theme from URL query string
+        // URL format: #/summary/articleId?theme=light
         let theme = 'dark'; // Default theme
-        if (idPart.includes('theme=')) {
-            theme = idPart.split('theme=')[1].split('&')[0];
+
+        if (hash.includes('?theme=')) {
+            const queryPart = hash.split('?')[1];
+            if (queryPart) {
+                const params = new URLSearchParams(queryPart);
+                theme = params.get('theme') || 'dark';
+            }
         }
 
-        console.log('SummaryWindow: Applying theme from URL:', theme);
+        console.log('SummaryWindow: Parsed theme from URL:', theme);
         document.documentElement.setAttribute('data-theme', theme);
     }, []);
 
@@ -50,30 +58,33 @@ export default function SummaryWindow() {
         if (ipcRenderer) {
             console.log('SummaryWindow: IPC renderer found, registering listener');
 
-            // Method 1: Listen for push updates
-            ipcRenderer.on('update-summary', (_event: any, data: SummaryData) => {
+            // Listen for updates via send
+            const updateHandler = (_event: any, data: SummaryData) => {
                 console.log('SummaryWindow: Received summary update via send:', data);
                 setSummaryData(data);
 
-                // Apply theme if provided (update it)
+                // Apply theme if provided
                 if (data.theme) {
                     console.log('SummaryWindow: Applying theme from data:', data.theme);
                     document.documentElement.setAttribute('data-theme', data.theme);
                 }
-            });
+            };
 
-            // Method 2: Pull data using invoke (more reliable)
-            const fetchData = async () => {
+            ipcRenderer.on('update-summary', updateHandler);
+
+            // Immediately try to fetch data via invoke
+            (async () => {
                 try {
                     console.log('SummaryWindow: Fetching data via invoke for article:', articleId);
-                    const result = await ipcRenderer.invoke('get-summary-data', articleId);
+                    const response = await ipcRenderer.invoke('get-summary-data', articleId);
 
-                    if (result.success && result.data) {
+                    if (response && response.success && response.data) {
                         console.log('SummaryWindow: Successfully fetched data via invoke');
-                        setSummaryData(result.data);
-
-                        if (result.data.theme) {
-                            document.documentElement.setAttribute('data-theme', result.data.theme);
+                        console.log('SummaryWindow: Data contains settings?', !!response.data.settings);
+                        console.log('SummaryWindow: Settings ttsProvider:', response.data.settings?.ttsProvider);
+                        setSummaryData(response.data);
+                        if (response.data.theme) {
+                            document.documentElement.setAttribute('data-theme', response.data.theme);
                         }
                     } else {
                         console.log('SummaryWindow: No data available yet, will retry');
@@ -81,37 +92,53 @@ export default function SummaryWindow() {
                 } catch (error) {
                     console.error('SummaryWindow: Error fetching data:', error);
                 }
-            };
+            })();
 
-            // Try to fetch immediately
-            fetchData();
+            // Send ready signal to main process
+            setTimeout(() => {
+                console.log('SummaryWindow: Sending ready signal to main process for article:', articleId);
+                ipcRenderer.send('summary-window-ready', articleId);
+            }, 100);
 
-            // Also send ready signal (legacy method)
-            console.log('SummaryWindow: Sending ready signal to main process for article:', articleId);
-            ipcRenderer.send('summary-window-ready', articleId);
-
-            // Retry mechanism: if data doesn't arrive, keep trying
+            // Retry fetching data if not received - only run once
             let retryCount = 0;
-            const maxRetries = 10;
-            const retryInterval = setInterval(() => {
-                if (!summaryData && retryCount < maxRetries) {
-                    console.log(`SummaryWindow: Retry ${retryCount + 1}/${maxRetries} - fetching data`);
-                    fetchData();
-                    ipcRenderer.send('summary-window-ready', articleId);
-                    retryCount++;
-                } else {
+            const maxRetries = 5;
+            let dataReceived = false;
+
+            const retryInterval = setInterval(async () => {
+                if (dataReceived || retryCount >= maxRetries) {
                     clearInterval(retryInterval);
-                    if (retryCount >= maxRetries && !summaryData) {
-                        console.error('SummaryWindow: Failed to load data after max retries');
+                    return;
+                }
+
+                console.log(`SummaryWindow: Retry ${retryCount + 1}/${maxRetries} - fetching data`);
+                try {
+                    const response = await ipcRenderer.invoke('get-summary-data', articleId);
+                    if (response && response.success && response.data) {
+                        setSummaryData(response.data);
+                        dataReceived = true;
+                        clearInterval(retryInterval);
+                    } else {
+                        retryCount++;
+                        if (retryCount >= maxRetries) {
+                            console.error('SummaryWindow: Failed to load data after max retries');
+                            clearInterval(retryInterval);
+                        }
                     }
+                } catch (error) {
+                    console.error('SummaryWindow: Error in retry:', error);
+                    retryCount++;
                 }
             }, 500);
 
-            // Clear interval after timeout
-            setTimeout(() => clearInterval(retryInterval), 6000);
-
             return () => {
                 clearInterval(retryInterval);
+                ipcRenderer.removeListener('update-summary', updateHandler);
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current = null;
+                }
+                window.speechSynthesis.cancel();
             };
         } else {
             console.error('SummaryWindow: IPC renderer not available!');
@@ -124,9 +151,142 @@ export default function SummaryWindow() {
             }
             window.speechSynthesis.cancel();
         };
-    }, [summaryData]); // Add summaryData dependency to clear interval correctly
+    }, []); // Empty dependency array - only run once on mount
 
-    const handleReadAloud = () => {
+    const handleTogglePause = () => {
+        if (!isReadingAloud) return;
+
+        if (isPaused) {
+            // Resume
+            if (audioRef.current) {
+                audioRef.current.play();
+            } else {
+                window.speechSynthesis.resume();
+            }
+            setIsPaused(false);
+        } else {
+            // Pause
+            if (audioRef.current) {
+                audioRef.current.pause();
+            } else {
+                window.speechSynthesis.pause();
+            }
+            setIsPaused(true);
+        }
+    };
+
+    const handleChangeSpeed = () => {
+        const rates = [0.75, 1.0, 1.25, 1.5, 2.0];
+        const currentIndex = rates.indexOf(playbackRate);
+        const nextRate = rates[(currentIndex + 1) % rates.length];
+
+        setPlaybackRate(nextRate);
+
+        if (audioRef.current) {
+            audioRef.current.playbackRate = nextRate;
+        }
+    };
+
+    const readWithOpenAI = async (text: string) => {
+        const settings = summaryData?.settings;
+        if (!settings?.openaiApiKey) {
+            throw new Error('OpenAI API key not configured');
+        }
+
+        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${settings.openaiApiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'tts-1',
+                voice: 'alloy',
+                input: text
+            })
+        });
+
+        if (!response.ok) throw new Error('OpenAI TTS failed');
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.playbackRate = playbackRate;
+        audioRef.current = audio;
+
+        audio.onended = () => {
+            setIsReadingAloud(false);
+            isReadingAloudRef.current = false;
+            setIsPaused(false);
+            audioRef.current = null;
+        };
+
+        await audio.play();
+    };
+
+    const readWithCloudTTS = async (text: string) => {
+        const settings = summaryData?.settings;
+        const language = settings?.readAloudLanguage || 'en';
+        const ipcRenderer = (window as any).ipcRenderer;
+
+        if (!ipcRenderer) throw new Error('IPC not available');
+
+        // Fetch audio segments via IPC (uses google-tts-api in main process)
+        const base64List: string[] = await ipcRenderer.invoke('fetch-tts', {
+            text,
+            lang: language
+        });
+
+        if (!base64List || base64List.length === 0) throw new Error('No audio returned');
+
+        // Play segments sequentially
+        const playSegment = async (index: number) => {
+            if (index >= base64List.length) {
+                setIsReadingAloud(false);
+                isReadingAloudRef.current = false;
+                setIsPaused(false);
+                audioRef.current = null;
+                return;
+            }
+
+            if (!isReadingAloudRef.current) return;
+
+            const audio = new Audio(`data:audio/mp3;base64,${base64List[index]}`);
+            audio.playbackRate = playbackRate;
+            audioRef.current = audio;
+
+            audio.onended = () => {
+                playSegment(index + 1);
+            };
+
+            try {
+                await audio.play();
+            } catch (e) {
+                console.error('Error playing segment:', e);
+                playSegment(index + 1); // Skip error segment
+            }
+        };
+
+        await playSegment(0);
+    };
+
+    const readWithSystemVoice = (text: string) => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = playbackRate;
+        utterance.onend = () => {
+            setIsReadingAloud(false);
+            isReadingAloudRef.current = false;
+            setIsPaused(false);
+        };
+        utterance.onerror = () => {
+            setIsReadingAloud(false);
+            isReadingAloudRef.current = false;
+            setIsPaused(false);
+        };
+        window.speechSynthesis.speak(utterance);
+    };
+
+    const handleReadAloud = async () => {
         if (!summaryData?.summary) return;
 
         if (isReadingAloud) {
@@ -138,26 +298,34 @@ export default function SummaryWindow() {
             window.speechSynthesis.cancel();
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
+            setIsPaused(false);
             return;
         }
 
-        // Start reading with system voice
         const plainText = summaryData.summary.replace(/[#*\[\]()]/g, '').replace(/\n+/g, ' ').trim();
         if (!plainText) return;
 
         setIsReadingAloud(true);
         isReadingAloudRef.current = true;
+        const settings = summaryData.settings;
+        const provider = settings?.ttsProvider || 'free';
+        console.log('SummaryWindow: TTS provider:', provider, 'Settings:', settings);
 
-        const utterance = new SpeechSynthesisUtterance(plainText);
-        utterance.onend = () => {
+        try {
+            if (provider === 'openai' && settings?.openaiApiKey) {
+                await readWithOpenAI(plainText);
+            } else if (provider === 'free') {
+                await readWithCloudTTS(plainText);
+            } else {
+                readWithSystemVoice(plainText);
+            }
+        } catch (error) {
+            console.error('TTS error:', error);
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
-        };
-        utterance.onerror = () => {
-            setIsReadingAloud(false);
-            isReadingAloudRef.current = false;
-        };
-        window.speechSynthesis.speak(utterance);
+            setIsPaused(false);
+            readWithSystemVoice(plainText);
+        }
     };
 
     const handleRegenerate = () => {
@@ -188,6 +356,24 @@ export default function SummaryWindow() {
                     <h2>AI Summary</h2>
                 </div>
                 <div className="summary-window-actions">
+                    {isReadingAloud && (
+                        <>
+                            <button
+                                className="action-btn"
+                                onClick={handleChangeSpeed}
+                                title={`Speed: ${playbackRate}x`}
+                            >
+                                {playbackRate}x
+                            </button>
+                            <button
+                                className="action-btn"
+                                onClick={handleTogglePause}
+                                title={isPaused ? "Resume" : "Pause"}
+                            >
+                                {isPaused ? <Play size={18} /> : <Pause size={18} />}
+                            </button>
+                        </>
+                    )}
                     <button
                         className={`action-btn ${isReadingAloud ? 'active' : ''}`}
                         onClick={handleReadAloud}
@@ -204,23 +390,19 @@ export default function SummaryWindow() {
                     </button>
                 </div>
             </div>
-
-            <div className="summary-window-article-title">
-                <h3>{summaryData.articleTitle}</h3>
-            </div>
-
             <div className="summary-window-content">
-                <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                        a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />
-                    }}
-                >
-                    {summaryData.summary}
-                </ReactMarkdown>
+                <h3 className="article-title">{summaryData.articleTitle}</h3>
+                <div className="summary-markdown">
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                            a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />
+                        }}
+                    >
+                        {summaryData.summary}
+                    </ReactMarkdown>
+                </div>
             </div>
-
-
         </div>
     );
 }

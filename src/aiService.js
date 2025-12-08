@@ -1,22 +1,22 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
     if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
+        desc = { enumerable: true, get: function () { return m[k]; } };
     }
     Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
+}) : (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function (o, v) {
     Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
+}) : function (o, v) {
     o["default"] = v;
 });
 var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
+    var ownKeys = function (o) {
         ownKeys = Object.getOwnPropertyNames || function (o) {
             var ar = [];
             for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
@@ -77,10 +77,10 @@ async function summarizeWithGemini(content, apiKey, settings, instructionOverrid
         },
         body: JSON.stringify({
             contents: [{
-                    parts: [{
-                            text: prompt
-                        }]
+                parts: [{
+                    text: prompt
                 }]
+            }]
         })
     });
     if (!response.ok) {
@@ -510,3 +510,119 @@ Answer with just YES or NO:`;
     }
     return false;
 }
+
+async function suggestFeeds(currentFeeds, apiKey, settings) {
+    const provider = settings.aiProvider || 'gemini';
+    const feedList = currentFeeds.map(f => `- ${f.title}`).join('\n');
+
+    const prompt = `I am subscribed to the following RSS feeds:
+${feedList}
+
+Please suggest 5-10 new, high-quality RSS feeds that I might like based on these interests.
+For each suggestion, provide:
+1. Title
+2. RSS URL (must be a valid RSS/Atom feed URL)
+3. Brief description of why I might like it.
+
+Format the output as a JSON array of objects with keys: 'title', 'url', 'description'.
+IMPORTANT: Return ONLY the raw JSON array. Do not include markdown formatting (like \`\`\`json), explanations, or code blocks.`;
+
+    let responseText = '';
+
+    if (provider === 'gemini') {
+        responseText = await suggestWithGemini(prompt, settings.geminiApiKey || apiKey, settings);
+    } else if (provider === 'openai') {
+        responseText = await suggestWithOpenAI(prompt, settings.openaiApiKey || '', settings);
+    } else if (provider === 'claude') {
+        responseText = await suggestWithClaude(prompt, settings.claudeApiKey || '', settings);
+    } else {
+        throw new Error(`Unsupported AI provider: ${provider}`);
+    }
+
+    // Clean up response if it contains markdown code blocks
+    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    try {
+        return JSON.parse(responseText);
+    } catch (e) {
+        console.error('Failed to parse feed suggestions JSON:', responseText);
+        throw new Error('Failed to parse AI response. Please try again.');
+    }
+}
+
+async function suggestWithGemini(prompt, apiKey, settings) {
+    if (!apiKey) throw new Error('Please set your Gemini API Key in Settings.');
+    const model = settings.geminiModel || 'gemini-1.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to get suggestions from Gemini');
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+}
+
+async function suggestWithOpenAI(prompt, apiKey, settings) {
+    if (!apiKey) throw new Error('Please set your OpenAI API Key in Settings.');
+    const model = settings.openaiModel || 'gpt-4o-mini';
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: prompt }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to get suggestions from OpenAI');
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '[]';
+}
+
+async function suggestWithClaude(prompt, apiKey, settings) {
+    if (!apiKey) throw new Error('Please set your Anthropic API Key in Settings.');
+    const model = settings.claudeModel || 'claude-3-haiku-20240307';
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'dangerously-allow-browser': 'true'
+        },
+        body: JSON.stringify({
+            model: model,
+            max_tokens: 2048,
+            messages: [{ role: 'user', content: prompt }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to get suggestions from Claude');
+    }
+
+    const data = await response.json();
+    return data.content?.[0]?.text || '[]';
+}
+
+exports.suggestFeeds = suggestFeeds;

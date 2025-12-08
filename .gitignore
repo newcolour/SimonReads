@@ -52,3 +52,5 @@ android/keystore.properties
 # Capacitor
 .capacitor/
 ios/
+android/simonreads-release-key.keystore
+android/key.properties

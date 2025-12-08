@@ -4,6 +4,7 @@ export interface Feed {
     url: string;
     icon?: string; // URL to feed icon/favicon
     lastFetched?: Date;
+    category?: string; // Optional category/theme for organizing feeds
 }
 
 export interface MediaEnclosure {
@@ -17,6 +18,7 @@ export type MediaType = 'article' | 'audio' | 'video';
 export interface Article {
     id: string;
     feedId: string;
+    feedTitle?: string;
     title: string;
     link: string;
     pubDate?: Date;
@@ -33,7 +35,7 @@ export interface Article {
     image?: string; // Episode artwork URL
 }
 
-export type Theme = 'system' | 'dark' | 'light' | 'sepia' | 'black';
+export type Theme = 'system' | 'dark' | 'light' | 'sepia' | 'black' | 'nord' | 'solarized-dark' | 'dracula' | 'gruvbox' | 'tokyo-night' | 'sorcerer';
 export type RefreshInterval = 0 | 1 | 5 | 10 | 15 | 30 | 60;
 export type RetentionPeriod = 7 | 14 | 30 | 90 | 365 | -1; // days, -1 = forever
 export type SummaryTone = 'neutral' | 'formal' | 'witty' | 'critical' | 'eli5';
@@ -60,7 +62,10 @@ export interface AppSettings {
     summaryDepth: SummaryDepth;
     summaryPrompt?: string;
     readAloudLanguage: string;
+    pdfSummaryLength?: SummaryLength;
+    pdfSummaryDepth?: SummaryDepth;
     dailyNewsreelTimeHorizon: 1 | 4 | 12 | 24; // hours
+    usePublicationColors: boolean; // Apply publication brand colors to article view
     // Email settings
     emailEnabled: boolean;
     emailSmtpHost: string;

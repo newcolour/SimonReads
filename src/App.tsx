@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Badge } from '@capawesome/capacitor-badge';
 import { Feed, Article, AppSettings } from './types';
 import { fetchFeed, fetchFeedIcon, fetchFeedDetails } from './rssService';
 import { storage } from './storage';
@@ -34,6 +36,7 @@ function App() {
         ttsProvider: 'free',
         aiProvider: 'gemini',
         dailyNewsreelTimeHorizon: 24,
+        usePublicationColors: true,
         // Email settings
         emailEnabled: false,
         emailSmtpHost: '',
@@ -48,7 +51,8 @@ function App() {
     });
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showWelcomeTour, setShowWelcomeTour] = useState(false);
-
+    // Mobile view state: 'feeds' | 'articles' | 'article'
+    const [mobileView, setMobileView] = useState<'feeds' | 'articles' | 'article'>('feeds');
     // Load data from storage on mount
     useEffect(() => {
         const savedFeeds = storage.getFeeds();
@@ -75,6 +79,7 @@ function App() {
             ttsProvider: savedSettings.ttsProvider ?? 'free',
             aiProvider: savedSettings.aiProvider || 'gemini',
             dailyNewsreelTimeHorizon: savedSettings.dailyNewsreelTimeHorizon ?? 24,
+            usePublicationColors: savedSettings.usePublicationColors ?? true,
             // Email settings
             emailEnabled: savedSettings.emailEnabled ?? false,
             emailSmtpHost: savedSettings.emailSmtpHost ?? '',
@@ -94,6 +99,97 @@ function App() {
             setShowWelcomeTour(true);
         }
     }, []);
+
+    // Fix icons for existing feeds (Migration to Google Favicon Service)
+    useEffect(() => {
+        if (feeds.length === 0) return;
+
+        let changed = false;
+        const updatedFeeds = feeds.map(feed => {
+            // If icon is missing or not using Google service (and not a custom data URI), update it
+            if (!feed.icon || (!feed.icon.includes('google.com/s2/favicons') && !feed.icon.startsWith('data:'))) {
+                try {
+                    const url = new URL(feed.url);
+                    const newIcon = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`;
+                    if (feed.icon !== newIcon) {
+                        changed = true;
+                        return { ...feed, icon: newIcon };
+                    }
+                } catch (e) {
+                    // Invalid URL, ignore
+                }
+            }
+            return feed;
+        });
+
+        if (changed) {
+            console.log('Migrating feed icons to Google Favicon service...');
+            setFeeds(updatedFeeds);
+            storage.saveFeeds(updatedFeeds);
+        }
+    }, [feeds]);
+
+    // Update App Badge (Unread Count)
+    useEffect(() => {
+        const updateBadge = async () => {
+            if (!Capacitor.isNativePlatform()) return;
+
+            try {
+                const unreadCount = articles.filter(a => !a.isRead).length;
+
+                // Check and request permissions if needed
+                const permissions = await Badge.checkPermissions();
+                if (permissions.display !== 'granted') {
+                    const requested = await Badge.requestPermissions();
+                    if (requested.display !== 'granted') return;
+                }
+
+                if (unreadCount > 0) {
+                    await Badge.set({ count: unreadCount });
+                } else {
+                    await Badge.clear();
+                }
+            } catch (error) {
+                console.warn('Badge update failed:', error);
+            }
+        };
+
+        updateBadge();
+    }, [articles]);
+
+    // Handle Android back button
+    useEffect(() => {
+        let backButtonListener: any;
+
+        const setupBackButton = async () => {
+            try {
+                const { App } = await import('@capacitor/app');
+                backButtonListener = await App.addListener('backButton', () => {
+                    if (mobileView === 'article') {
+                        // Go back to articles view
+                        setSelectedArticle(null);
+                        setMobileView('articles');
+                    } else if (mobileView === 'articles') {
+                        // Go back to feeds view
+                        setMobileView('feeds');
+                    } else {
+                        // On feeds view, exit app
+                        App.exitApp();
+                    }
+                });
+            } catch (error) {
+                // Not on mobile, ignore
+            }
+        };
+
+        setupBackButton();
+
+        return () => {
+            if (backButtonListener) {
+                backButtonListener.remove();
+            }
+        };
+    }, [mobileView]);
 
     // Disabled automatic cleanup of read articles – user now retains all read items.
     // Previously, a useEffect removed read articles older than the retention period.
@@ -218,6 +314,28 @@ function App() {
         }
     }, [feeds, articles.length]); // Run when feeds or article count changes
 
+    // Data Integrity Check: Backfill feedTitle
+    useEffect(() => {
+        if (feeds.length === 0 || articles.length === 0) return;
+
+        let hasChanges = false;
+        const feedMap = new Map(feeds.map(f => [f.id, f.title]));
+
+        const updatedArticles = articles.map(a => {
+            if (!a.feedTitle && feedMap.has(a.feedId)) {
+                hasChanges = true;
+                return { ...a, feedTitle: feedMap.get(a.feedId) };
+            }
+            return a;
+        });
+
+        if (hasChanges) {
+            console.log('Backfilling feed titles for existing articles');
+            setArticles(updatedArticles);
+            storage.saveArticles(updatedArticles);
+        }
+    }, [feeds, articles.length]);
+
     // Email Scheduler (Electron only)
     useEffect(() => {
         const ipcRenderer = (window as any).ipcRenderer;
@@ -325,50 +443,80 @@ function App() {
         setIsRefreshing(false);
     }, [feeds, articles, isRefreshing]);
 
+    const handleRefreshSingleFeed = useCallback(async (feedId: string) => {
+        if (isRefreshing) return;
+
+        const feed = feeds.find(f => f.id === feedId);
+        if (!feed) return;
+
+        setIsRefreshing(true);
+        try {
+            const feedArticles = await fetchFeed(feed);
+            const updatedFeed = { ...feed, lastFetched: new Date() };
+
+            // Create a map of existing articles for quick lookup
+            const existingArticlesMap = new Map(articles.map(a => [a.id, a]));
+
+            // Process fetched articles
+            const mergedNewArticles: Article[] = feedArticles.map(newArticle => {
+                const existing = existingArticlesMap.get(newArticle.id);
+                if (existing) {
+                    // Update content but preserve local state (isRead)
+                    return { ...newArticle, isRead: existing.isRead };
+                }
+                return newArticle;
+            });
+
+            // Remove old articles from this feed and add the new/updated ones
+            const otherArticles = articles.filter(a => a.feedId !== feedId);
+            const allArticles = [...otherArticles, ...mergedNewArticles];
+
+            // Sort by date descending
+            allArticles.sort((a, b) => {
+                const dateA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+                const dateB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+                return dateB - dateA;
+            });
+
+            // Update feeds array
+            const updatedFeeds = feeds.map(f => f.id === feedId ? updatedFeed : f);
+
+            setArticles(allArticles);
+            setFeeds(updatedFeeds);
+            storage.saveArticles(allArticles);
+            storage.saveFeeds(updatedFeeds);
+        } catch (error) {
+            console.error(`Failed to refresh feed: ${feed.title}`, error);
+            alert(`Failed to refresh "${feed.title}". Please try again.`);
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [feeds, articles, isRefreshing]);
+
     const handleAddFeed = async (url: string) => {
         try {
-            const tempFeed: Feed = {
-                id: crypto.randomUUID(),
-                title: 'Loading...',
-                url,
-            };
-
-            // Fetch feed to get title and articles
-            const response = await fetch(url);
-            const text = await response.text();
-            const parser = new DOMParser();
-            const xml = parser.parseFromString(text, 'text/xml');
-
-            // Get feed title from XML
-            const rssTitle = xml.querySelector('channel > title')?.textContent;
-            const atomTitle = xml.querySelector('feed > title')?.textContent;
-            const feedTitle = rssTitle || atomTitle || url;
-
-            // Parse articles
-            const feedArticles = await fetchFeed(tempFeed);
-
-            // Try to get favicon
-            const icon = await fetchFeedIcon(url);
+            // Use rssService to fetch and validate feed details
+            const { title, articles: feedArticles } = await fetchFeedDetails(url, crypto.randomUUID());
 
             const newFeed: Feed = {
-                ...tempFeed,
-                title: feedTitle,
-                icon,
-                lastFetched: new Date(),
+                id: crypto.randomUUID(),
+                title: title || 'Untitled Feed',
+                url,
+                icon: await fetchFeedIcon(url)
             };
 
-            const updatedFeeds = [...feeds, newFeed];
-            const updatedArticles = [...articles, ...feedArticles];
+            setFeeds(prev => [...prev, newFeed]);
+            setArticles(prev => [...prev, ...feedArticles]);
+            storage.saveFeeds([...feeds, newFeed]);
+            storage.saveArticles([...articles, ...feedArticles]);
 
-            setFeeds(updatedFeeds);
-            setArticles(updatedArticles);
-            storage.saveFeeds(updatedFeeds);
-            storage.saveArticles(updatedArticles);
+            return; // Success
         } catch (error) {
-            alert('Failed to add feed. Please check the URL and try again.');
             console.error('Error adding feed:', error);
+            throw error; // Re-throw for caller to handle
         }
     };
+
 
     const handleRemoveFeed = (feedId: string) => {
         const updatedFeeds = feeds.filter(f => f.id !== feedId);
@@ -396,11 +544,21 @@ function App() {
         storage.saveFeeds(updatedFeeds);
     };
 
+    const handleUpdateFeed = (feedId: string, updates: Partial<Feed>) => {
+        const updatedFeeds = feeds.map(f =>
+            f.id === feedId ? { ...f, ...updates } : f
+        );
+        setFeeds(updatedFeeds);
+        storage.saveFeeds(updatedFeeds);
+    };
+
     const handleSelectFeed = (feedId: string | null) => {
         setSelectedFeedId(feedId);
         setSelectedArticle(null);
         setSelectedArticleIds(new Set());
         setShowNewsreel(false);
+        // On mobile, switch to articles view when a feed is selected
+        setMobileView('articles');
     };
 
     const handleSettingsChange = (newSettings: AppSettings) => {
@@ -428,6 +586,9 @@ function App() {
             setSelectedArticle(article);
             setSelectedArticleIds(new Set()); // Clear multi-selection
             setShowNewsreel(false); // Close newsreel when selecting single article
+            setShowDailyNewsreel(false); // Close daily newsreel when selecting single article
+            // On mobile, switch to article view
+            setMobileView('article');
 
             // Mark as read
             if (!article.isRead) {
@@ -462,6 +623,14 @@ function App() {
                 setSelectedArticleIds(newSelection);
             }
         }
+    };
+
+    const handleToggleRead = (articleId: string) => {
+        const updatedArticles = articles.map(a =>
+            a.id === articleId ? { ...a, isRead: !a.isRead } : a
+        );
+        setArticles(updatedArticles);
+        storage.saveArticles(updatedArticles);
     };
 
     const handleClearAllData = () => {
@@ -631,9 +800,41 @@ function App() {
         setSelectedArticle(article);
     };
 
-    const handleWelcomeTourComplete = () => {
-        localStorage.setItem('hasSeenWelcome', 'true');
+    const handleWelcomeTourComplete = (showAgain: boolean) => {
+        // If user unchecked "show again", mark as seen. Otherwise, don't set it so it shows next time
+        if (!showAgain) {
+            localStorage.setItem('hasSeenWelcome', 'true');
+        } else {
+            localStorage.removeItem('hasSeenWelcome');
+        }
         setShowWelcomeTour(false);
+    };
+
+    const handleSelectFirstArticleForTour = () => {
+        // Select the first article if available
+        if (filteredArticles.length > 0 && !selectedArticle) {
+            handleSelectArticle(filteredArticles[0], false);
+        }
+    };
+    const handleShowTutorial = () => {
+        setShowWelcomeTour(true);
+    };
+
+    const handleMarkAllAsRead = () => {
+        const updatedArticles = articles.map(article => ({
+            ...article,
+            isRead: true
+        }));
+        setArticles(updatedArticles);
+        storage.saveArticles(updatedArticles);
+    };
+
+    const handleMarkFeedAsRead = (feedId: string) => {
+        const updatedArticles = articles.map(article =>
+            article.feedId === feedId ? { ...article, isRead: true } : article
+        );
+        setArticles(updatedArticles);
+        storage.saveArticles(updatedArticles);
     };
 
     return (
@@ -650,8 +851,9 @@ function App() {
                 onClearAllData={handleClearAllData}
                 onImportOPML={handleImportOPML}
                 articles={articles}
+                onShowTutorial={handleShowTutorial}
             />
-            <div className="app-content">
+            <div className="app-content" data-mobile-view={mobileView}>
                 <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex' }}>
                     <Sidebar
                         feeds={feeds}
@@ -660,9 +862,14 @@ function App() {
                         onAddFeed={handleAddFeed}
                         onRemoveFeed={handleRemoveFeed}
                         onRenameFeed={handleRenameFeed}
+                        onUpdateFeed={handleUpdateFeed}
                         articles={articles}
                         searchQuery={searchQuery}
                         onSearchChange={setSearchQuery}
+                        onMarkAllAsRead={handleMarkAllAsRead}
+                        onMarkFeedAsRead={handleMarkFeedAsRead}
+                        onRefreshFeed={handleRefreshSingleFeed}
+                        settings={settings}
                     />
                 </div>
                 <div
@@ -676,7 +883,11 @@ function App() {
                         selectedArticle={selectedArticle}
                         selectedArticleIds={selectedArticleIds}
                         onSelectArticle={handleSelectArticle}
+                        onToggleRead={handleToggleRead}
+                        onDeleteArticle={handleDeleteArticle}
                         title={!selectedFeedId ? 'All Articles' : selectedFeedId === 'read' ? 'Read Articles' : feeds.find(f => f.id === selectedFeedId)?.title || 'Articles'}
+                        icon={!selectedFeedId ? undefined : selectedFeedId === 'read' ? undefined : feeds.find(f => f.id === selectedFeedId)?.icon}
+                        onBack={() => setMobileView('feeds')}
                     />
                 </div>
 
@@ -710,15 +921,19 @@ function App() {
                     ) : (
                         <ArticleView
                             article={selectedArticle}
+                            feed={feeds.find(f => f.id === selectedArticle?.feedId)}
                             settings={settings}
-                            onClose={() => setSelectedArticle(null)}
+                            onClose={() => {
+                                setSelectedArticle(null);
+                                setMobileView('articles');
+                            }}
                             onDelete={handleDeleteArticle}
                         />
                     )}
                 </div>
             </div>
-            {showWelcomeTour && <WelcomeTour onComplete={handleWelcomeTourComplete} />}
-        </div>
+            {showWelcomeTour && <WelcomeTour onComplete={handleWelcomeTourComplete} onSelectFirstArticle={handleSelectFirstArticleForTour} />}
+        </div >
     );
 }
 

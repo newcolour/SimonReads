@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme, net } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { setupEmailScheduler, updateSchedule, stopScheduler } from './emailScheduler';
@@ -46,6 +46,56 @@ ipcMain.handle('ping', async () => {
   return 'pong';
 });
 
+// Image proxy handler - fetches images with proper headers to bypass hotlink protection
+ipcMain.handle('proxy-image', async (event, imageUrl: string) => {
+  try {
+    // Extract the origin from the image URL to use as referer
+    const urlObj = new URL(imageUrl);
+    const referer = `${urlObj.protocol}//${urlObj.hostname}/`;
+
+    return new Promise((resolve, reject) => {
+      const request = net.request({
+        url: imageUrl,
+        method: 'GET'
+      });
+
+      request.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      request.setHeader('Referer', referer);
+      request.setHeader('Accept', 'image/webp,image/apng,image/*,*/*;q=0.8');
+
+      const chunks: Buffer[] = [];
+
+      request.on('response', (response) => {
+        const contentType = response.headers['content-type'] as string || 'image/jpeg';
+
+        response.on('data', (chunk) => {
+          chunks.push(chunk);
+        });
+
+        response.on('end', () => {
+          const buffer = Buffer.concat(chunks);
+          const base64 = buffer.toString('base64');
+          const dataUrl = `data:${contentType};base64,${base64}`;
+          resolve({ success: true, dataUrl });
+        });
+
+        response.on('error', (err: Error) => {
+          reject(err);
+        });
+      });
+
+      request.on('error', (err: Error) => {
+        reject(err);
+      });
+
+      request.end();
+    });
+  } catch (error) {
+    console.error('Image proxy error:', error);
+    return { success: false, error: String(error) };
+  }
+});
+
 import * as googleTTS from 'google-tts-api';
 
 // TTS Proxy Handler
@@ -81,6 +131,85 @@ ipcMain.handle('open-external', async (event, url: string) => {
   }
 });
 
+// Open YouTube in a popup window (bypasses embed restrictions)
+let youtubeWindow: BrowserWindow | null = null;
+
+ipcMain.handle('open-youtube-popup', async (event, videoId: string) => {
+  console.log('Opening YouTube popup for video:', videoId);
+
+  // Close existing popup if any
+  if (youtubeWindow && !youtubeWindow.isDestroyed()) {
+    youtubeWindow.close();
+  }
+
+  // Create popup window
+  youtubeWindow = new BrowserWindow({
+    width: 854,
+    height: 520,
+    title: 'YouTube Video',
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
+    }
+  });
+
+  // Load YouTube watch page (NOT embed - embed can still be blocked)
+  youtubeWindow.loadURL(`https://www.youtube.com/watch?v=${videoId}`);
+
+  youtubeWindow.on('closed', () => {
+    youtubeWindow = null;
+  });
+
+  return true;
+});
+
+// Share feed handler - uses native OS share panel
+ipcMain.handle('share-feed', async (event, { title, url }: { title: string; url: string }) => {
+  console.log('Share feed:', { title, url });
+  try {
+    const { shell, dialog } = require('electron');
+
+    // On macOS, we can use the native share menu via shell.openExternal with mailto
+    // or we can show a dialog with options
+    if (process.platform === 'darwin') {
+      // For macOS, we'll use shell.openExternal with different protocols
+      // Show a simple dialog with share options
+      const { response } = await dialog.showMessageBox(win!, {
+        type: 'info',
+        title: 'Share Feed',
+        message: `Share "${title}"`,
+        detail: url,
+        buttons: ['Email', 'Copy Link', 'Cancel'],
+        defaultId: 1,
+        cancelId: 2
+      });
+
+      if (response === 0) {
+        // Email
+        const mailtoUrl = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(`Check out this RSS feed:\n\n${title}\n${url}`)}`;
+        await shell.openExternal(mailtoUrl);
+      } else if (response === 1) {
+        // Copy to clipboard
+        const { clipboard } = require('electron');
+        clipboard.writeText(`${title}\n${url}`);
+        return { success: true, action: 'copied' };
+      }
+
+      return { success: true, action: response === 0 ? 'email' : 'cancelled' };
+    } else {
+      // For other platforms, just copy to clipboard
+      const { clipboard } = require('electron');
+      clipboard.writeText(`${title}\n${url}`);
+      return { success: true, action: 'copied' };
+    }
+  } catch (err: unknown) {
+    console.error('Failed to share feed:', err);
+    throw err;
+  }
+});
+
 // Search proxy handler
 ipcMain.handle('perform-search', async (event, query: string) => {
   console.log('Search Proxy: Received query:', query);
@@ -101,6 +230,80 @@ ipcMain.handle('perform-search', async (event, query: string) => {
   } catch (error) {
     console.error('Search Proxy Error:', error);
     throw error;
+  }
+});
+
+// Fetch Gemini Models
+ipcMain.handle('fetch-gemini-models', async (event, apiKey: string) => {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (!response.ok) throw new Error(`Gemini API Error: ${response.statusText}`);
+    const data = await response.json();
+    return data.models
+      .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+      .map((m: any) => m.name.replace('models/', ''));
+  } catch (error) {
+    console.error('Failed to fetch Gemini models:', error);
+    throw error;
+  }
+});
+
+// Fetch OpenAI Models
+ipcMain.handle('fetch-openai-models', async (event, apiKey: string) => {
+  try {
+    const response = await fetch('https://api.openai.com/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+    if (!response.ok) throw new Error(`OpenAI API Error: ${response.statusText}`);
+    const data = await response.json();
+    return data.data
+      .filter((m: any) => m.id.includes('gpt')) // Filter for GPT models
+      .map((m: any) => m.id)
+      .sort();
+  } catch (error) {
+    console.error('Failed to fetch OpenAI models:', error);
+    throw error;
+  }
+});
+
+// Fetch Claude Models
+ipcMain.handle('fetch-claude-models', async (event, apiKey: string) => {
+  try {
+    // Anthropic doesn't have a simple public list models endpoint that works with just an API key in the same way
+    // But we can try the standard one if it exists, otherwise we might need to return a static list
+    // or try to hit their models endpoint if available.
+    // As of late 2024, Anthropic added a models endpoint.
+    const response = await fetch('https://api.anthropic.com/v1/models', {
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      }
+    });
+
+    if (!response.ok) {
+      // Fallback to static list if endpoint fails (e.g. strict CORS or auth issues)
+      console.warn('Anthropic models endpoint failed, using static list');
+      return [
+        'claude-3-5-sonnet-20240620',
+        'claude-3-opus-20240229',
+        'claude-3-sonnet-20240229',
+        'claude-3-haiku-20240307'
+      ];
+    }
+
+    const data = await response.json();
+    return data.data.map((m: any) => m.id);
+  } catch (error) {
+    console.error('Failed to fetch Claude models:', error);
+    // Fallback
+    return [
+      'claude-3-5-sonnet-20240620',
+      'claude-3-opus-20240229',
+      'claude-3-sonnet-20240229',
+      'claude-3-haiku-20240307'
+    ];
   }
 });
 
@@ -128,6 +331,8 @@ ipcMain.handle('send-daily-email', async (event, { articles, emailSettings, appS
 ipcMain.handle('get-system-theme', () => {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
 });
+
+
 
 // Listen for system theme changes
 nativeTheme.on('updated', () => {
@@ -171,20 +376,23 @@ ipcMain.on('summary-window-ready', (event, articleId: string) => {
 });
 
 // Create summary window handler
-ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, articleId, theme: passedTheme }) => {
+ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, articleId, theme: passedTheme, settings: passedSettings }) => {
   try {
     // Determine theme: use passed theme, or fallback to storage
     let theme = passedTheme;
-    if (!theme) {
+    let settings = passedSettings;
+    if (!theme || !settings) {
       const appData = readData();
-      const settings = appData['rss-reader-settings'] || {};
-      theme = settings.theme || 'dark';
+      const storedSettings = appData['rss-reader-settings'] || {};
+      theme = theme || storedSettings.theme || 'dark';
+      settings = settings || storedSettings;
     }
 
     // Store the data for when window is ready
-    const data = { summary, articleTitle, articleId, theme };
+    const data = { summary, articleTitle, articleId, theme, settings };
     pendingSummaryData.set(articleId, data);
     console.log('Main: Stored pending summary data for article:', articleId);
+    console.log('Main: Settings received ttsProvider:', settings?.ttsProvider);
 
     // Check if window for this article already exists
     const existingWindow = summaryWindows.get(articleId);
@@ -302,6 +510,71 @@ ipcMain.handle('test-email-connection', async (event, emailSettings) => {
     console.error('Error stack:', error instanceof Error ? error.stack : '');
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
+});
+
+
+ipcMain.handle('fetch-url', async (event, url) => {
+  return new Promise((resolve) => {
+    try {
+      console.log(`Fetching URL content: ${url}`);
+
+      const request = net.request({
+        method: 'GET',
+        url: url,
+        redirect: 'follow'
+      });
+
+      // Set browser-like headers
+      request.setHeader('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+      request.setHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7');
+      request.setHeader('Accept-Language', 'en-US,en;q=0.9');
+      request.setHeader('Accept-Encoding', 'gzip, deflate, br');
+      request.setHeader('Cache-Control', 'max-age=0');
+      request.setHeader('Upgrade-Insecure-Requests', '1');
+      request.setHeader('Sec-Fetch-Dest', 'document');
+      request.setHeader('Sec-Fetch-Mode', 'navigate');
+      request.setHeader('Sec-Fetch-Site', 'none');
+      request.setHeader('Sec-Fetch-User', '?1');
+      request.setHeader('Connection', 'keep-alive');
+
+      let responseData = '';
+
+      request.on('response', (response) => {
+        console.log(`Response status: ${response.statusCode} for ${url}`);
+
+        if (response.statusCode !== 200) {
+          resolve({
+            success: false,
+            error: `Failed to fetch: ${response.statusCode} ${response.statusMessage}`
+          });
+          return;
+        }
+
+        response.on('data', (chunk) => {
+          responseData += chunk.toString();
+        });
+
+        response.on('end', () => {
+          resolve({ success: true, content: responseData });
+        });
+
+        response.on('error', (error: Error) => {
+          console.error(`Response error for ${url}:`, error);
+          resolve({ success: false, error: error.message });
+        });
+      });
+
+      request.on('error', (error) => {
+        console.error(`Request error for ${url}:`, error);
+        resolve({ success: false, error: error.message });
+      });
+
+      request.end();
+    } catch (error) {
+      console.error(`Error fetching URL ${url}:`, error);
+      resolve({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
 });
 
 process.env.DIST = path.join(__dirname, '../dist');

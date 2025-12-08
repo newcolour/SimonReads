@@ -75,6 +75,7 @@ export const storage = {
                 ttsProvider: 'free',
                 aiProvider: 'gemini',
                 dailyNewsreelTimeHorizon: 24,
+                usePublicationColors: true,
                 // Email settings
                 emailEnabled: false,
                 emailSmtpHost: '',

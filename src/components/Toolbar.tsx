@@ -18,6 +18,7 @@ interface ToolbarProps {
     onClearAllData: () => void;
     onImportOPML: (file: File) => void;
     articles: Article[];
+    onShowTutorial?: () => void;
 }
 
 const FONTS = [
@@ -44,10 +45,83 @@ const TIME_HORIZONS: { value: number; label: string }[] = [
     { value: 24, label: 'Today (24 Hours)' },
 ];
 
-export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles }: ToolbarProps) {
+export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial }: ToolbarProps) {
     const [showSettings, setShowSettings] = useState(false);
     const [tempSettings, setTempSettings] = useState(settings);
     const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'ai' | 'email' | 'about'>('general');
+    const [geminiModels, setGeminiModels] = useState<string[]>([]);
+    const [openaiModels, setOpenaiModels] = useState<string[]>([]);
+    const [claudeModels, setClaudeModels] = useState<string[]>([]);
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+    const fetchModels = async (provider: 'gemini' | 'openai' | 'claude') => {
+        setIsLoadingModels(true);
+        const ipcRenderer = (window as any).ipcRenderer;
+
+        try {
+            let models: string[] = [];
+
+            if (provider === 'gemini' && tempSettings.geminiApiKey) {
+                if (ipcRenderer) {
+                    models = await ipcRenderer.invoke('fetch-gemini-models', tempSettings.geminiApiKey);
+                } else {
+                    // Direct fetch for Android/mobile
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${tempSettings.geminiApiKey}`);
+                    if (!response.ok) throw new Error('Failed to fetch Gemini models');
+                    const data = await response.json();
+                    models = data.models
+                        .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+                        .map((m: any) => m.name.replace('models/', ''));
+                }
+                setGeminiModels(models);
+                if (models.length > 0 && (!tempSettings.geminiModel || !models.includes(tempSettings.geminiModel))) {
+                    setTempSettings(prev => ({ ...prev, geminiModel: models[0] }));
+                }
+            } else if (provider === 'openai' && tempSettings.openaiApiKey) {
+                if (ipcRenderer) {
+                    models = await ipcRenderer.invoke('fetch-openai-models', tempSettings.openaiApiKey);
+                } else {
+                    // Direct fetch for Android/mobile
+                    const response = await fetch('https://api.openai.com/v1/models', {
+                        headers: { 'Authorization': `Bearer ${tempSettings.openaiApiKey}` }
+                    });
+                    if (!response.ok) throw new Error('Failed to fetch OpenAI models');
+                    const data = await response.json();
+                    models = data.data
+                        .filter((m: any) => m.id.includes('gpt'))
+                        .map((m: any) => m.id)
+                        .sort();
+                }
+                setOpenaiModels(models);
+                if (models.length > 0 && (!tempSettings.openaiModel || !models.includes(tempSettings.openaiModel))) {
+                    setTempSettings(prev => ({ ...prev, openaiModel: models[0] }));
+                }
+            } else if (provider === 'claude' && tempSettings.claudeApiKey) {
+                if (ipcRenderer) {
+                    models = await ipcRenderer.invoke('fetch-claude-models', tempSettings.claudeApiKey);
+                } else {
+                    // Anthropic's API may have CORS issues from browser, provide static list
+                    // The API endpoint doesn't support browser CORS
+                    models = [
+                        'claude-3-5-sonnet-20241022',
+                        'claude-3-5-haiku-20241022',
+                        'claude-3-opus-20240229',
+                        'claude-3-sonnet-20240229',
+                        'claude-3-haiku-20240307'
+                    ];
+                }
+                setClaudeModels(models);
+                if (models.length > 0 && (!tempSettings.claudeModel || !models.includes(tempSettings.claudeModel))) {
+                    setTempSettings(prev => ({ ...prev, claudeModel: models[0] }));
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch models:', error);
+            alert('Failed to fetch models. Please check your API key.');
+        } finally {
+            setIsLoadingModels(false);
+        }
+    };
 
 
 
@@ -295,6 +369,12 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     <option value="light">Light</option>
                                     <option value="sepia">Sepia</option>
                                     <option value="black">Black (OLED)</option>
+                                    <option value="nord">Nord</option>
+                                    <option value="solarized-dark">Solarized Dark</option>
+                                    <option value="dracula">Dracula</option>
+                                    <option value="gruvbox">Gruvbox</option>
+                                    <option value="tokyo-night">Tokyo Night</option>
+                                    <option value="sorcerer">✨ Sorcerer</option>
                                 </select>
                             </div>
                             <div className="setting-group">
@@ -319,6 +399,17 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     <option value="large">Large</option>
                                     <option value="xlarge">Extra Large</option>
                                 </select>
+                            </div>
+                            <div className="setting-group">
+                                <label>
+                                    <input
+                                        type="checkbox"
+                                        checked={tempSettings.usePublicationColors ?? true}
+                                        onChange={e => setTempSettings({ ...tempSettings, usePublicationColors: e.target.checked })}
+                                    />
+                                    Use Publication Colors
+                                </label>
+                                <p className="setting-hint">Apply subtle brand colors from the original publication to the article view</p>
                             </div>
                         </>
                     )}
@@ -352,13 +443,38 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     </div>
                                     <div className="setting-group">
                                         <label>Gemini Model</label>
-                                        <input
-                                            type="text"
-                                            value={tempSettings.geminiModel || 'gemini-1.5-flash'}
-                                            onChange={e => setTempSettings({ ...tempSettings, geminiModel: e.target.value })}
-                                            placeholder="e.g. gemini-1.5-flash"
-                                            className="api-key-input"
-                                        />
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            {geminiModels.length > 0 ? (
+                                                <select
+                                                    value={tempSettings.geminiModel || 'gemini-1.5-flash'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, geminiModel: e.target.value })}
+                                                    className="api-key-input"
+                                                    style={{ flex: 1 }}
+                                                >
+                                                    {geminiModels.map(model => (
+                                                        <option key={model} value={model}>{model}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={tempSettings.geminiModel || 'gemini-1.5-flash'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, geminiModel: e.target.value })}
+                                                    placeholder="e.g. gemini-1.5-flash"
+                                                    className="api-key-input"
+                                                    style={{ flex: 1 }}
+                                                />
+                                            )}
+                                            <button
+                                                className="icon-btn"
+                                                onClick={() => fetchModels('gemini')}
+                                                disabled={isLoadingModels || !tempSettings.geminiApiKey}
+                                                title="Fetch available models"
+                                                style={{ height: '38px', width: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            >
+                                                <RefreshCw size={16} className={isLoadingModels ? 'spin' : ''} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </>
                             )}
@@ -378,13 +494,38 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     </div>
                                     <div className="setting-group">
                                         <label>OpenAI Model</label>
-                                        <input
-                                            type="text"
-                                            value={tempSettings.openaiModel || 'gpt-4o-mini'}
-                                            onChange={e => setTempSettings({ ...tempSettings, openaiModel: e.target.value })}
-                                            placeholder="e.g. gpt-4o-mini"
-                                            className="api-key-input"
-                                        />
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            {openaiModels.length > 0 ? (
+                                                <select
+                                                    value={tempSettings.openaiModel || 'gpt-4o-mini'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, openaiModel: e.target.value })}
+                                                    className="api-key-input"
+                                                    style={{ flex: 1 }}
+                                                >
+                                                    {openaiModels.map(model => (
+                                                        <option key={model} value={model}>{model}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={tempSettings.openaiModel || 'gpt-4o-mini'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, openaiModel: e.target.value })}
+                                                    placeholder="e.g. gpt-4o-mini"
+                                                    className="api-key-input"
+                                                    style={{ flex: 1 }}
+                                                />
+                                            )}
+                                            <button
+                                                className="icon-btn"
+                                                onClick={() => fetchModels('openai')}
+                                                disabled={isLoadingModels || !tempSettings.openaiApiKey}
+                                                title="Fetch available models"
+                                                style={{ height: '38px', width: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            >
+                                                <RefreshCw size={16} className={isLoadingModels ? 'spin' : ''} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </>
                             )}
@@ -404,13 +545,38 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     </div>
                                     <div className="setting-group">
                                         <label>Claude Model</label>
-                                        <input
-                                            type="text"
-                                            value={tempSettings.claudeModel || 'claude-3-haiku-20240307'}
-                                            onChange={e => setTempSettings({ ...tempSettings, claudeModel: e.target.value })}
-                                            placeholder="e.g. claude-3-haiku-20240307"
-                                            className="api-key-input"
-                                        />
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            {claudeModels.length > 0 ? (
+                                                <select
+                                                    value={tempSettings.claudeModel || 'claude-3-haiku-20240307'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, claudeModel: e.target.value })}
+                                                    className="api-key-input"
+                                                    style={{ flex: 1 }}
+                                                >
+                                                    {claudeModels.map(model => (
+                                                        <option key={model} value={model}>{model}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={tempSettings.claudeModel || 'claude-3-haiku-20240307'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, claudeModel: e.target.value })}
+                                                    placeholder="e.g. claude-3-haiku-20240307"
+                                                    className="api-key-input"
+                                                    style={{ flex: 1 }}
+                                                />
+                                            )}
+                                            <button
+                                                className="icon-btn"
+                                                onClick={() => fetchModels('claude')}
+                                                disabled={isLoadingModels || !tempSettings.claudeApiKey}
+                                                title="Fetch available models"
+                                                style={{ height: '38px', width: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            >
+                                                <RefreshCw size={16} className={isLoadingModels ? 'spin' : ''} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </>
                             )}
@@ -486,6 +652,33 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     className="api-key-input"
                                     style={{ minHeight: '60px', resize: 'vertical', fontFamily: 'inherit' }}
                                 />
+                            </div>
+
+                            <div className="setting-divider"></div>
+                            <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--text-primary)' }}>PDF Newsreel Preferences</h3>
+
+                            <div className="setting-group">
+                                <label>Summary Length</label>
+                                <select
+                                    value={tempSettings.pdfSummaryLength || 'medium'}
+                                    onChange={e => setTempSettings({ ...tempSettings, pdfSummaryLength: e.target.value as any })}
+                                >
+                                    <option value="short">Short</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="long">Long</option>
+                                </select>
+                            </div>
+
+                            <div className="setting-group">
+                                <label>Summary Depth</label>
+                                <select
+                                    value={tempSettings.pdfSummaryDepth || 'detailed'}
+                                    onChange={e => setTempSettings({ ...tempSettings, pdfSummaryDepth: e.target.value as any })}
+                                >
+                                    <option value="brief">Brief</option>
+                                    <option value="detailed">Detailed</option>
+                                    <option value="comprehensive">Comprehensive</option>
+                                </select>
                             </div>
 
                             <div className="setting-divider"></div>
@@ -712,6 +905,20 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 © Simone Bianco {new Date().getFullYear()}<br />
                                 Version {packageJson.version}
                             </div>
+                            {onShowTutorial && (
+                                <div style={{ textAlign: 'center', marginTop: '24px' }}>
+                                    <button
+                                        className="btn-primary"
+                                        onClick={() => {
+                                            setShowSettings(false);
+                                            onShowTutorial();
+                                        }}
+                                        style={{ padding: '10px 20px' }}
+                                    >
+                                        Show Tutorial
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

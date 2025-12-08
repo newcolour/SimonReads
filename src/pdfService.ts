@@ -8,6 +8,7 @@ interface RankedArticle {
     translatedTitle?: string;
     imageUrl?: string;
     language?: string;
+    searchQuery?: string;
 }
 
 export async function generateNewspaperPDF(
@@ -78,14 +79,14 @@ export async function generateNewspaperPDF(
 
         // Save the PDF
         const filename = `SimonDailyNews_${today.toISOString().split('T')[0]}.pdf`;
-        console.log(`Saving PDF as ${filename}`);
+        console.log(`Saving PDF as ${filename} `);
         pdf.save(filename);
         console.log('PDF generation complete');
     } catch (error) {
         console.error('PDF generation failed:', error);
         // Provide more specific error message
         if (error instanceof Error) {
-            throw new Error(`PDF generation failed: ${error.message}`);
+            throw new Error(`PDF generation failed: ${error.message} `);
         } else {
             throw new Error('PDF generation failed due to an unknown error');
         }
@@ -157,10 +158,34 @@ async function layoutNewspaperArticles(
                 pageHeight
             );
 
-            // Track the tallest article in this row
-            const articleBottom = yPosition + articleHeight;
-            if (articleBottom > rowMaxY) {
-                rowMaxY = articleBottom;
+            // If article doesn't fit (returns -1), start a new page and try again
+            if (articleHeight === -1) {
+                pdf.addPage();
+                yPosition = 20;
+                rowMaxY = 20;
+
+                // Re-render the article on the new page
+                const newXPosition = margin + (column * (columnWidth + 5));
+                const newArticleHeight = await addRegularArticle(
+                    pdf,
+                    ranked,
+                    newXPosition,
+                    yPosition,
+                    columnWidth,
+                    targetLanguage,
+                    pageHeight
+                );
+
+                const articleBottom = yPosition + newArticleHeight;
+                if (articleBottom > rowMaxY) {
+                    rowMaxY = articleBottom;
+                }
+            } else {
+                // Track the tallest article in this row
+                const articleBottom = yPosition + articleHeight;
+                if (articleBottom > rowMaxY) {
+                    rowMaxY = articleBottom;
+                }
             }
 
             // If this is the last column or last article, advance yPosition
@@ -266,7 +291,7 @@ async function addTopStory(
                     pdf.setFont('helvetica', 'italic');
                     pdf.setFontSize(8);
                     pdf.setTextColor(120, 120, 120);
-                    const caption = `Source: ${new URL(article.link).hostname}`;
+                    const caption = `Source: ${new URL(article.link).hostname} `;
                     pdf.text(caption, margin, currentY);
                     currentY += 5;
                 } catch (pdfError) {
@@ -337,22 +362,56 @@ async function addRegularArticle(
         return 0;
     }
 
-    let localY = yPosition;
     const bottomMargin = 20;
+    const fontSize = 10;
+    const lineHeight = fontSize * 0.3527;
+    const lineSpacing = 1.4;
 
-    // Title (use translated title if available)
+    // Calculate total height needed for this article
+    pdf.setFont('times', 'bold');
+    pdf.setFontSize(14);
+    const displayTitle = ranked.translatedTitle || article.title;
+    const titleLines = pdf.splitTextToSize(displayTitle, columnWidth);
+    let estimatedHeight = titleLines.length * 6 + 2; // Title height
+
+    // Language indicator height
+    if (ranked.language && ranked.language.toLowerCase() !== targetLanguage.toLowerCase()) {
+        estimatedHeight += 3;
+    }
+
+    // Image height (if available)
+    if (ranked.imageUrl) {
+        estimatedHeight += 43; // Max image height + spacing
+    }
+
+    // Summary height
+    pdf.setFont('times', 'normal');
+    pdf.setFontSize(fontSize);
+    const paragraphs = ranked.summary.split('\n\n');
+    for (const paragraph of paragraphs) {
+        if (paragraph.trim()) {
+            const paragraphLines = pdf.splitTextToSize(paragraph.trim(), columnWidth);
+            estimatedHeight += paragraphLines.length * (lineHeight * lineSpacing) + 2;
+        }
+    }
+    estimatedHeight += 3; // Final spacing
+
+    // Check if article fits on current page
+    // If not, we need to signal that this article should start on a new page
+    // We return a special value to indicate this
+    if (yPosition + estimatedHeight > pageHeight - bottomMargin) {
+        // Article doesn't fit, return negative height to signal "needs new page"
+        return -1;
+    }
+
+    // Article fits, render it normally
+    let localY = yPosition;
+
+    // Title
     pdf.setFont('times', 'bold');
     pdf.setFontSize(14);
     pdf.setTextColor(0, 0, 0);
-
-    const displayTitle = ranked.translatedTitle || article.title;
-    const titleLines = pdf.splitTextToSize(displayTitle, columnWidth);
     const titleHeight = titleLines.length * 6;
-
-    // Check if title fits
-    if (localY + titleHeight > pageHeight - bottomMargin) {
-        return localY - yPosition;
-    }
 
     pdf.textWithLink(titleLines.join('\n'), xPosition, localY, {
         url: article.link
@@ -398,13 +457,11 @@ async function addRegularArticle(
 
                 const xOffset = xPosition + (maxWidth - imageWidth) / 2;
 
-                if (localY + imageHeight < pageHeight - bottomMargin) {
-                    try {
-                        pdf.addImage(ranked.imageUrl, 'JPEG', xOffset, localY, imageWidth, imageHeight);
-                        localY += imageHeight + 3;
-                    } catch (pdfError) {
-                        console.error('Failed to add column image to PDF:', pdfError);
-                    }
+                try {
+                    pdf.addImage(ranked.imageUrl, 'JPEG', xOffset, localY, imageWidth, imageHeight);
+                    localY += imageHeight + 3;
+                } catch (pdfError) {
+                    console.error('Failed to add column image to PDF:', pdfError);
                 }
             }
         } catch (error) {
@@ -412,35 +469,22 @@ async function addRegularArticle(
         }
     }
 
-    // Summary - render as much as possible without truncating
+    // Summary - render all content since we know it fits
     pdf.setFont('times', 'normal');
-    const fontSize = 10;
     pdf.setFontSize(fontSize);
     pdf.setTextColor(40, 40, 40);
-
-    const paragraphs = ranked.summary.split('\n\n');
-    const lineHeight = fontSize * 0.3527;
-    const lineSpacing = 1.4;
 
     for (const paragraph of paragraphs) {
         if (paragraph.trim()) {
             const paragraphLines = pdf.splitTextToSize(paragraph.trim(), columnWidth);
 
-            // Render lines until we run out of space
             for (let i = 0; i < paragraphLines.length; i++) {
-                if (localY + (lineHeight * lineSpacing) > pageHeight - bottomMargin) {
-                    // Stop if no space left
-                    return localY - yPosition;
-                }
-
                 pdf.text(paragraphLines[i], xPosition, localY);
                 localY += lineHeight * lineSpacing;
             }
             localY += 2; // Space between paragraphs
         }
     }
-
-    localY += 3;
 
     return localY - yPosition;
 }
@@ -469,33 +513,57 @@ async function rankArticlesByImportance(
     try {
         // Use AI to rank articles
         const articlesInfo = articles.map((a, i) =>
-            `${i + 1}. ${a.title}\n   ${a.contentSnippet || a.content?.slice(0, 150) || ''}`
+            `[Index ${i}] ${a.title} \n   ${a.contentSnippet || a.content?.slice(0, 150) || ''} `
         ).join('\n\n');
 
-        const prompt = `Analyze these ${articles.length} news articles and rank them by importance (1-10 scale, 10 being most important). Consider factors like: impact, timeliness, relevance, and newsworthiness.
+        const lengthMap = {
+            short: '1 paragraph (approx 60 words)',
+            medium: '2-3 paragraphs (approx 180 words)',
+            long: '3-4 paragraphs (approx 350 words)'
+        };
+        const depthMap = {
+            brief: 'focus strictly on the main event/news',
+            detailed: 'include context, background, and key details',
+            comprehensive: 'provide deep analysis, historical context, and future implications'
+        };
+
+        const len = settings.pdfSummaryLength || 'medium';
+        const dep = settings.pdfSummaryDepth || 'detailed';
+        const lengthDesc = lengthMap[len];
+        const depthDesc = depthMap[dep];
+
+        console.log(`PDF Summary Settings - Length: ${len} (${lengthDesc}), Depth: ${dep} (${depthDesc})`);
+
+        const prompt = `Analyze these ${articles.length} news articles and rank them by importance(1 - 10 scale, 10 being most important).Consider factors like: impact, timeliness, relevance, and newsworthiness.
 
 For each article:
-1. Assign an importance score (1-10)
+1. Assign an importance score(1 - 10)
 2. Translate the article title to ${targetLanguage} (keep it concise and accurate to the original meaning)
-3. Provide a complete 3-paragraph summary in ${targetLanguage} (each paragraph should be 2-3 sentences, covering: main story, context/background, and implications/significance)
+3. Provide a summary in ${targetLanguage}.IMPORTANT: Strictly follow these requirements:
+- Length: ${lengthDesc}
+- Depth: ${depthDesc}
+   Make sure to match the specified length and depth exactly.Do not deviate from these requirements.
 4. Detect the original language of the article
+5. Create a concise search query(3 - 5 words) to find related articles about this topic from other sources
 
 Articles:
 ${articlesInfo}
 
+
 Respond in JSON format:
 {
-  "rankings": [
-    {
-      "index": 0,
-      "importance": 8,
-      "translatedTitle": "Translated title in ${targetLanguage}",
-      "summary": "Paragraph 1: Main story details...\\n\\nParagraph 2: Background and context...\\n\\nParagraph 3: Implications and significance...",
-      "language": "English" (or "Italian", "Spanish", etc.)
-    },
-    ...
+    "rankings": [
+        {
+            "index": 0,
+            "importance": 8,
+            "translatedTitle": "Translated title in ${targetLanguage}",
+            "summary": "Summary following the specified length and depth requirements...",
+            "language": "English"(or "Italian", "Spanish", etc.),
+            "searchQuery": "concise search terms"
+        },
+        ...
   ]
-}`;
+} `;
 
         let response;
         if (provider === 'gemini') {
@@ -518,6 +586,7 @@ Respond in JSON format:
             }
 
             // Filter and validate rankings
+            const seenIndices = new Set<number>();
             const validRankings = result.rankings
                 .filter((r: any) => {
                     // Validate that index is valid
@@ -530,6 +599,13 @@ Respond in JSON format:
                         console.warn(`Article at index ${r.index} is undefined, skipping`);
                         return false;
                     }
+                    // Deduplicate
+                    if (seenIndices.has(r.index)) {
+                        console.warn(`Duplicate index ${r.index}, skipping`);
+                        return false;
+                    }
+                    seenIndices.add(r.index);
+
                     // Validate required fields
                     if (!r.summary || !r.importance) {
                         console.warn(`Missing required fields for article ${r.index}, skipping`);
@@ -542,7 +618,8 @@ Respond in JSON format:
                     importance: r.importance,
                     summary: r.summary,
                     translatedTitle: r.translatedTitle || articles[r.index].title,
-                    language: r.language
+                    language: r.language,
+                    searchQuery: r.searchQuery
                 }))
                 .sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
 
@@ -576,6 +653,7 @@ Respond in JSON format:
             }
 
             // Filter and validate rankings
+            const seenIndices = new Set<number>();
             const validRankings = result.rankings
                 .filter((r: any) => {
                     if (typeof r.index !== 'number' || r.index < 0 || r.index >= articles.length) {
@@ -586,6 +664,13 @@ Respond in JSON format:
                         console.warn(`Article at index ${r.index} is undefined, skipping`);
                         return false;
                     }
+                    // Deduplicate
+                    if (seenIndices.has(r.index)) {
+                        console.warn(`Duplicate index ${r.index}, skipping`);
+                        return false;
+                    }
+                    seenIndices.add(r.index);
+
                     if (!r.summary || !r.importance) {
                         console.warn(`Missing required fields for article ${r.index}, skipping`);
                         return false;
@@ -597,7 +682,8 @@ Respond in JSON format:
                     importance: r.importance,
                     summary: r.summary,
                     translatedTitle: r.translatedTitle || articles[r.index].title,
-                    language: r.language
+                    language: r.language,
+                    searchQuery: r.searchQuery
                 }))
                 .sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
 

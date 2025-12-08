@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles, Loader, X, Volume2, RotateCw, FileDown } from 'lucide-react';
+import { Sparkles, Loader, X, Volume2, RotateCw, FileDown, Pause, Play } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Article, AppSettings } from '../types';
 import { summarizeArticle } from '../summaryService';
 import { generateNewspaperPDF } from '../pdfService';
+import { fetchRelatedArticles } from '../relatedArticlesService';
 import './Newsreel.css';
 
 interface NewsreelProps {
@@ -20,14 +21,15 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isReadingAloud, setIsReadingAloud] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [playbackRate, setPlaybackRate] = useState(1.0);
     const [isExportingPdf, setIsExportingPdf] = useState(false);
     const isReadingAloudRef = useRef(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const articleMapRef = useRef<Map<string, Article>>(new Map());
 
-    // Cache to avoid regenerating when articles haven't changed
-    const lastArticleHashRef = useRef<string>('');
-    const cachedSummaryRef = useRef<string | null>(null);
+    // Cache key based on type (daily or custom)
+    const CACHE_KEY = `newsreel_cache_${isDailyNewsreel ? 'daily' : 'custom'}`;
 
     useEffect(() => {
         return () => {
@@ -37,6 +39,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             }
             window.speechSynthesis.cancel();
             setIsReadingAloud(false);
+            setIsPaused(false);
         };
     }, []);
 
@@ -46,23 +49,62 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             // Create a hash of article IDs to detect changes
             const articleHash = articles.map(a => a.id).sort().join('|');
 
-            // Check if articles have changed
-            if (articleHash !== lastArticleHashRef.current) {
-                console.log('📰 Articles changed, generating new newsreel...');
-                lastArticleHashRef.current = articleHash;
-                cachedSummaryRef.current = null; // Invalidate cache
-                generateNewsreel();
-            } else if (cachedSummaryRef.current) {
-                console.log('✅ Using cached newsreel (no new articles)');
-                setSummary(cachedSummaryRef.current);
+            // Try to load from session storage
+            let cachedData = null;
+            try {
+                const stored = sessionStorage.getItem(CACHE_KEY);
+                if (stored) {
+                    cachedData = JSON.parse(stored);
+                }
+            } catch (e) {
+                console.error('Failed to parse newsreel cache', e);
+            }
+
+            // Check if we have a valid cache match
+            if (cachedData && cachedData.hash === articleHash && cachedData.summary) {
+                console.log('✅ Using cached newsreel from session storage');
+                setSummary(cachedData.summary);
             } else {
-                // First time or cache miss
-                generateNewsreel();
+                console.log('📰 Articles changed or no cache, generating new newsreel...');
+                generateNewsreel(articleHash);
             }
         }
-    }, [articles, isExportingPdf]);
+    }, [articles, isExportingPdf, CACHE_KEY]);
 
-    const generateNewsreel = async () => {
+    const handleTogglePause = () => {
+        if (isPaused) {
+            // Resume
+            if (audioRef.current) {
+                audioRef.current.play();
+            } else {
+                window.speechSynthesis.resume();
+            }
+            setIsPaused(false);
+        } else {
+            // Pause
+            if (audioRef.current) {
+                audioRef.current.pause();
+            } else {
+                window.speechSynthesis.pause();
+            }
+            setIsPaused(true);
+        }
+    };
+
+    const handleChangeSpeed = () => {
+        const rates = [0.75, 1.0, 1.25, 1.5, 2.0];
+        const currentIndex = rates.indexOf(playbackRate);
+        const nextRate = rates[(currentIndex + 1) % rates.length];
+
+        setPlaybackRate(nextRate);
+
+        if (audioRef.current) {
+            audioRef.current.playbackRate = nextRate;
+        }
+        // Note: System voice rate change requires restart usually, so it will apply on next segment
+    };
+
+    const generateNewsreel = async (currentArticleHash: string) => {
         if (articles.length === 0) return;
 
         setIsSummarizing(true);
@@ -80,8 +122,24 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             const articleContents = await Promise.all(
                 articles.map(async (article) => {
                     try {
-                        const response = await fetch(article.link);
-                        const html = await response.text();
+                        let html = '';
+                        const ipcRenderer = (window as any).ipcRenderer;
+
+                        if (ipcRenderer) {
+                            // Use IPC to fetch content (bypasses CORS and 403s)
+                            const result = await ipcRenderer.invoke('fetch-url', article.link);
+                            if (result.success) {
+                                html = result.content;
+                            } else {
+                                console.warn(`IPC fetch failed for ${article.link}: ${result.error}, falling back to direct fetch`);
+                                const response = await fetch(article.link);
+                                html = await response.text();
+                            }
+                        } else {
+                            // Fallback for web mode
+                            const response = await fetch(article.link);
+                            html = await response.text();
+                        }
 
                         // Extract text content from HTML (remove scripts, styles, etc.)
                         const parser = new DOMParser();
@@ -141,6 +199,7 @@ IMPORTANT INSTRUCTIONS:
    - Write 2-4 detailed paragraphs covering the key points from all articles in the group
    - Do NOT include inline links in the text
    - At the END of the section, create a "Sources" list with markdown links to each article: - [Article Title (Translated)](URL)
+   - After the sources, add a specific line exactly like this: "SEARCH_QUERY: <3-5 word search query for this topic>"
 5. Make sure EVERY article is included in at least one topic group
 6. If an article doesn't fit any group, create a "Miscellaneous" section
 
@@ -154,13 +213,55 @@ IMPORTANT INSTRUCTIONS:
 4. Write detailed summaries (2-3 paragraphs per topic group)
 5. Do NOT include inline links in the text
 6. At the END of each topic section, list the sources as bullet points with markdown links: - [Article Title (Translated)](URL)
-7. Make sure ALL ${articles.length} articles are included
+7. After the sources, add a specific line exactly like this: "SEARCH_QUERY: <3-5 word search query for this topic>"
+8. Make sure ALL ${articles.length} articles are included
 
 This topic-based approach allows for richer summaries than individual article summaries.`;
 
-            const result = await summarizeArticle(combinedContent, settings.geminiApiKey || '', settings, instruction);
+            let result = await summarizeArticle(combinedContent, settings.geminiApiKey || '', settings, instruction);
+
+            // Post-process to add "To know more" sections
+            const queryRegex = /SEARCH_QUERY: (.*)/g;
+            let match;
+            const replacements = [];
+
+            // Find all search queries
+            while ((match = queryRegex.exec(result)) !== null) {
+                const fullMatch = match[0];
+                const query = match[1].trim();
+                replacements.push({ fullMatch, query });
+            }
+
+            // Fetch related articles for each query
+            for (const { fullMatch, query } of replacements) {
+                try {
+                    const related = await fetchRelatedArticles(query);
+                    if (related.length > 0) {
+                        const relatedMd = `\n\n**To know more:**\n` +
+                            related.map(r => `- [${r.title} (${r.source})](${r.url})`).join('\n');
+                        result = result.replace(fullMatch, relatedMd);
+                    } else {
+                        result = result.replace(fullMatch, '');
+                    }
+                } catch (e) {
+                    console.error(`Failed to fetch related articles for query "${query}":`, e);
+                    result = result.replace(fullMatch, '');
+                }
+            }
+
             setSummary(result);
-            cachedSummaryRef.current = result; // Cache the result
+
+            // Save to session storage
+            if (currentArticleHash) {
+                try {
+                    sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                        hash: currentArticleHash,
+                        summary: result
+                    }));
+                } catch (e) {
+                    console.error('Failed to save newsreel cache', e);
+                }
+            }
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -170,8 +271,9 @@ This topic-based approach allows for richer summaries than individual article su
 
     const handleRegenerate = () => {
         console.log('🔄 Force regenerating newsreel...');
-        cachedSummaryRef.current = null; // Clear cache to force regeneration
-        generateNewsreel();
+        sessionStorage.removeItem(CACHE_KEY); // Clear cache
+        const articleHash = articles.map(a => a.id).sort().join('|');
+        generateNewsreel(articleHash);
     };
 
     const handleReadAloud = async () => {
@@ -231,6 +333,7 @@ This topic-based approach allows for richer summaries than individual article su
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
             const audio = new Audio(url);
+            audio.playbackRate = playbackRate;
             audioRef.current = audio;
 
             audio.onended = () => {
@@ -311,6 +414,7 @@ This topic-based approach allows for richer summaries than individual article su
 
                 const audioSrc = `data:audio/mp3;base64,${base64List[segmentIndex]}`;
                 const audio = new Audio();
+                audio.playbackRate = playbackRate;
                 audioRef.current = audio;
 
                 audio.onended = () => {
@@ -347,13 +451,16 @@ This topic-based approach allows for richer summaries than individual article su
 
     const readWithSystemVoice = (text: string) => {
         const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = playbackRate;
         utterance.onend = () => {
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
+            setIsPaused(false);
         };
         utterance.onerror = () => {
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
+            setIsPaused(false);
         };
         window.speechSynthesis.speak(utterance);
     };
@@ -381,39 +488,54 @@ This topic-based approach allows for richer summaries than individual article su
         <div className="newsreel">
             <div className="newsreel-header">
                 <div className="newsreel-title">
-                    <Sparkles size={20} />
+                    <Sparkles size={18} className="sparkles-icon" />
                     <h2>{isDailyNewsreel ? 'Daily Newsreel' : 'Newsreel Summary'}</h2>
                     <span className="article-count">{articles.length} articles</span>
                 </div>
                 <div className="newsreel-actions">
-                    {summary && (
+                    {isReadingAloud && (
                         <>
                             <button
-                                className={`action-btn ${isReadingAloud ? 'active' : ''}`}
-                                onClick={handleReadAloud}
-                                title={isReadingAloud ? "Stop Reading" : "Read Aloud"}
+                                className="icon-btn"
+                                onClick={handleChangeSpeed}
+                                title={`Speed: ${playbackRate}x`}
+                                style={{ width: 'auto', padding: '0 8px', fontSize: '12px', fontWeight: 'bold' }}
                             >
-                                <Volume2 size={20} />
+                                {playbackRate}x
                             </button>
                             <button
-                                className="action-btn"
-                                onClick={handleRegenerate}
-                                disabled={isSummarizing}
-                                title="Regenerate Summary"
+                                className="icon-btn"
+                                onClick={handleTogglePause}
+                                title={isPaused ? "Resume" : "Pause"}
                             >
-                                {isSummarizing ? <Loader size={20} className="spin" /> : <RotateCw size={20} />}
+                                {isPaused ? <Play size={18} /> : <Pause size={18} />}
                             </button>
-                            {isDailyNewsreel && (
-                                <button
-                                    className="action-btn"
-                                    onClick={handleExportPdf}
-                                    disabled={isExportingPdf}
-                                    title="Export as Newspaper PDF"
-                                >
-                                    {isExportingPdf ? <Loader size={20} className="spin" /> : <FileDown size={20} />}
-                                </button>
-                            )}
                         </>
+                    )}
+                    <button
+                        className={`icon-btn ${isReadingAloud ? 'active' : ''}`}
+                        onClick={handleReadAloud}
+                        title={isReadingAloud ? "Stop Reading" : "Read Aloud"}
+                    >
+                        {isReadingAloud ? <X size={18} /> : <Volume2 size={18} />}
+                    </button>
+                    <button
+                        className="action-btn"
+                        onClick={handleRegenerate}
+                        disabled={isSummarizing}
+                        title="Regenerate Summary"
+                    >
+                        {isSummarizing ? <Loader size={20} className="spin" /> : <RotateCw size={20} />}
+                    </button>
+                    {isDailyNewsreel && (
+                        <button
+                            className="icon-btn"
+                            onClick={handleExportPdf}
+                            disabled={isExportingPdf || !summary}
+                            title="Export as PDF"
+                        >
+                            {isExportingPdf ? <Loader className="spin" size={18} /> : <FileDown size={18} />}
+                        </button>
                     )}
                     <button className="close-btn" onClick={onClose} title="Close Newsreel">
                         <X size={20} />
@@ -430,7 +552,10 @@ This topic-based approach allows for richer summaries than individual article su
                 ) : error ? (
                     <div className="newsreel-error">
                         <p>{error}</p>
-                        <button onClick={generateNewsreel}>Try Again</button>
+                        <button onClick={() => {
+                            const articleHash = articles.map(a => a.id).sort().join('|');
+                            generateNewsreel(articleHash);
+                        }}>Try Again</button>
                     </div>
                 ) : summary ? (
                     <div className="newsreel-summary">
@@ -447,6 +572,7 @@ This topic-based approach allows for richer summaries than individual article su
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     onArticleClick(article);
+                                                    onClose(); // Close newsreel when article is clicked
                                                 }}
                                                 style={{ cursor: 'pointer' }}
                                                 {...props}
@@ -455,8 +581,45 @@ This topic-based approach allows for richer summaries than individual article su
                                             </a>
                                         );
                                     }
-                                    // Regular external link
-                                    return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+                                    // Regular external link - treat as an article to open in app
+                                    return (
+                                        <a
+                                            href="#"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                if (href) {
+                                                    // Create a temporary article object for the external link
+                                                    const tempArticle: Article = {
+                                                        id: href,
+                                                        feedId: 'external',
+                                                        title: String(children),
+                                                        link: href,
+                                                        pubDate: new Date(),
+                                                        content: '',
+                                                        contentSnippet: '',
+                                                        isRead: false
+                                                    };
+
+                                                    if (onArticleClick) {
+                                                        onArticleClick(tempArticle);
+                                                        onClose();
+                                                    } else {
+                                                        // Fallback
+                                                        const ipcRenderer = (window as any).ipcRenderer;
+                                                        if (ipcRenderer) {
+                                                            ipcRenderer.invoke('open-external', href);
+                                                        } else {
+                                                            window.open(href, '_blank');
+                                                        }
+                                                    }
+                                                }
+                                            }}
+                                            style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                            {...props}
+                                        >
+                                            {children}
+                                        </a>
+                                    );
                                 }
                             }}
                         >
