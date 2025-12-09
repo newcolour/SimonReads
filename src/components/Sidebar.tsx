@@ -54,6 +54,8 @@ export default function Sidebar({
     const [newFeedTitle, setNewFeedTitle] = useState('');
     const [categorizingFeedId, setCategorizingFeedId] = useState<string | null>(null);
     const [newCategory, setNewCategory] = useState('');
+    const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
+    const [newCategoryName, setNewCategoryName] = useState('');
     const [sortOption, setSortOption] = useState<SortOption>('updated');
     const [showSortMenu, setShowSortMenu] = useState(false);
     const [sortMenuPos, setSortMenuPos] = useState({ x: 0, y: 0 });
@@ -309,6 +311,26 @@ export default function Sidebar({
         return Array.from(cats).sort();
     }, [feeds]);
 
+    // Handler to rename a category (updates all feeds with that category)
+    const handleRenameCategory = (oldCategory: string, newName: string) => {
+        const trimmedName = newName.trim();
+        // Update all feeds that have this category
+        feeds.forEach(feed => {
+            if ((feed.category || 'Uncategorized') === oldCategory) {
+                const newCat = trimmedName === '' || trimmedName === 'Uncategorized' ? undefined : trimmedName;
+                onUpdateFeed(feed.id, { ...feed, category: newCat });
+            }
+        });
+        setRenamingCategory(null);
+        setNewCategoryName('');
+    };
+
+    const startRenamingCategory = (category: string) => {
+        if (category === 'Uncategorized') return; // Can't rename Uncategorized
+        setRenamingCategory(category);
+        setNewCategoryName(category);
+    };
+
     const handleContextRefresh = () => {
         if (contextMenu.feed && onRefreshFeed) {
             onRefreshFeed(contextMenu.feed.id);
@@ -474,9 +496,33 @@ export default function Sidebar({
                     return (
                         <div key={feed.id}>
                             {showCategoryHeader && (
-                                <div className="category-header">
+                                <div
+                                    className="category-header"
+                                    onDoubleClick={() => startRenamingCategory(currentCategory)}
+                                    title={currentCategory !== 'Uncategorized' ? 'Double-click to rename' : undefined}
+                                >
                                     <Folder size={14} />
-                                    <span>{currentCategory}</span>
+                                    {renamingCategory === currentCategory ? (
+                                        <input
+                                            type="text"
+                                            value={newCategoryName}
+                                            onChange={(e) => setNewCategoryName(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    handleRenameCategory(currentCategory, newCategoryName);
+                                                } else if (e.key === 'Escape') {
+                                                    setRenamingCategory(null);
+                                                    setNewCategoryName('');
+                                                }
+                                            }}
+                                            onBlur={() => handleRenameCategory(currentCategory, newCategoryName)}
+                                            className="category-rename-input"
+                                            autoFocus
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    ) : (
+                                        <span>{currentCategory}</span>
+                                    )}
                                 </div>
                             )}
                             <div

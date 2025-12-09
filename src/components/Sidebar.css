@@ -468,6 +468,30 @@
     margin-top: 0;
 }
 
+.category-header:hover {
+    background: var(--bg-hover);
+    border-radius: 4px;
+    margin-left: 8px;
+    margin-right: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.category-rename-input {
+    flex: 1;
+    background: var(--bg-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 2px 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    outline: none;
+    max-width: 150px;
+}
+
 .category-input-container {
     flex: 1;
     display: flex;
