@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { Loader, LogIn, Newspaper, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star } from 'lucide-react';
+import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
@@ -615,8 +615,11 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
         return (
             <div className="article-view empty">
                 <div className="empty-content">
-                    <Newspaper size={48} />
+                    <div className="empty-icon">
+                        <BookOpen size={32} strokeWidth={1.5} />
+                    </div>
                     <h2>Select an article to read</h2>
+                    <p className="empty-subtitle">Choose an article from the list to start reading</p>
                 </div>
             </div>
         );
