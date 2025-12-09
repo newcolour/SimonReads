@@ -794,16 +794,16 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                         >
                             <MessageCircle size={18} />
                         </button>
-                        {viewMode === 'browser' && (
-                            <button
-                                className="action-btn"
-                                onClick={handleLogin}
-                                data-tooltip="Login to this site"
-                                data-tooltip-align="right"
-                            >
-                                <LogIn size={18} />
-                            </button>
-                        )}
+                        {/* Login button - always rendered for consistent layout, hidden when not in browser mode */}
+                        <button
+                            className="action-btn"
+                            onClick={handleLogin}
+                            data-tooltip="Login to this site"
+                            data-tooltip-align="right"
+                            style={{ visibility: viewMode === 'browser' ? 'visible' : 'hidden' }}
+                        >
+                            <LogIn size={18} />
+                        </button>
                     </div>
                 </div>
 
