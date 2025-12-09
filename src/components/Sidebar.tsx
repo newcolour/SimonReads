@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, MoreHorizontal } from 'lucide-react';
+import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
 import FeedDiscovery from './FeedDiscovery';
 import './Sidebar.css';
@@ -68,11 +68,6 @@ export default function Sidebar({
     const [sortOption, setSortOption] = useState<SortOption>('updated');
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, feed: null });
     const contextMenuRef = useRef<HTMLDivElement>(null);
-    // Overflow menu state
-    const [showOverflowMenu, setShowOverflowMenu] = useState(false);
-    const [overflowMenuPos, setOverflowMenuPos] = useState({ x: 0, y: 0 });
-    const overflowButtonRef = useRef<HTMLButtonElement>(null);
-    const overflowMenuRef = useRef<HTMLDivElement>(null);
 
     const sortedFeeds = useMemo(() => {
         const sorted = [...feeds].sort((a, b) => {
@@ -335,36 +330,19 @@ export default function Sidebar({
         }
     };
 
-    // Close context menu and sort menu when clicking outside
+    // Close context menu when clicking outside
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
                 closeContextMenu();
             }
-            if (showOverflowMenu && overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node) &&
-                overflowButtonRef.current && !overflowButtonRef.current.contains(e.target as Node)) {
-                setShowOverflowMenu(false);
-            }
         };
 
-        if (contextMenu.show || showOverflowMenu) {
+        if (contextMenu.show) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [contextMenu.show, showOverflowMenu]);
-
-    const toggleOverflowMenu = () => {
-        if (showOverflowMenu) {
-            setShowOverflowMenu(false);
-        } else if (overflowButtonRef.current) {
-            const rect = overflowButtonRef.current.getBoundingClientRect();
-            setOverflowMenuPos({
-                x: rect.left,
-                y: rect.bottom + 4
-            });
-            setShowOverflowMenu(true);
-        }
-    };
+    }, [contextMenu.show]);
 
     return (
         <div className="sidebar">
@@ -389,6 +367,42 @@ export default function Sidebar({
                     </button>
                 )}
                 <button
+                    className={`toolbar-icon-btn ${sortOption !== 'updated' ? 'active' : ''}`}
+                    onClick={() => {
+                        // Cycle through sort options
+                        if (sortOption === 'updated') setSortOption('alpha-asc');
+                        else if (sortOption === 'alpha-asc') setSortOption('alpha-desc');
+                        else setSortOption('updated');
+                    }}
+                    data-tooltip={sortOption === 'updated' ? 'Sort: Last Updated' : sortOption === 'alpha-asc' ? 'Sort: A-Z' : 'Sort: Z-A'}
+                >
+                    {sortOption === 'updated' && <Clock size={15} />}
+                    {sortOption === 'alpha-asc' && <ArrowDownAZ size={15} />}
+                    {sortOption === 'alpha-desc' && <ArrowUpAZ size={15} />}
+                </button>
+                {onOpenDailyNewsreel && (
+                    <button
+                        className="toolbar-icon-btn"
+                        onClick={onOpenDailyNewsreel}
+                        data-tooltip="Daily Newsreel"
+                    >
+                        <Newspaper size={15} />
+                    </button>
+                )}
+                {onMarkAllAsRead && (
+                    <button
+                        className="toolbar-icon-btn"
+                        onClick={() => {
+                            if (confirm('Mark all articles as read?')) {
+                                onMarkAllAsRead();
+                            }
+                        }}
+                        data-tooltip="Mark All as Read"
+                    >
+                        <CheckCheck size={15} />
+                    </button>
+                )}
+                <button
                     className="toolbar-icon-btn"
                     onClick={() => setShowDiscovery(true)}
                     data-tooltip="Discover Feeds"
@@ -401,14 +415,6 @@ export default function Sidebar({
                     data-tooltip="Add Feed"
                 >
                     <Plus size={15} />
-                </button>
-                <button
-                    ref={overflowButtonRef}
-                    className="toolbar-icon-btn"
-                    onClick={toggleOverflowMenu}
-                    data-tooltip="More"
-                >
-                    <MoreHorizontal size={15} />
                 </button>
             </div>
 
@@ -623,68 +629,6 @@ export default function Sidebar({
                         onClose={() => setShowDiscovery(false)}
                         onAddFeed={onAddFeed}
                     />
-                )
-            }
-            {
-                showOverflowMenu && createPortal(
-                    <div
-                        ref={overflowMenuRef}
-                        className="overflow-menu"
-                        style={{
-                            position: 'fixed',
-                            top: `${overflowMenuPos.y}px`,
-                            left: `${overflowMenuPos.x}px`,
-                            zIndex: 1000
-                        }}
-                    >
-                        <div className="overflow-menu-section">
-                            <div className="overflow-menu-label">Sort by</div>
-                            <div
-                                className={`overflow-menu-item ${sortOption === 'updated' ? 'active' : ''}`}
-                                onClick={() => { setSortOption('updated'); setShowOverflowMenu(false); }}
-                            >
-                                <Clock size={14} /> Last Updated
-                            </div>
-                            <div
-                                className={`overflow-menu-item ${sortOption === 'alpha-asc' ? 'active' : ''}`}
-                                onClick={() => { setSortOption('alpha-asc'); setShowOverflowMenu(false); }}
-                            >
-                                <ArrowDownAZ size={14} /> Name (A-Z)
-                            </div>
-                            <div
-                                className={`overflow-menu-item ${sortOption === 'alpha-desc' ? 'active' : ''}`}
-                                onClick={() => { setSortOption('alpha-desc'); setShowOverflowMenu(false); }}
-                            >
-                                <ArrowUpAZ size={14} /> Name (Z-A)
-                            </div>
-                        </div>
-                        <div className="overflow-menu-divider" />
-                        {onMarkAllAsRead && (
-                            <div
-                                className="overflow-menu-item"
-                                onClick={() => {
-                                    if (confirm('Mark all articles as read?')) {
-                                        onMarkAllAsRead();
-                                    }
-                                    setShowOverflowMenu(false);
-                                }}
-                            >
-                                <CheckCheck size={14} /> Mark All as Read
-                            </div>
-                        )}
-                        {onOpenDailyNewsreel && (
-                            <div
-                                className="overflow-menu-item"
-                                onClick={() => {
-                                    onOpenDailyNewsreel();
-                                    setShowOverflowMenu(false);
-                                }}
-                            >
-                                <Newspaper size={14} /> Daily Newsreel
-                            </div>
-                        )}
-                    </div>,
-                    document.body
                 )
             }
             {
