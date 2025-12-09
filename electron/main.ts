@@ -513,6 +513,50 @@ ipcMain.handle('test-email-connection', async (event, emailSettings) => {
 });
 
 
+// Helper to fetch via BrowserWindow (bypasses most anti-bot checks)
+async function fetchUrlViaWindow(url: string): Promise<{ success: boolean; content?: string; error?: string }> {
+  console.log(`Fallback fetching via Window: ${url}`);
+  let fetchWin: BrowserWindow | null = new BrowserWindow({
+    show: false, // Invisible
+    width: 1024,
+    height: 768,
+    webPreferences: {
+      offscreen: true, // Render offscreen
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  try {
+    // Set a timeout
+    const timeout = setTimeout(() => {
+      if (fetchWin && !fetchWin.isDestroyed()) {
+        fetchWin.destroy();
+        fetchWin = null;
+      }
+    }, 15000); // 15s timeout
+
+    await fetchWin.loadURL(url, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' });
+
+    // Wait a moment for dynamic content
+    await new Promise(r => setTimeout(r, 1000));
+
+    if (!fetchWin || fetchWin.isDestroyed()) throw new Error('Window destroyed/timeout');
+
+    // Get HTML
+    const content = await fetchWin.webContents.executeJavaScript('document.documentElement.outerHTML');
+
+    clearTimeout(timeout);
+    if (fetchWin && !fetchWin.isDestroyed()) fetchWin.destroy();
+
+    return { success: true, content };
+  } catch (error) {
+    console.error('Window fetch failed:', error);
+    if (fetchWin && !fetchWin.isDestroyed()) fetchWin.destroy();
+    return { success: false, error: String(error) };
+  }
+}
+
 ipcMain.handle('fetch-url', async (event, url) => {
   try {
     console.log(`Fetching URL content: ${url}`);
@@ -521,16 +565,12 @@ ipcMain.handle('fetch-url', async (event, url) => {
     const cookies = await session.defaultSession.cookies.get({ url });
     const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
-    if (cookieHeader) {
-      console.log(`Including ${cookies.length} cookies for ${new URL(url).hostname}`);
-    }
-
-    return new Promise((resolve) => {
+    const result: any = await new Promise((resolve) => {
       const request = net.request({
         method: 'GET',
         url: url,
         redirect: 'follow',
-        session: session.defaultSession // Use the default session for cookie handling
+        session: session.defaultSession
       });
 
       // Set browser-like headers
@@ -538,29 +578,23 @@ ipcMain.handle('fetch-url', async (event, url) => {
       request.setHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7');
       request.setHeader('Accept-Language', 'en-US,en;q=0.9');
       request.setHeader('Accept-Encoding', 'gzip, deflate, br');
-      request.setHeader('Cache-Control', 'max-age=0');
       request.setHeader('Upgrade-Insecure-Requests', '1');
-      request.setHeader('Sec-Fetch-Dest', 'document');
-      request.setHeader('Sec-Fetch-Mode', 'navigate');
-      request.setHeader('Sec-Fetch-Site', 'none');
-      request.setHeader('Sec-Fetch-User', '?1');
       request.setHeader('Connection', 'keep-alive');
 
-      // Include cookies in the request
-      if (cookieHeader) {
-        request.setHeader('Cookie', cookieHeader);
-      }
+      if (cookieHeader) request.setHeader('Cookie', cookieHeader);
 
       let responseData = '';
 
       request.on('response', (response) => {
-        console.log(`Response status: ${response.statusCode} for ${url}`);
+        // If we get specific error codes that imply blocking, resolve with failure to trigger fallback
+        if (response.statusCode === 403 || response.statusCode === 503 || response.statusCode === 429) {
+          console.log(`Primary fetch blocked: ${response.statusCode}`);
+          resolve({ success: false, error: `Status ${response.statusCode}`, attemptFallback: true });
+          return;
+        }
 
         if (response.statusCode !== 200) {
-          resolve({
-            success: false,
-            error: `Failed to fetch: ${response.statusCode} ${response.statusMessage}`
-          });
+          resolve({ success: false, error: `Failed to fetch: ${response.statusCode} ${response.statusMessage}` });
           return;
         }
 
@@ -573,21 +607,34 @@ ipcMain.handle('fetch-url', async (event, url) => {
         });
 
         response.on('error', (error: Error) => {
-          console.error(`Response error for ${url}:`, error);
           resolve({ success: false, error: error.message });
         });
       });
 
       request.on('error', (error: Error) => {
-        console.error(`Request error for ${url}:`, error);
         resolve({ success: false, error: error.message });
       });
 
       request.end();
     });
+
+    // If primary fetch failed with a blocking status, or if successful but content looks like a captcha/challenge
+    if (result.attemptFallback || (result.success && (
+      result.content.includes('cf-challenge') ||
+      result.content.includes('Just a moment...') ||
+      result.content.includes('security check') ||
+      result.content.length < 500 // Too short to be real article
+    ))) {
+      console.log('Detected blocking or challenge, attempting fallback fetch via Window...');
+      return await fetchUrlViaWindow(url);
+    }
+
+    return result;
+
   } catch (error) {
     console.error(`Error fetching URL ${url}:`, error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    // Try fallback on general error too
+    return await fetchUrlViaWindow(url);
   }
 });
 
