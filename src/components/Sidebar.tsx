@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper } from 'lucide-react';
+import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, MoreHorizontal } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
 import FeedDiscovery from './FeedDiscovery';
 import './Sidebar.css';
@@ -72,6 +72,11 @@ export default function Sidebar({
     const sortMenuRef = useRef<HTMLDivElement>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, feed: null });
     const contextMenuRef = useRef<HTMLDivElement>(null);
+    // Overflow menu state
+    const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+    const [overflowMenuPos, setOverflowMenuPos] = useState({ x: 0, y: 0 });
+    const overflowButtonRef = useRef<HTMLButtonElement>(null);
+    const overflowMenuRef = useRef<HTMLDivElement>(null);
 
     const sortedFeeds = useMemo(() => {
         const sorted = [...feeds].sort((a, b) => {
@@ -162,19 +167,6 @@ export default function Sidebar({
             return 0;
         }
         return articles.filter(a => a.feedId === feedId && !a.isRead).length;
-    };
-
-    const getSortLabel = () => {
-        switch (sortOption) {
-            case 'updated':
-                return 'Last Updated';
-            case 'alpha-asc':
-                return 'Name (A-Z)';
-            case 'alpha-desc':
-                return 'Name (Z-A)';
-            default:
-                return 'Sort';
-        }
     };
 
     // Context menu handlers
@@ -357,28 +349,28 @@ export default function Sidebar({
                 sortButtonRef.current && !sortButtonRef.current.contains(e.target as Node)) {
                 setShowSortMenu(false);
             }
+            if (showOverflowMenu && overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node) &&
+                overflowButtonRef.current && !overflowButtonRef.current.contains(e.target as Node)) {
+                setShowOverflowMenu(false);
+            }
         };
 
-        if (contextMenu.show || showSortMenu) {
+        if (contextMenu.show || showSortMenu || showOverflowMenu) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [contextMenu.show, showSortMenu]);
+    }, [contextMenu.show, showSortMenu, showOverflowMenu]);
 
-    const toggleSortMenu = () => {
-        if (showSortMenu) {
-            setShowSortMenu(false);
-        } else if (sortButtonRef.current) {
-            const rect = sortButtonRef.current.getBoundingClientRect();
-            // Align right edge of menu with right edge of button
-            // But since we use left/top for fixed positioning usually:
-            // Let's use right alignment style if possible, or calculate x
-            // A simple way is to pass styling to the portal div.
-            setSortMenuPos({
+    const toggleOverflowMenu = () => {
+        if (showOverflowMenu) {
+            setShowOverflowMenu(false);
+        } else if (overflowButtonRef.current) {
+            const rect = overflowButtonRef.current.getBoundingClientRect();
+            setOverflowMenuPos({
                 x: rect.left,
                 y: rect.bottom + 4
             });
-            setShowSortMenu(true);
+            setShowOverflowMenu(true);
         }
     };
 
@@ -415,32 +407,14 @@ export default function Sidebar({
                             <Settings size={18} />
                         </button>
                     )}
-                    <div className="sidebar-actions-divider" />
-                    <div className="sort-dropdown-container">
-                        <button
-                            ref={sortButtonRef}
-                            className="icon-btn"
-                            onClick={toggleSortMenu}
-                            data-tooltip={getSortLabel()}
-                        >
-                            {sortOption === 'updated' && <Clock size={18} />}
-                            {sortOption === 'alpha-asc' && <ArrowDownAZ size={18} />}
-                            {sortOption === 'alpha-desc' && <ArrowUpAZ size={18} />}
-                        </button>
-                    </div>
-                    {onMarkAllAsRead && (
-                        <button
-                            className="icon-btn"
-                            onClick={() => {
-                                if (confirm('Mark all articles as read?')) {
-                                    onMarkAllAsRead();
-                                }
-                            }}
-                            data-tooltip="Mark All as Read"
-                        >
-                            <CheckCheck size={18} />
-                        </button>
-                    )}
+                    <button
+                        ref={overflowButtonRef}
+                        className="icon-btn"
+                        onClick={toggleOverflowMenu}
+                        data-tooltip="More actions"
+                    >
+                        <MoreHorizontal size={18} />
+                    </button>
                     <button
                         className="icon-btn"
                         onClick={() => setShowDiscovery(true)}
@@ -703,6 +677,57 @@ export default function Sidebar({
                         >
                             <ArrowUpAZ size={14} /> Name (Z-A)
                         </div>
+                    </div>,
+                    document.body
+                )
+            }
+            {
+                showOverflowMenu && createPortal(
+                    <div
+                        ref={overflowMenuRef}
+                        className="overflow-menu"
+                        style={{
+                            position: 'fixed',
+                            top: `${overflowMenuPos.y}px`,
+                            left: `${overflowMenuPos.x}px`,
+                            zIndex: 1000
+                        }}
+                    >
+                        <div className="overflow-menu-section">
+                            <div className="overflow-menu-label">Sort by</div>
+                            <div
+                                className={`overflow-menu-item ${sortOption === 'updated' ? 'active' : ''}`}
+                                onClick={() => { setSortOption('updated'); setShowOverflowMenu(false); }}
+                            >
+                                <Clock size={14} /> Last Updated
+                            </div>
+                            <div
+                                className={`overflow-menu-item ${sortOption === 'alpha-asc' ? 'active' : ''}`}
+                                onClick={() => { setSortOption('alpha-asc'); setShowOverflowMenu(false); }}
+                            >
+                                <ArrowDownAZ size={14} /> Name (A-Z)
+                            </div>
+                            <div
+                                className={`overflow-menu-item ${sortOption === 'alpha-desc' ? 'active' : ''}`}
+                                onClick={() => { setSortOption('alpha-desc'); setShowOverflowMenu(false); }}
+                            >
+                                <ArrowUpAZ size={14} /> Name (Z-A)
+                            </div>
+                        </div>
+                        <div className="overflow-menu-divider" />
+                        {onMarkAllAsRead && (
+                            <div
+                                className="overflow-menu-item"
+                                onClick={() => {
+                                    if (confirm('Mark all articles as read?')) {
+                                        onMarkAllAsRead();
+                                    }
+                                    setShowOverflowMenu(false);
+                                }}
+                            >
+                                <CheckCheck size={14} /> Mark All as Read
+                            </div>
+                        )}
                     </div>,
                     document.body
                 )

@@ -3,7 +3,6 @@
     background: var(--bg-secondary);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
-    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -127,6 +126,57 @@
     min-width: 160px;
     overflow: hidden;
     backdrop-filter: blur(10px);
+}
+
+/* Overflow menu (More actions) */
+.overflow-menu {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 180px;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+}
+
+.overflow-menu-section {
+    padding: 4px 0;
+}
+
+.overflow-menu-label {
+    padding: 6px 12px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.overflow-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.overflow-menu-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.overflow-menu-item.active {
+    color: var(--accent-primary);
+    background: var(--accent-light);
+}
+
+.overflow-menu-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
 }
 
 .sort-option {
