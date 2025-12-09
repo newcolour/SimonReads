@@ -508,13 +508,15 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
       x: mainBounds ? mainBounds.x + mainBounds.width + offset : undefined,
       y: mainBounds ? mainBounds.y + offset : undefined,
       title: `AI Summary - ${articleTitle.substring(0, 50)}...`,
-      // Remove parent to fix dragging and always-on-top issues
-      vibrancy: 'under-window',
-      visualEffectState: 'active',
+      // macOS-specific visual effects
+      ...(process.platform === 'darwin' ? {
+        vibrancy: 'under-window',
+        visualEffectState: 'active',
+        titleBarStyle: 'hiddenInset',
+      } : {}),
       transparent: false,
       backgroundColor: '#1a1a1a',
-      titleBarStyle: 'hiddenInset',
-      alwaysOnTop: false, // Explicitly set to false
+      alwaysOnTop: false,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: true,
@@ -804,11 +806,14 @@ function createWindow() {
     width: 1200,
     height: 800,
     title: 'SimonReads',
-    vibrancy: 'under-window', // macOS vibrancy effect
-    visualEffectState: 'active',
+    // macOS-specific visual effects
+    ...(process.platform === 'darwin' ? {
+      vibrancy: 'under-window',
+      visualEffectState: 'active',
+      titleBarStyle: 'hiddenInset',
+    } : {}),
     transparent: false,
-    backgroundColor: '#ffffff',
-    titleBarStyle: 'hiddenInset', // Native-like title bar
+    backgroundColor: '#1a1a1a',
     autoHideMenuBar: true, // Hide menu bar on Windows/Linux (press Alt to show)
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
