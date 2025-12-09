@@ -345,15 +345,30 @@ export default function Sidebar({
     }, [contextMenu.show]);
 
     // Tooltip state
-    const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null);
+    const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number, align: 'center' | 'left' } | null>(null);
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLButtonElement>, text: string) => {
         const rect = e.currentTarget.getBoundingClientRect();
-        setTooltip({
-            text,
-            x: rect.left + rect.width / 2,
-            y: rect.bottom + 5
-        });
+        const centerX = rect.left + rect.width / 2;
+
+
+        // Simple heuristic: if the center is within 60px of the left edge, align left.
+        // Otherwise align center. 
+        if (centerX < 60) {
+            setTooltip({
+                text,
+                x: rect.left, // Start at the button's left edge
+                y: rect.bottom + 5,
+                align: 'left'
+            });
+        } else {
+            setTooltip({
+                text,
+                x: centerX,
+                y: rect.bottom + 5,
+                align: 'center'
+            });
+        }
     };
 
     const handleMouseLeave = () => {
@@ -448,7 +463,7 @@ export default function Sidebar({
                         position: 'fixed',
                         top: tooltip.y,
                         left: tooltip.x,
-                        transform: 'translateX(-50%)',
+                        transform: tooltip.align === 'left' ? 'none' : 'translateX(-50%)',
                         zIndex: 9999
                     }}
                 >
