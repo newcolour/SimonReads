@@ -1,13 +1,13 @@
 :root {
-  /* Base Colors */
-  --bg-primary: rgba(15, 15, 15, 0.8);
-  --bg-secondary: rgba(26, 26, 26, 0.6);
-  --bg-tertiary: rgba(36, 36, 36, 0.6);
-  --bg-hover: rgba(42, 42, 42, 0.8);
-  --border-color: rgba(255, 255, 255, 0.1);
-  --text-primary: #e8e8e8;
-  --text-secondary: #a0a0a0;
-  --text-muted: #666;
+  /* Base Colors - Default Dark Theme */
+  --bg-primary: rgba(28, 28, 30, 0.95);
+  --bg-secondary: rgba(44, 44, 46, 0.9);
+  --bg-tertiary: rgba(58, 58, 60, 0.85);
+  --bg-hover: rgba(72, 72, 74, 0.9);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --text-primary: #f5f5f5;
+  --text-secondary: #a1a1a6;
+  --text-muted: #6e6e73;
   --accent-primary: #0a84ff;
   /* macOS Blue */
   --accent-hover: #0077ed;
@@ -19,31 +19,49 @@
   --glass-blur: 20px;
 }
 
+/* Dark Theme - Explicit dark mode (same as root) */
+[data-theme="dark"] {
+  --bg-primary: rgba(28, 28, 30, 0.95);
+  --bg-secondary: rgba(44, 44, 46, 0.9);
+  --bg-tertiary: rgba(58, 58, 60, 0.85);
+  --bg-hover: rgba(72, 72, 74, 0.9);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --text-primary: #f5f5f5;
+  --text-secondary: #a1a1a6;
+  --text-muted: #6e6e73;
+  --accent-primary: #0a84ff;
+  --accent-hover: #0077ed;
+  --accent-light: rgba(10, 132, 255, 0.15);
+  --icon-color: #0a84ff;
+  --badge-bg: #0a84ff;
+  --glass-blur: 20px;
+}
+
 /* Light Theme */
 [data-theme="light"] {
-  --bg-primary: rgba(255, 255, 255, 0.8);
-  --bg-secondary: rgba(245, 245, 245, 0.6);
-  --bg-tertiary: rgba(232, 232, 232, 0.6);
-  --bg-hover: rgba(224, 224, 224, 0.8);
-  --border-color: rgba(0, 0, 0, 0.1);
-  --text-primary: #1a1a1a;
-  --text-secondary: #4a4a4a;
-  --text-muted: #888;
+  --bg-primary: rgba(255, 255, 255, 0.95);
+  --bg-secondary: rgba(242, 242, 247, 0.9);
+  --bg-tertiary: rgba(229, 229, 234, 0.85);
+  --bg-hover: rgba(209, 209, 214, 0.9);
+  --border-color: rgba(0, 0, 0, 0.12);
+  --text-primary: #1c1c1e;
+  --text-secondary: #3a3a3c;
+  --text-muted: #8e8e93;
   --accent-primary: #007aff;
   --accent-hover: #0062cc;
   --accent-light: rgba(0, 122, 255, 0.1);
-  --icon-color: #4a4a4a;
+  --icon-color: #3a3a3c;
   /* Dark grey icons for light theme */
-  --badge-bg: #4a4a4a;
+  --badge-bg: #3a3a3c;
   /* Dark grey badges for light theme */
 }
 
 /* Sepia Theme */
 [data-theme="sepia"] {
-  --bg-primary: rgba(244, 236, 216, 0.9);
-  --bg-secondary: rgba(232, 220, 192, 0.7);
-  --bg-tertiary: rgba(217, 205, 176, 0.7);
-  --bg-hover: rgba(207, 195, 168, 0.8);
+  --bg-primary: rgba(244, 236, 216, 0.95);
+  --bg-secondary: rgba(232, 220, 192, 0.9);
+  --bg-tertiary: rgba(217, 205, 176, 0.85);
+  --bg-hover: rgba(207, 195, 168, 0.9);
   --border-color: rgba(192, 180, 154, 0.5);
   --text-primary: #3a2f1f;
   --text-secondary: #5a4f3f;
@@ -55,12 +73,12 @@
   --badge-bg: #8b6914;
 }
 
-/* Black Theme - Pure black for OLED displays (macOS liquid dark style) */
+/* Black Theme - Pure black for OLED displays */
 [data-theme="black"] {
-  --bg-primary: rgba(0, 0, 0, 0.95);
-  --bg-secondary: rgba(10, 10, 10, 0.8);
-  --bg-tertiary: rgba(18, 18, 18, 0.8);
-  --bg-hover: rgba(28, 28, 28, 0.9);
+  --bg-primary: rgba(0, 0, 0, 0.98);
+  --bg-secondary: rgba(12, 12, 12, 0.95);
+  --bg-tertiary: rgba(22, 22, 22, 0.9);
+  --bg-hover: rgba(32, 32, 32, 0.95);
   --border-color: rgba(255, 255, 255, 0.08);
   --text-primary: #f5f5f5;
   --text-secondary: #b0b0b0;
