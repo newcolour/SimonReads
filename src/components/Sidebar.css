@@ -473,12 +473,24 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
+    /* Allow container to shrink */
+    overflow: hidden;
+}
+
+.category-input-container .feed-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
 }
 
 .category-input {
     width: 100%;
+    max-width: 180px;
+    /* Fixed max width for the input */
     background: var(--bg-primary);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--accent-primary);
     border-radius: 4px;
     color: var(--text-primary);
     padding: 4px 8px;
@@ -487,5 +499,6 @@
 
 .category-input:focus {
     outline: none;
-    border-color: var(--accent-color);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
