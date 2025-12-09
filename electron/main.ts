@@ -40,6 +40,19 @@ ipcMain.on('write-data-sync', (event, arg) => {
   event.returnValue = true;
 });
 
+// Async read data handler for better performance
+ipcMain.handle('read-data', async () => {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = await fs.promises.readFile(DATA_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error('Error reading data async:', e);
+  }
+  return {};
+});
+
 // Simple ping handler for testing IPC
 ipcMain.handle('ping', async () => {
   console.log('🏓 Ping received!');

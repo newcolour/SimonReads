@@ -95,4 +95,33 @@ export const storage = {
     saveSettings(settings: AppSettings): void {
         setItem(SETTINGS_KEY, settings);
     },
+
+    async loadAllDataAsync(): Promise<{ feeds: Feed[], articles: Article[], settings: AppSettings } | null> {
+        if (ipcRenderer) {
+            try {
+                const data = await ipcRenderer.invoke('read-data');
+
+                // Parse feeds
+                const feeds = (data[FEEDS_KEY] || []).map((f: any) => ({
+                    ...f,
+                    lastFetched: f.lastFetched ? new Date(f.lastFetched) : undefined,
+                }));
+
+                // Parse articles
+                const articles = (data[ARTICLES_KEY] || []).map((a: any) => ({
+                    ...a,
+                    pubDate: a.pubDate ? new Date(a.pubDate) : undefined,
+                }));
+
+                // Parse settings
+                const settings = data[SETTINGS_KEY];
+
+                return { feeds, articles, settings };
+            } catch (error) {
+                console.error("Failed to load data async:", error);
+                return null;
+            }
+        }
+        return null; // Fallback to normal sync loading if not in electron or error
+    }
 };

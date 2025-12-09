@@ -57,44 +57,74 @@ function App() {
     // Ref to hold the openSettings function from Toolbar
     const openSettingsRef = useRef<(() => void) | null>(null);
     // Load data from storage on mount
+    // Load data from storage on mount
     useEffect(() => {
-        const savedFeeds = storage.getFeeds();
-        const savedArticles = storage.getArticles();
-        const savedSettings = storage.getSettings();
+        const loadData = async () => {
+            try {
+                // Try async loading first (Electron)
+                const asyncData = await storage.loadAllDataAsync();
 
-        setFeeds(savedFeeds);
-        setArticles(savedArticles);
-        setSettings({
-            theme: savedSettings.theme || 'dark',
-            font: savedSettings.font || 'system-ui',
-            fontSize: savedSettings.fontSize || 'medium',
-            autoRefreshInterval: savedSettings.autoRefreshInterval || 0,
-            retentionPeriod: savedSettings.retentionPeriod ?? 30,
-            geminiApiKey: savedSettings.geminiApiKey || '',
-            geminiModel: savedSettings.geminiModel || 'gemini-flash-latest',
-            openaiApiKey: savedSettings.openaiApiKey || '',
-            summaryTone: savedSettings.summaryTone ?? 'neutral',
-            summaryLanguage: savedSettings.summaryLanguage ?? 'English',
-            summaryLength: savedSettings.summaryLength ?? 'medium',
-            summaryDepth: savedSettings.summaryDepth ?? 'detailed',
-            summaryPrompt: savedSettings.summaryPrompt ?? '',
-            readAloudLanguage: savedSettings.readAloudLanguage ?? 'en',
-            ttsProvider: savedSettings.ttsProvider ?? 'free',
-            aiProvider: savedSettings.aiProvider || 'gemini',
-            dailyNewsreelTimeHorizon: savedSettings.dailyNewsreelTimeHorizon ?? 24,
-            usePublicationColors: savedSettings.usePublicationColors ?? true,
-            // Email settings
-            emailEnabled: savedSettings.emailEnabled ?? false,
-            emailSmtpHost: savedSettings.emailSmtpHost ?? '',
-            emailSmtpPort: savedSettings.emailSmtpPort ?? 587,
-            emailSmtpSecure: savedSettings.emailSmtpSecure ?? false,
-            emailSmtpUser: savedSettings.emailSmtpUser ?? '',
-            emailSmtpPassword: savedSettings.emailSmtpPassword ?? '',
-            emailFrom: savedSettings.emailFrom ?? '',
-            emailTo: savedSettings.emailTo ?? '',
-            emailSendTime: savedSettings.emailSendTime ?? '08:00',
-            emailTimeHorizon: savedSettings.emailTimeHorizon ?? 12
-        });
+                if (asyncData) {
+                    setFeeds(asyncData.feeds);
+                    setArticles(asyncData.articles);
+
+                    // Merge saved settings with defaults
+                    const s = asyncData.settings || {};
+                    setSettings(prev => ({
+                        ...prev, // Keep initial state defaults
+                        ...s,    // Override with saved
+                        // Ensure critical fields are valid
+                        theme: s.theme || 'dark',
+                        font: s.font || 'system-ui',
+                        fontSize: s.fontSize || 'medium',
+                        retentionPeriod: s.retentionPeriod ?? 30,
+                    }));
+                } else {
+                    // Fallback to sync (Web / Error)
+                    const savedFeeds = storage.getFeeds();
+                    const savedArticles = storage.getArticles();
+                    const savedSettings = storage.getSettings();
+
+                    setFeeds(savedFeeds);
+                    setArticles(savedArticles);
+                    setSettings({
+                        theme: savedSettings.theme || 'dark',
+                        font: savedSettings.font || 'system-ui',
+                        fontSize: savedSettings.fontSize || 'medium',
+                        autoRefreshInterval: savedSettings.autoRefreshInterval || 0,
+                        retentionPeriod: savedSettings.retentionPeriod ?? 30,
+                        geminiApiKey: savedSettings.geminiApiKey || '',
+                        geminiModel: savedSettings.geminiModel || 'gemini-flash-latest',
+                        openaiApiKey: savedSettings.openaiApiKey || '',
+                        summaryTone: savedSettings.summaryTone ?? 'neutral',
+                        summaryLanguage: savedSettings.summaryLanguage ?? 'English',
+                        summaryLength: savedSettings.summaryLength ?? 'medium',
+                        summaryDepth: savedSettings.summaryDepth ?? 'detailed',
+                        summaryPrompt: savedSettings.summaryPrompt ?? '',
+                        readAloudLanguage: savedSettings.readAloudLanguage ?? 'en',
+                        ttsProvider: savedSettings.ttsProvider ?? 'free',
+                        aiProvider: savedSettings.aiProvider || 'gemini',
+                        dailyNewsreelTimeHorizon: savedSettings.dailyNewsreelTimeHorizon ?? 24,
+                        usePublicationColors: savedSettings.usePublicationColors ?? true,
+                        // Email settings
+                        emailEnabled: savedSettings.emailEnabled ?? false,
+                        emailSmtpHost: savedSettings.emailSmtpHost ?? '',
+                        emailSmtpPort: savedSettings.emailSmtpPort ?? 587,
+                        emailSmtpSecure: savedSettings.emailSmtpSecure ?? false,
+                        emailSmtpUser: savedSettings.emailSmtpUser ?? '',
+                        emailSmtpPassword: savedSettings.emailSmtpPassword ?? '',
+                        emailFrom: savedSettings.emailFrom ?? '',
+                        emailTo: savedSettings.emailTo ?? '',
+                        emailSendTime: savedSettings.emailSendTime ?? '08:00',
+                        emailTimeHorizon: savedSettings.emailTimeHorizon ?? 12
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to load data:", e);
+            }
+        };
+
+        loadData();
 
         // Check if this is the first time the app is opened
         const hasSeenWelcome = localStorage.getItem('hasSeenWelcome');
