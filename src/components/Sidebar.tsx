@@ -351,7 +351,7 @@ export default function Sidebar({
                     <button
                         className="toolbar-icon-btn"
                         onClick={onOpenSettings}
-                        data-tooltip="Settings"
+                        title="Settings"
                     >
                         <Settings size={15} />
                     </button>
@@ -361,7 +361,7 @@ export default function Sidebar({
                         className={`toolbar-icon-btn ${isRefreshing ? 'spinning' : ''}`}
                         onClick={onRefresh}
                         disabled={isRefreshing}
-                        data-tooltip="Refresh Feeds"
+                        title="Refresh Feeds"
                     >
                         <RefreshCw size={15} />
                     </button>
@@ -374,7 +374,7 @@ export default function Sidebar({
                         else if (sortOption === 'alpha-asc') setSortOption('alpha-desc');
                         else setSortOption('updated');
                     }}
-                    data-tooltip={sortOption === 'updated' ? 'Sort: Last Updated' : sortOption === 'alpha-asc' ? 'Sort: A-Z' : 'Sort: Z-A'}
+                    title={sortOption === 'updated' ? 'Sort: Last Updated' : sortOption === 'alpha-asc' ? 'Sort: A-Z' : 'Sort: Z-A'}
                 >
                     {sortOption === 'updated' && <Clock size={15} />}
                     {sortOption === 'alpha-asc' && <ArrowDownAZ size={15} />}
@@ -384,7 +384,7 @@ export default function Sidebar({
                     <button
                         className="toolbar-icon-btn"
                         onClick={onOpenDailyNewsreel}
-                        data-tooltip="Daily Newsreel"
+                        title="Daily Newsreel"
                     >
                         <Newspaper size={15} />
                     </button>
@@ -397,7 +397,7 @@ export default function Sidebar({
                                 onMarkAllAsRead();
                             }
                         }}
-                        data-tooltip="Mark All as Read"
+                        title="Mark All as Read"
                     >
                         <CheckCheck size={15} />
                     </button>
@@ -405,14 +405,14 @@ export default function Sidebar({
                 <button
                     className="toolbar-icon-btn"
                     onClick={() => setShowDiscovery(true)}
-                    data-tooltip="Discover Feeds"
+                    title="Discover Feeds"
                 >
                     <Sparkles size={15} />
                 </button>
                 <button
                     className="toolbar-icon-btn"
                     onClick={() => setIsAdding(!isAdding)}
-                    data-tooltip="Add Feed"
+                    title="Add Feed"
                 >
                     <Plus size={15} />
                 </button>
