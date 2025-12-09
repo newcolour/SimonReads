@@ -19,6 +19,8 @@ interface ToolbarProps {
     onImportOPML: (file: File) => void;
     articles: Article[];
     onShowTutorial?: () => void;
+    hideButtons?: boolean;
+    setOpenSettingsRef?: (fn: () => void) => void;
 }
 
 const FONTS = [
@@ -45,7 +47,7 @@ const TIME_HORIZONS: { value: number; label: string }[] = [
     { value: 24, label: 'Today (24 Hours)' },
 ];
 
-export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial }: ToolbarProps) {
+export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial, hideButtons, setOpenSettingsRef }: ToolbarProps) {
     const [showSettings, setShowSettings] = useState(false);
     const [tempSettings, setTempSettings] = useState(settings);
     const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'ai' | 'email' | 'about'>('general');
@@ -53,6 +55,17 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
     const [openaiModels, setOpenaiModels] = useState<string[]>([]);
     const [claudeModels, setClaudeModels] = useState<string[]>([]);
     const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+    // Expose the openSettings function to parent
+    const openSettings = () => {
+        setTempSettings(settings);
+        setShowSettings(true);
+    };
+
+    // Call setOpenSettingsRef once on mount to pass the function up
+    if (setOpenSettingsRef) {
+        setOpenSettingsRef(openSettings);
+    }
 
     const fetchModels = async (provider: 'gemini' | 'openai' | 'claude') => {
         setIsLoadingModels(true);
@@ -940,49 +953,48 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
 
     return (
         <>
-            <div className="toolbar">
+            <div className={`toolbar ${hideButtons ? 'toolbar-minimal' : ''}`}>
                 <div className="toolbar-left">
                 </div>
-                <div className="toolbar-right">
-                    {onOpenDailyNewsreel && (
+                {!hideButtons && (
+                    <div className="toolbar-right">
+                        {onOpenDailyNewsreel && (
+                            <button
+                                className="newsreel-btn"
+                                onClick={onOpenDailyNewsreel}
+                                data-tooltip={`Daily Newsreel (${TIME_HORIZONS.find(h => h.value === settings.dailyNewsreelTimeHorizon)?.label || '24 Hours'})`}
+                            >
+                                <Newspaper size={18} />
+                                <span>Daily Newsreel</span>
+                            </button>
+                        )}
+                        {selectedCount > 0 && onOpenNewsreel && (
+                            <button
+                                className="newsreel-btn"
+                                onClick={onOpenNewsreel}
+                                data-tooltip={`Create Newsreel from ${selectedCount} articles`}
+                            >
+                                <Newspaper size={18} />
+                                <span>Newsreel ({selectedCount})</span>
+                            </button>
+                        )}
                         <button
-                            className="newsreel-btn"
-                            onClick={onOpenDailyNewsreel}
-                            data-tooltip={`Daily Newsreel (${TIME_HORIZONS.find(h => h.value === settings.dailyNewsreelTimeHorizon)?.label || '24 Hours'})`}
+                            className={`refresh-btn ${isRefreshing ? 'spinning' : ''}`}
+                            onClick={onRefresh}
+                            disabled={isRefreshing}
+                            data-tooltip="Refresh Feeds"
                         >
-                            <Newspaper size={18} />
-                            <span>Daily Newsreel</span>
+                            <RefreshCw size={18} />
                         </button>
-                    )}
-                    {selectedCount > 0 && onOpenNewsreel && (
                         <button
-                            className="newsreel-btn"
-                            onClick={onOpenNewsreel}
-                            data-tooltip={`Create Newsreel from ${selectedCount} articles`}
+                            className="settings-btn"
+                            onClick={openSettings}
+                            data-tooltip="Settings"
                         >
-                            <Newspaper size={18} />
-                            <span>Newsreel ({selectedCount})</span>
+                            <Settings size={18} />
                         </button>
-                    )}
-                    <button
-                        className={`refresh-btn ${isRefreshing ? 'spinning' : ''}`}
-                        onClick={onRefresh}
-                        disabled={isRefreshing}
-                        data-tooltip="Refresh Feeds"
-                    >
-                        <RefreshCw size={18} />
-                    </button>
-                    <button
-                        className="settings-btn"
-                        onClick={() => {
-                            setTempSettings(settings);
-                            setShowSettings(true);
-                        }}
-                        data-tooltip="Settings"
-                    >
-                        <Settings size={18} />
-                    </button>
-                </div>
+                    </div>
+                )}
             </div>
             {createPortal(modal, document.body)}
         </>

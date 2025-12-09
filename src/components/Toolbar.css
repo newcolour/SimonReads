@@ -14,6 +14,12 @@
     position: relative;
 }
 
+/* Minimal toolbar - just for macOS traffic lights and window dragging */
+.toolbar.toolbar-minimal {
+    height: 38px;
+    padding: 0 16px 0 80px;
+}
+
 .toolbar-title {
     font-size: 16px;
     font-weight: 600;

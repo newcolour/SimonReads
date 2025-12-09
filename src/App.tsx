@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Badge } from '@capawesome/capacitor-badge';
 import { Feed, Article, AppSettings } from './types';
@@ -54,6 +54,8 @@ function App() {
     const [showWelcomeTour, setShowWelcomeTour] = useState(false);
     // Mobile view state: 'feeds' | 'articles' | 'article'
     const [mobileView, setMobileView] = useState<'feeds' | 'articles' | 'article'>('feeds');
+    // Ref to hold the openSettings function from Toolbar
+    const openSettingsRef = useRef<(() => void) | null>(null);
     // Load data from storage on mount
     useEffect(() => {
         const savedFeeds = storage.getFeeds();
@@ -894,6 +896,8 @@ function App() {
                 onImportOPML={handleImportOPML}
                 articles={articles}
                 onShowTutorial={handleShowTutorial}
+                hideButtons={true}
+                setOpenSettingsRef={(fn) => { openSettingsRef.current = fn; }}
             />
             <div className="app-content" data-mobile-view={mobileView}>
                 <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex' }}>
@@ -912,6 +916,10 @@ function App() {
                         onMarkFeedAsRead={handleMarkFeedAsRead}
                         onRefreshFeed={handleRefreshSingleFeed}
                         settings={settings}
+                        onRefresh={handleRefresh}
+                        isRefreshing={isRefreshing}
+                        onOpenSettings={() => openSettingsRef.current?.()}
+                        onOpenDailyNewsreel={handleOpenDailyNewsreel}
                     />
                 </div>
                 <div

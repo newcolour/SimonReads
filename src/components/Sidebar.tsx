@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star } from 'lucide-react';
+import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
 import FeedDiscovery from './FeedDiscovery';
 import './Sidebar.css';
@@ -20,6 +20,11 @@ interface SidebarProps {
     onMarkFeedAsRead?: (feedId: string) => void;
     onRefreshFeed?: (feedId: string) => void;
     settings: AppSettings;
+    // Toolbar-related props
+    onRefresh?: () => void;
+    isRefreshing?: boolean;
+    onOpenSettings?: () => void;
+    onOpenDailyNewsreel?: () => void;
 }
 
 type SortOption = 'updated' | 'alpha-asc' | 'alpha-desc';
@@ -45,7 +50,11 @@ export default function Sidebar({
     onMarkAllAsRead,
     onMarkFeedAsRead,
     onRefreshFeed,
-    settings
+    settings,
+    onRefresh,
+    isRefreshing,
+    onOpenSettings,
+    onOpenDailyNewsreel
 }: SidebarProps) {
     const [isAdding, setIsAdding] = useState(false);
     const [showDiscovery, setShowDiscovery] = useState(false);
@@ -378,6 +387,35 @@ export default function Sidebar({
             <div className="sidebar-header">
                 <h2>Feeds</h2>
                 <div className="sidebar-actions">
+                    {onOpenDailyNewsreel && (
+                        <button
+                            className="icon-btn"
+                            onClick={onOpenDailyNewsreel}
+                            data-tooltip="Daily Newsreel"
+                        >
+                            <Newspaper size={18} />
+                        </button>
+                    )}
+                    {onRefresh && (
+                        <button
+                            className={`icon-btn ${isRefreshing ? 'spinning' : ''}`}
+                            onClick={onRefresh}
+                            disabled={isRefreshing}
+                            data-tooltip="Refresh Feeds"
+                        >
+                            <RefreshCw size={18} />
+                        </button>
+                    )}
+                    {onOpenSettings && (
+                        <button
+                            className="icon-btn"
+                            onClick={onOpenSettings}
+                            data-tooltip="Settings"
+                        >
+                            <Settings size={18} />
+                        </button>
+                    )}
+                    <div className="sidebar-actions-divider" />
                     <div className="sort-dropdown-container">
                         <button
                             ref={sortButtonRef}
