@@ -3,6 +3,7 @@ import { Sparkles, Volume2, RotateCw, Loader, Pause, Play } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AppSettings } from '../types';
+import { TTSService, TTSController } from '../services/ttsService';
 import '../index.css'; // Import theme variables
 import './SummaryWindow.css';
 
@@ -20,6 +21,7 @@ export default function SummaryWindow() {
     const [playbackRate, setPlaybackRate] = useState(1.0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const isReadingAloudRef = useRef(false);
+    const ttsControllerRef = useRef<TTSController | null>(null);
 
     // Use useLayoutEffect to apply theme before painting
     useLayoutEffect(() => {
@@ -134,22 +136,30 @@ export default function SummaryWindow() {
             return () => {
                 clearInterval(retryInterval);
                 ipcRenderer.removeListener('update-summary', updateHandler);
+                if (ttsControllerRef.current) {
+                    ttsControllerRef.current.stop();
+                    ttsControllerRef.current = null;
+                }
                 if (audioRef.current) {
                     audioRef.current.pause();
                     audioRef.current = null;
                 }
-                window.speechSynthesis.cancel();
+                TTSService.stopCurrent();
             };
         } else {
             console.error('SummaryWindow: IPC renderer not available!');
         }
 
         return () => {
+            if (ttsControllerRef.current) {
+                ttsControllerRef.current.stop();
+                ttsControllerRef.current = null;
+            }
             if (audioRef.current) {
                 audioRef.current.pause();
                 audioRef.current = null;
             }
-            window.speechSynthesis.cancel();
+            TTSService.stopCurrent();
         };
     }, []); // Empty dependency array - only run once on mount
 
@@ -158,18 +168,18 @@ export default function SummaryWindow() {
 
         if (isPaused) {
             // Resume
-            if (audioRef.current) {
+            if (ttsControllerRef.current) {
+                ttsControllerRef.current.resume();
+            } else if (audioRef.current) {
                 audioRef.current.play();
-            } else {
-                window.speechSynthesis.resume();
             }
             setIsPaused(false);
         } else {
             // Pause
-            if (audioRef.current) {
+            if (ttsControllerRef.current) {
+                ttsControllerRef.current.pause();
+            } else if (audioRef.current) {
                 audioRef.current.pause();
-            } else {
-                window.speechSynthesis.pause();
             }
             setIsPaused(true);
         }
@@ -182,7 +192,9 @@ export default function SummaryWindow() {
 
         setPlaybackRate(nextRate);
 
-        if (audioRef.current) {
+        if (ttsControllerRef.current) {
+            ttsControllerRef.current.setRate(nextRate);
+        } else if (audioRef.current) {
             audioRef.current.playbackRate = nextRate;
         }
     };
@@ -227,63 +239,27 @@ export default function SummaryWindow() {
     const readWithCloudTTS = async (text: string) => {
         const settings = summaryData?.settings;
         const language = settings?.readAloudLanguage || 'en';
-        const ipcRenderer = (window as any).ipcRenderer;
 
-        if (!ipcRenderer) throw new Error('IPC not available');
-
-        // Fetch audio segments via IPC (uses google-tts-api in main process)
-        const base64List: string[] = await ipcRenderer.invoke('fetch-tts', {
+        // Use cross-platform TTS service
+        const controller = await TTSService.speak({
             text,
-            lang: language
-        });
-
-        if (!base64List || base64List.length === 0) throw new Error('No audio returned');
-
-        // Play segments sequentially
-        const playSegment = async (index: number) => {
-            if (index >= base64List.length) {
+            language,
+            playbackRate,
+            onEnd: () => {
                 setIsReadingAloud(false);
                 isReadingAloudRef.current = false;
                 setIsPaused(false);
-                audioRef.current = null;
-                return;
+                ttsControllerRef.current = null;
+            },
+            onError: (error) => {
+                console.error('TTS error:', error);
+                setIsReadingAloud(false);
+                isReadingAloudRef.current = false;
+                setIsPaused(false);
+                ttsControllerRef.current = null;
             }
-
-            if (!isReadingAloudRef.current) return;
-
-            const audio = new Audio(`data:audio/mp3;base64,${base64List[index]}`);
-            audio.playbackRate = playbackRate;
-            audioRef.current = audio;
-
-            audio.onended = () => {
-                playSegment(index + 1);
-            };
-
-            try {
-                await audio.play();
-            } catch (e) {
-                console.error('Error playing segment:', e);
-                playSegment(index + 1); // Skip error segment
-            }
-        };
-
-        await playSegment(0);
-    };
-
-    const readWithSystemVoice = (text: string) => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = playbackRate;
-        utterance.onend = () => {
-            setIsReadingAloud(false);
-            isReadingAloudRef.current = false;
-            setIsPaused(false);
-        };
-        utterance.onerror = () => {
-            setIsReadingAloud(false);
-            isReadingAloudRef.current = false;
-            setIsPaused(false);
-        };
-        window.speechSynthesis.speak(utterance);
+        });
+        ttsControllerRef.current = controller;
     };
 
     const handleReadAloud = async () => {
@@ -291,11 +267,15 @@ export default function SummaryWindow() {
 
         if (isReadingAloud) {
             // Stop reading
+            if (ttsControllerRef.current) {
+                ttsControllerRef.current.stop();
+                ttsControllerRef.current = null;
+            }
             if (audioRef.current) {
                 audioRef.current.pause();
                 audioRef.current = null;
             }
-            window.speechSynthesis.cancel();
+            await TTSService.stopCurrent();
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
             setIsPaused(false);
@@ -314,17 +294,18 @@ export default function SummaryWindow() {
         try {
             if (provider === 'openai' && settings?.openaiApiKey) {
                 await readWithOpenAI(plainText);
-            } else if (provider === 'free') {
-                await readWithCloudTTS(plainText);
             } else {
-                readWithSystemVoice(plainText);
+                // Use cross-platform TTS service for 'free' and 'system' providers
+                // On Android/iOS: uses native TTS
+                // On Electron: uses google-tts-api via IPC
+                // On Web: uses browser speechSynthesis
+                await readWithCloudTTS(plainText);
             }
         } catch (error) {
             console.error('TTS error:', error);
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
             setIsPaused(false);
-            readWithSystemVoice(plainText);
         }
     };
 

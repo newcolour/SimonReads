@@ -115,7 +115,7 @@ These features currently use Electron IPC and need Capacitor equivalents:
 
 3. **TTS (Text-to-Speech)** (`fetch-tts`)
    - **Solution**: Use Capacitor Text-to-Speech plugin
-   - **Status**: Needs implementation
+   - **Status**: ✅ Implemented - Uses `@capacitor-community/text-to-speech`
 
 4. **Email scheduling** (Electron-specific)
    - **Solution**: Not available on mobile (server-side feature)
@@ -129,18 +129,17 @@ These features currently use Electron IPC and need Capacitor equivalents:
 
 ## 🛠️ Required Capacitor Plugins
 
-To make all features work, install these plugins:
+Core plugins already installed:
 
 ```bash
-# Browser for opening external links
-npm install @capacitor/browser
+# ✅ Already installed:
+# - @capacitor/browser (external links)
+# - @capacitor-community/text-to-speech (TTS)
+# - @capacitor/status-bar
+# - @capacitor/app
+# - @capawesome/capacitor-badge
 
-# HTTP for fetching content
-npm install @capacitor/http
-
-# Text-to-Speech
-npm install @capacitor-community/text-to-speech
-
+# Optional - install for additional features:
 # Filesystem for OPML import/export
 npm install @capacitor/filesystem
 

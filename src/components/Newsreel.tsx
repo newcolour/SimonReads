@@ -6,6 +6,7 @@ import { Article, AppSettings } from '../types';
 import { summarizeArticle } from '../summaryService';
 import { generateNewspaperPDF } from '../pdfService';
 import { fetchRelatedArticles } from '../relatedArticlesService';
+import { TTSService, TTSController } from '../services/ttsService';
 import './Newsreel.css';
 
 interface NewsreelProps {
@@ -26,6 +27,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
     const [isExportingPdf, setIsExportingPdf] = useState(false);
     const isReadingAloudRef = useRef(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const ttsControllerRef = useRef<TTSController | null>(null);
     const articleMapRef = useRef<Map<string, Article>>(new Map());
 
     // Cache key based on type (daily or custom)
@@ -33,11 +35,16 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
 
     useEffect(() => {
         return () => {
+            // Clean up TTS on unmount
+            if (ttsControllerRef.current) {
+                ttsControllerRef.current.stop();
+                ttsControllerRef.current = null;
+            }
             if (audioRef.current) {
                 audioRef.current.pause();
                 audioRef.current = null;
             }
-            window.speechSynthesis.cancel();
+            TTSService.stopCurrent();
             setIsReadingAloud(false);
             setIsPaused(false);
         };
@@ -74,18 +81,18 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
     const handleTogglePause = () => {
         if (isPaused) {
             // Resume
-            if (audioRef.current) {
+            if (ttsControllerRef.current) {
+                ttsControllerRef.current.resume();
+            } else if (audioRef.current) {
                 audioRef.current.play();
-            } else {
-                window.speechSynthesis.resume();
             }
             setIsPaused(false);
         } else {
             // Pause
-            if (audioRef.current) {
+            if (ttsControllerRef.current) {
+                ttsControllerRef.current.pause();
+            } else if (audioRef.current) {
                 audioRef.current.pause();
-            } else {
-                window.speechSynthesis.pause();
             }
             setIsPaused(true);
         }
@@ -98,10 +105,11 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
 
         setPlaybackRate(nextRate);
 
-        if (audioRef.current) {
+        if (ttsControllerRef.current) {
+            ttsControllerRef.current.setRate(nextRate);
+        } else if (audioRef.current) {
             audioRef.current.playbackRate = nextRate;
         }
-        // Note: System voice rate change requires restart usually, so it will apply on next segment
     };
 
     const generateNewsreel = async (currentArticleHash: string) => {
@@ -280,13 +288,19 @@ This topic-based approach allows for richer summaries than individual article su
         if (!summary) return;
 
         if (isReadingAloud) {
+            // Stop reading
+            if (ttsControllerRef.current) {
+                ttsControllerRef.current.stop();
+                ttsControllerRef.current = null;
+            }
             if (audioRef.current) {
                 audioRef.current.pause();
                 audioRef.current = null;
             }
-            window.speechSynthesis.cancel();
+            await TTSService.stopCurrent();
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
+            setIsPaused(false);
             return;
         }
 
@@ -295,21 +309,43 @@ This topic-based approach allows for richer summaries than individual article su
 
         setIsReadingAloud(true);
         isReadingAloudRef.current = true;
-        const provider = settings.ttsProvider || 'system';
+        const provider = settings.ttsProvider || 'free';
+        const language = settings.readAloudLanguage || 'en';
 
         try {
             if (provider === 'openai' && settings.openaiApiKey) {
+                // OpenAI TTS - uses direct API call, works on all platforms
                 await readWithOpenAI(plainText);
-            } else if (provider === 'free') {
-                await readWithCloudTTS(plainText);
             } else {
-                readWithSystemVoice(plainText);
+                // Use cross-platform TTS service for 'free' and 'system' providers
+                // On Android/iOS: uses native TTS
+                // On Electron: uses google-tts-api via IPC
+                // On Web: uses browser speechSynthesis
+                const controller = await TTSService.speak({
+                    text: plainText,
+                    language,
+                    playbackRate,
+                    onEnd: () => {
+                        setIsReadingAloud(false);
+                        isReadingAloudRef.current = false;
+                        setIsPaused(false);
+                        ttsControllerRef.current = null;
+                    },
+                    onError: (error) => {
+                        console.error('TTS error:', error);
+                        setIsReadingAloud(false);
+                        isReadingAloudRef.current = false;
+                        setIsPaused(false);
+                        ttsControllerRef.current = null;
+                    }
+                });
+                ttsControllerRef.current = controller;
             }
         } catch (error) {
             console.error('TTS error:', error);
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
-            readWithSystemVoice(plainText);
+            setIsPaused(false);
         }
     };
 
@@ -340,6 +376,7 @@ This topic-based approach allows for richer summaries than individual article su
                 URL.revokeObjectURL(url);
                 setIsReadingAloud(false);
                 isReadingAloudRef.current = false;
+                setIsPaused(false);
                 audioRef.current = null;
             };
 
@@ -347,122 +384,14 @@ This topic-based approach allows for richer summaries than individual article su
                 URL.revokeObjectURL(url);
                 setIsReadingAloud(false);
                 isReadingAloudRef.current = false;
+                setIsPaused(false);
                 audioRef.current = null;
-                readWithSystemVoice(text);
             };
 
             await audio.play();
         } catch (error) {
             throw error;
         }
-    };
-
-    const readWithCloudTTS = async (text: string) => {
-        const maxLength = 200;
-        const chunks: string[] = [];
-
-        try {
-            if (text.length <= maxLength) {
-                chunks.push(text);
-            } else {
-                const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-                let currentChunk = '';
-
-                for (const sentence of sentences) {
-                    if ((currentChunk + sentence).length <= maxLength) {
-                        currentChunk += sentence;
-                    } else {
-                        if (currentChunk) chunks.push(currentChunk);
-                        currentChunk = sentence;
-                    }
-                }
-                if (currentChunk) chunks.push(currentChunk);
-            }
-            await playCloudChunks(chunks, 0);
-        } catch (e) {
-            throw e;
-        }
-    };
-
-    const playCloudChunks = async (chunks: string[], index: number) => {
-        if (index >= chunks.length || !isReadingAloudRef.current) {
-            setIsReadingAloud(false);
-            isReadingAloudRef.current = false;
-            return;
-        }
-
-        const language = settings.readAloudLanguage || 'en';
-
-        try {
-            const ipcRenderer = (window as any).ipcRenderer;
-            if (!ipcRenderer) {
-                setIsReadingAloud(false);
-                isReadingAloudRef.current = false;
-                return;
-            }
-
-            const base64List = await ipcRenderer.invoke('fetch-tts', {
-                text: chunks[index],
-                lang: language
-            });
-
-            const playSegments = async (segmentIndex: number) => {
-                if (segmentIndex >= base64List.length || !isReadingAloudRef.current) {
-                    playCloudChunks(chunks, index + 1);
-                    return;
-                }
-
-                const audioSrc = `data:audio/mp3;base64,${base64List[segmentIndex]}`;
-                const audio = new Audio();
-                audio.playbackRate = playbackRate;
-                audioRef.current = audio;
-
-                audio.onended = () => {
-                    audioRef.current = null;
-                    playSegments(segmentIndex + 1);
-                };
-
-                audio.onerror = () => {
-                    audioRef.current = null;
-                    playSegments(segmentIndex + 1);
-                };
-
-                const playPromise = new Promise<void>((resolve, reject) => {
-                    audio.oncanplaythrough = () => {
-                        audio.play().then(() => resolve()).catch(reject);
-                    };
-                    audio.src = audioSrc;
-                    audio.load();
-                });
-
-                await playPromise;
-            };
-
-            await playSegments(0);
-
-        } catch (e) {
-            console.error('Playback failed:', e);
-            audioRef.current = null;
-            setIsReadingAloud(false);
-            isReadingAloudRef.current = false;
-            readWithSystemVoice(chunks.slice(index).join(' '));
-        }
-    };
-
-    const readWithSystemVoice = (text: string) => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = playbackRate;
-        utterance.onend = () => {
-            setIsReadingAloud(false);
-            isReadingAloudRef.current = false;
-            setIsPaused(false);
-        };
-        utterance.onerror = () => {
-            setIsReadingAloud(false);
-            isReadingAloudRef.current = false;
-            setIsPaused(false);
-        };
-        window.speechSynthesis.speak(utterance);
     };
 
     const handleExportPdf = async () => {
