@@ -368,61 +368,49 @@ export default function Sidebar({
 
     return (
         <div className="sidebar">
-            <div className="sidebar-header">
-                <h2>Feeds</h2>
-                <div className="sidebar-actions">
-                    {onOpenDailyNewsreel && (
-                        <button
-                            className="icon-btn"
-                            onClick={onOpenDailyNewsreel}
-                            data-tooltip="Daily Newsreel"
-                        >
-                            <Newspaper size={18} />
-                        </button>
-                    )}
-                    {onRefresh && (
-                        <button
-                            className={`icon-btn ${isRefreshing ? 'spinning' : ''}`}
-                            onClick={onRefresh}
-                            disabled={isRefreshing}
-                            data-tooltip="Refresh Feeds"
-                        >
-                            <RefreshCw size={18} />
-                        </button>
-                    )}
-                    {onOpenSettings && (
-                        <button
-                            className="icon-btn"
-                            onClick={onOpenSettings}
-                            data-tooltip="Settings"
-                        >
-                            <Settings size={18} />
-                        </button>
-                    )}
+            <div className="sidebar-toolbar">
+                {onOpenSettings && (
                     <button
-                        ref={overflowButtonRef}
-                        className="icon-btn"
-                        onClick={toggleOverflowMenu}
-                        data-tooltip="More actions"
+                        className="toolbar-icon-btn"
+                        onClick={onOpenSettings}
+                        data-tooltip="Settings"
                     >
-                        <MoreHorizontal size={18} />
+                        <Settings size={15} />
                     </button>
+                )}
+                {onRefresh && (
                     <button
-                        className="icon-btn"
-                        onClick={() => setShowDiscovery(true)}
-                        data-tooltip="Discover Feeds"
+                        className={`toolbar-icon-btn ${isRefreshing ? 'spinning' : ''}`}
+                        onClick={onRefresh}
+                        disabled={isRefreshing}
+                        data-tooltip="Refresh Feeds"
                     >
-                        <Sparkles size={18} className="text-accent" />
+                        <RefreshCw size={15} />
                     </button>
-                    <button
-                        className="add-feed-btn"
-                        onClick={() => setIsAdding(!isAdding)}
-                        data-tooltip="Add Feed"
-                    >
-                        <Plus size={18} />
-                    </button>
-                </div>
-            </div >
+                )}
+                <button
+                    className="toolbar-icon-btn"
+                    onClick={() => setShowDiscovery(true)}
+                    data-tooltip="Discover Feeds"
+                >
+                    <Sparkles size={15} />
+                </button>
+                <button
+                    className="toolbar-icon-btn"
+                    onClick={() => setIsAdding(!isAdding)}
+                    data-tooltip="Add Feed"
+                >
+                    <Plus size={15} />
+                </button>
+                <button
+                    ref={overflowButtonRef}
+                    className="toolbar-icon-btn"
+                    onClick={toggleOverflowMenu}
+                    data-tooltip="More"
+                >
+                    <MoreHorizontal size={15} />
+                </button>
+            </div>
 
             <div className="search-container">
                 <div className="search-input-wrapper">
@@ -682,6 +670,17 @@ export default function Sidebar({
                                 }}
                             >
                                 <CheckCheck size={14} /> Mark All as Read
+                            </div>
+                        )}
+                        {onOpenDailyNewsreel && (
+                            <div
+                                className="overflow-menu-item"
+                                onClick={() => {
+                                    onOpenDailyNewsreel();
+                                    setShowOverflowMenu(false);
+                                }}
+                            >
+                                <Newspaper size={14} /> Daily Newsreel
                             </div>
                         )}
                     </div>,

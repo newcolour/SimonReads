@@ -9,6 +9,49 @@
     overflow: hidden;
 }
 
+/* Compact toolbar - NetNewsWire style */
+.sidebar-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.toolbar-icon-btn {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-app-region: no-drag;
+}
+
+.toolbar-icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.toolbar-icon-btn:active {
+    transform: scale(0.95);
+}
+
+.toolbar-icon-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.toolbar-icon-btn.spinning svg {
+    animation: spin 1s linear infinite;
+}
+
+/* Legacy sidebar-header (keep for compatibility) */
 .sidebar-header {
     padding: 16px;
     border-bottom: 1px solid var(--border-color);
