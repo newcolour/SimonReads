@@ -256,25 +256,31 @@ ipcMain.handle('share-to-mastodon', async (event, { text }: { text: string }) =>
 
   // Build dialog buttons
   const buttons = installedApps.map(app => app.name);
+  buttons.push('Open in Browser'); // Universal web fallback
   buttons.push('Copy to Clipboard');
   buttons.push('Cancel');
 
   const { response } = await dialog.showMessageBox(win!, {
     type: 'question',
     title: 'Share to Mastodon',
-    message: installedApps.length > 0 ? 'Choose your Mastodon app:' : 'No Mastodon app found',
+    message: installedApps.length > 0 ? 'Choose how to share:' : 'Share to Mastodon',
     detail: text.length > 100 ? text.substring(0, 100) + '...' : text,
     buttons: buttons,
     defaultId: 0,
     cancelId: buttons.length - 1
   });
 
-  if (response === buttons.length - 1) {
+  if (response === buttons.length - 1) { // Cancel
     return { success: true, action: 'cancelled' };
-  } else if (response === buttons.length - 2) {
+  } else if (response === buttons.length - 2) { // Copy
     clipboard.writeText(text);
     return { success: true, action: 'copied' };
-  } else if (response < installedApps.length) {
+  } else if (response === buttons.length - 3) { // Open in Browser
+    // Open mastodon.social share intent (user can usually redirect to their instance)
+    // Or use a generic intent if available. mastodon.social is the most common default.
+    await shell.openExternal(`https://mastodon.social/share?text=${encodedText}`);
+    return { success: true, action: 'opened' };
+  } else { // Native App
     const selectedApp = installedApps[response];
 
     if (selectedApp.useAppleScript) {
