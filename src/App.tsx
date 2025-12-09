@@ -325,10 +325,11 @@ function App() {
         if (feeds.length === 0 && articles.length === 0) return;
 
         const feedIds = new Set(feeds.map(f => f.id));
-        const validArticles = articles.filter(a => feedIds.has(a.feedId));
+        // Keep articles that either belong to an existing feed OR are saved
+        const validArticles = articles.filter(a => feedIds.has(a.feedId) || a.isSaved);
 
         if (validArticles.length !== articles.length) {
-            console.log(`Removing ${articles.length - validArticles.length} orphan articles`);
+            console.log(`Removing ${articles.length - validArticles.length} orphan articles (preserved saved articles)`);
             setArticles(validArticles);
             storage.saveArticles(validArticles);
         }
@@ -440,8 +441,8 @@ function App() {
             if (existing) {
                 // Remove from map to track what's left (articles no longer in feed)
                 existingArticlesMap.delete(newArticle.id);
-                // Update content but preserve local state (isRead)
-                return { ...newArticle, isRead: existing.isRead };
+                // Update content but preserve local state (isRead, isSaved)
+                return { ...newArticle, isRead: existing.isRead, isSaved: existing.isSaved };
             }
             newCount++;
             return newArticle;
@@ -490,8 +491,8 @@ function App() {
             const mergedNewArticles: Article[] = feedArticles.map(newArticle => {
                 const existing = existingArticlesMap.get(newArticle.id);
                 if (existing) {
-                    // Update content but preserve local state (isRead)
-                    return { ...newArticle, isRead: existing.isRead };
+                    // Update content but preserve local state (isRead, isSaved)
+                    return { ...newArticle, isRead: existing.isRead, isSaved: existing.isSaved };
                 }
                 return newArticle;
             });
