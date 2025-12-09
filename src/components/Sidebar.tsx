@@ -66,10 +66,6 @@ export default function Sidebar({
     const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
     const [newCategoryName, setNewCategoryName] = useState('');
     const [sortOption, setSortOption] = useState<SortOption>('updated');
-    const [showSortMenu, setShowSortMenu] = useState(false);
-    const [sortMenuPos, setSortMenuPos] = useState({ x: 0, y: 0 });
-    const sortButtonRef = useRef<HTMLButtonElement>(null);
-    const sortMenuRef = useRef<HTMLDivElement>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, feed: null });
     const contextMenuRef = useRef<HTMLDivElement>(null);
     // Overflow menu state
@@ -345,21 +341,17 @@ export default function Sidebar({
             if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
                 closeContextMenu();
             }
-            if (showSortMenu && sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node) &&
-                sortButtonRef.current && !sortButtonRef.current.contains(e.target as Node)) {
-                setShowSortMenu(false);
-            }
             if (showOverflowMenu && overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node) &&
                 overflowButtonRef.current && !overflowButtonRef.current.contains(e.target as Node)) {
                 setShowOverflowMenu(false);
             }
         };
 
-        if (contextMenu.show || showSortMenu || showOverflowMenu) {
+        if (contextMenu.show || showOverflowMenu) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [contextMenu.show, showSortMenu, showOverflowMenu]);
+    }, [contextMenu.show, showOverflowMenu]);
 
     const toggleOverflowMenu = () => {
         if (showOverflowMenu) {
@@ -643,42 +635,6 @@ export default function Sidebar({
                         onClose={() => setShowDiscovery(false)}
                         onAddFeed={onAddFeed}
                     />
-                )
-            }
-            {
-                showSortMenu && createPortal(
-                    <div
-                        ref={sortMenuRef}
-                        className="sort-menu"
-                        style={{
-                            position: 'fixed',
-                            top: `${sortMenuPos.y}px`,
-                            left: `${sortMenuPos.x}px`,
-                            right: 'auto',
-                            zIndex: 1000,
-                            marginTop: 0 // Override existing CSS margin
-                        }}
-                    >
-                        <div
-                            className={`sort-option ${sortOption === 'updated' ? 'active' : ''}`}
-                            onClick={() => { setSortOption('updated'); setShowSortMenu(false); }}
-                        >
-                            <Clock size={14} /> Last Updated
-                        </div>
-                        <div
-                            className={`sort-option ${sortOption === 'alpha-asc' ? 'active' : ''}`}
-                            onClick={() => { setSortOption('alpha-asc'); setShowSortMenu(false); }}
-                        >
-                            <ArrowDownAZ size={14} /> Name (A-Z)
-                        </div>
-                        <div
-                            className={`sort-option ${sortOption === 'alpha-desc' ? 'active' : ''}`}
-                            onClick={() => { setSortOption('alpha-desc'); setShowSortMenu(false); }}
-                        >
-                            <ArrowUpAZ size={14} /> Name (Z-A)
-                        </div>
-                    </div>,
-                    document.body
                 )
             }
             {
