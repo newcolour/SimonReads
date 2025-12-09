@@ -250,42 +250,41 @@ async function addTopStory(
     // Embed actual image if available
     if (ranked.imageUrl) {
         try {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.src = ranked.imageUrl;
+            let imgWidth = 0;
+            let imgHeight = 0;
 
-            const imageLoaded = await Promise.race([
-                new Promise<boolean>((resolve) => {
-                    img.onload = () => resolve(true);
-                    img.onerror = () => resolve(false);
-                }),
-                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000))
-            ]);
+            try {
+                const props = pdf.getImageProperties(ranked.imageUrl);
+                imgWidth = props.width;
+                imgHeight = props.height;
+            } catch (e) {
+                // If it fails, image data might be invalid
+            }
 
-            if (imageLoaded && img.width && img.height && img.complete) {
+            if (imgWidth > 0 && imgHeight > 0) {
                 const maxWidth = contentWidth;
                 const maxHeight = 70;
-                const aspectRatio = img.width / img.height;
+                const aspectRatio = imgWidth / imgHeight;
 
-                let imageWidth = maxWidth;
-                let imageHeight = maxWidth / aspectRatio;
+                let displayWidth = maxWidth;
+                let displayHeight = maxWidth / aspectRatio;
 
-                if (imageHeight > maxHeight) {
-                    imageHeight = maxHeight;
-                    imageWidth = maxHeight * aspectRatio;
+                if (displayHeight > maxHeight) {
+                    displayHeight = maxHeight;
+                    displayWidth = maxHeight * aspectRatio;
                 }
 
                 // Check if image fits on current page
-                if (currentY + imageHeight + 10 > pageHeight - 20) {
+                if (currentY + displayHeight + 10 > pageHeight - 20) {
                     pdf.addPage();
                     currentY = 20;
                 }
 
-                const xOffset = margin + (maxWidth - imageWidth) / 2;
+                const xOffset = margin + (maxWidth - displayWidth) / 2;
 
                 try {
-                    pdf.addImage(ranked.imageUrl, 'JPEG', xOffset, currentY, imageWidth, imageHeight);
-                    currentY += imageHeight + 5;
+                    pdf.addImage(ranked.imageUrl, 'JPEG', xOffset, currentY, displayWidth, displayHeight);
+                    currentY += displayHeight + 5;
 
                     // Image caption
                     pdf.setFont('helvetica', 'italic');
@@ -430,36 +429,35 @@ async function addRegularArticle(
     // Embed image if available
     if (ranked.imageUrl) {
         try {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.src = ranked.imageUrl;
+            let imgWidth = 0;
+            let imgHeight = 0;
 
-            const imageLoaded = await Promise.race([
-                new Promise<boolean>((resolve) => {
-                    img.onload = () => resolve(true);
-                    img.onerror = () => resolve(false);
-                }),
-                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000))
-            ]);
+            try {
+                const props = pdf.getImageProperties(ranked.imageUrl);
+                imgWidth = props.width;
+                imgHeight = props.height;
+            } catch (e) {
+                // If it fails, image data might be invalid
+            }
 
-            if (imageLoaded && img.width && img.height && img.complete) {
+            if (imgWidth > 0 && imgHeight > 0) {
                 const maxWidth = columnWidth;
                 const maxHeight = 40;
-                const aspectRatio = img.width / img.height;
+                const aspectRatio = imgWidth / imgHeight;
 
-                let imageWidth = maxWidth;
-                let imageHeight = maxWidth / aspectRatio;
+                let displayWidth = maxWidth;
+                let displayHeight = maxWidth / aspectRatio;
 
-                if (imageHeight > maxHeight) {
-                    imageHeight = maxHeight;
-                    imageWidth = maxHeight * aspectRatio;
+                if (displayHeight > maxHeight) {
+                    displayHeight = maxHeight;
+                    displayWidth = maxHeight * aspectRatio;
                 }
 
-                const xOffset = xPosition + (maxWidth - imageWidth) / 2;
+                const xOffset = xPosition + (maxWidth - displayWidth) / 2;
 
                 try {
-                    pdf.addImage(ranked.imageUrl, 'JPEG', xOffset, localY, imageWidth, imageHeight);
-                    localY += imageHeight + 3;
+                    pdf.addImage(ranked.imageUrl, 'JPEG', xOffset, localY, displayWidth, displayHeight);
+                    localY += displayHeight + 3;
                 } catch (pdfError) {
                     console.error('Failed to add column image to PDF:', pdfError);
                 }
@@ -803,18 +801,27 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
         const response = await fetch(imageUrl);
         if (!response.ok) return null;
 
-        const blob = await response.blob();
+        // Check if running in Node.js (Electron Main Process)
+        const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
 
-        // Convert blob to base64
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64 = reader.result as string;
-                resolve(base64);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
+        if (isNode) {
+            const arrayBuffer = await response.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            const contentType = response.headers.get('content-type') || 'image/jpeg';
+            return `data:${contentType};base64,${buffer.toString('base64')}`;
+        } else {
+            // Browser environment
+            const blob = await response.blob();
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64 = reader.result as string;
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
     } catch (error) {
         console.error('Failed to fetch image:', imageUrl, error);
         return null;

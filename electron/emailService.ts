@@ -1,10 +1,7 @@
 import nodemailer from 'nodemailer';
-// @ts-ignore - Runtime path after compilation
-import { Article, AppSettings } from './src/types';
-// @ts-ignore - Runtime path after compilation
-import { summarizeArticle } from './src/summaryService';
-// @ts-ignore - Runtime path after compilation
-import { generateNewspaperPDF } from './src/pdfService';
+import { Article, AppSettings } from '../src/types';
+import { summarizeArticle } from '../src/summaryService';
+import { generateNewspaperPDF } from '../src/pdfService';
 import * as fs from 'fs';
 import * as path from 'path';
 
