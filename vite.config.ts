@@ -28,9 +28,9 @@ export default defineConfig({
         emptyOutDir: true,
         rollupOptions: {
             output: {
-                manualChunks: undefined, // Disable code splitting for Electron
+                // manualChunks: undefined, // Let Vite handle chunking automatically
             },
-            treeshake: false, // Disable tree-shaking to fix export detection issues
+            // treeshake: true, // Default is true
         },
         commonjsOptions: {
             transformMixedEsModules: true,

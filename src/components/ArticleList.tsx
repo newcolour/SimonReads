@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star } from 'lucide-react';
@@ -13,6 +13,61 @@ const cleanTitle = (title: string): string => {
     temp.innerHTML = title;
     return temp.textContent || temp.innerText || title;
 };
+
+interface ArticleItemProps {
+    article: Article;
+    isSelected: boolean;
+    isMultiSelected: boolean;
+    onSelect: (article: Article, ctrlKey: boolean) => void;
+    onContextMenu: (e: React.MouseEvent, article: Article) => void;
+}
+
+const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onContextMenu }: ArticleItemProps) => {
+    return (
+        <div
+            className={`article-item ${isSelected ? 'active' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${!article.isRead ? 'unread' : ''}`}
+            onClick={(e) => onSelect(article, e.ctrlKey || e.metaKey)}
+            onContextMenu={(e) => onContextMenu(e, article)}
+        >
+            {!article.isRead && <div className="unread-marker"></div>}
+            {isMultiSelected && <div className="multi-select-marker">✓</div>}
+            <h4 className="article-title">
+                {article.mediaType === 'audio' && (
+                    <span className="media-badge audio" title="Audio Podcast">
+                        <Headphones size={14} />
+                    </span>
+                )}
+                {article.mediaType === 'video' && (
+                    <span className="media-badge video" title="Video Podcast">
+                        <Video size={14} />
+                    </span>
+                )}
+                {article.isSaved && (
+                    <span className="saved-badge" title="Saved">
+                        <Star size={14} fill="currentColor" />
+                    </span>
+                )}
+                {cleanTitle(article.title)}
+            </h4>
+            <div className="article-meta">
+                {article.creator && (
+                    <span className="article-creator">{article.creator}</span>
+                )}
+                {article.duration && (
+                    <span className="article-duration">• {article.duration}</span>
+                )}
+                {article.pubDate && (
+                    <span className="article-date">
+                        {article.duration ? '• ' : ''}{formatDistanceToNow(article.pubDate, { addSuffix: true })}
+                    </span>
+                )}
+            </div>
+            {article.contentSnippet && (
+                <p className="article-snippet">{article.contentSnippet.slice(0, 150)}...</p>
+            )}
+        </div>
+    );
+});
 
 interface ArticleListProps {
     articles: Article[];
@@ -36,11 +91,13 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
     });
     const contextMenuRef = useRef<HTMLDivElement>(null);
 
-    const sortedArticles = [...articles].sort((a, b) => {
-        const dateA = a.pubDate?.getTime() || 0;
-        const dateB = b.pubDate?.getTime() || 0;
-        return dateB - dateA;
-    });
+    const sortedArticles = useMemo(() => {
+        return [...articles].sort((a, b) => {
+            const dateA = a.pubDate?.getTime() || 0;
+            const dateB = b.pubDate?.getTime() || 0;
+            return dateB - dateA;
+        });
+    }, [articles]);
 
     // Context menu handlers
     const handleContextMenu = (e: React.MouseEvent, article: Article) => {
@@ -205,49 +262,14 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                     </div>
                 ) : (
                     sortedArticles.map((article) => (
-                        <div
+                        <ArticleItem
                             key={article.id}
-                            className={`article-item ${selectedArticle?.id === article.id ? 'active' : ''} ${selectedArticleIds.has(article.id) ? 'multi-selected' : ''} ${!article.isRead ? 'unread' : ''}`}
-                            onClick={(e) => onSelectArticle(article, e.ctrlKey || e.metaKey)}
-                            onContextMenu={(e) => handleContextMenu(e, article)}
-                        >
-                            {!article.isRead && <div className="unread-marker"></div>}
-                            {selectedArticleIds.has(article.id) && <div className="multi-select-marker">✓</div>}
-                            <h4 className="article-title">
-                                {article.mediaType === 'audio' && (
-                                    <span className="media-badge audio" title="Audio Podcast">
-                                        <Headphones size={14} />
-                                    </span>
-                                )}
-                                {article.mediaType === 'video' && (
-                                    <span className="media-badge video" title="Video Podcast">
-                                        <Video size={14} />
-                                    </span>
-                                )}
-                                {article.isSaved && (
-                                    <span className="saved-badge" title="Saved">
-                                        <Star size={14} fill="currentColor" />
-                                    </span>
-                                )}
-                                {cleanTitle(article.title)}
-                            </h4>
-                            <div className="article-meta">
-                                {article.creator && (
-                                    <span className="article-creator">{article.creator}</span>
-                                )}
-                                {article.duration && (
-                                    <span className="article-duration">• {article.duration}</span>
-                                )}
-                                {article.pubDate && (
-                                    <span className="article-date">
-                                        {article.duration ? '• ' : ''}{formatDistanceToNow(article.pubDate, { addSuffix: true })}
-                                    </span>
-                                )}
-                            </div>
-                            {article.contentSnippet && (
-                                <p className="article-snippet">{article.contentSnippet.slice(0, 150)}...</p>
-                            )}
-                        </div>
+                            article={article}
+                            isSelected={selectedArticle?.id === article.id}
+                            isMultiSelected={selectedArticleIds.has(article.id)}
+                            onSelect={onSelectArticle}
+                            onContextMenu={handleContextMenu}
+                        />
                     ))
                 )}
             </div>

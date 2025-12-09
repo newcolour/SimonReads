@@ -338,7 +338,8 @@ export async function fetchFeedIcon(feedUrl: string): Promise<string | undefined
             let text = '';
             // Use ipcRenderer if available (in Electron) to bypass CORS
             if ((window as any).ipcRenderer) {
-                text = await (window as any).ipcRenderer.invoke('fetch-url', feedUrl);
+                const result = await (window as any).ipcRenderer.invoke('fetch-url', feedUrl);
+                text = (typeof result === 'string') ? result : result.content || '';
             } else {
                 const response = await fetch(feedUrl);
                 text = await response.text();

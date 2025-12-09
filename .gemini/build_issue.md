@@ -39,6 +39,7 @@ The build now completes successfully!
 - `src/webSearchService.ts` (was `searchService.ts`)
 - `src/pdfService.ts` (was `newspaperPdfService.ts`)
 
+## Next Step Id: 199
 ## Next Steps
 - Proceed with UI integration for the Email feature.
 - Test the built application.

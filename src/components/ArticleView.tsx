@@ -250,6 +250,14 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                     article.feedTitle?.toLowerCase().includes('omg') ||
                     article.content.includes('You\'re reading');
 
+                // Check for Boing Boing
+                const isBoingBoing = article.link.includes('boingboing.net') ||
+                    article.feedTitle?.toLowerCase().includes('boing boing');
+
+                // Check for generic "truncated feed" footer pattern common in WordPress
+                // distinct enough to not trigger false positives
+                const hasTruncatedFooter = article.content.includes('appeared first on');
+
                 console.log('Content analysis:', {
                     contentLength,
                     textLength,
@@ -257,6 +265,8 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                     hasTrackingPixel,
                     isNPR,
                     isOMGUbuntu,
+                    isBoingBoing,
+                    hasTruncatedFooter,
                     feedTitle: article.feedTitle,
                     domain: new URL(article.link).hostname
                 });
@@ -266,11 +276,15 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                 // - Has tracking pixel and only 1-2 paragraphs (typical NPR snippet), OR
                 // - Is NPR article with less than 3 paragraphs (NPR typically provides snippets), OR
                 // - Is OMG! Ubuntu article (they always provide snippets with "You're reading" footer), OR
+                // - Is Boing Boing (always truncated), OR
+                // - Has generic truncated footer text, OR
                 // - Content is less than 800 characters total
                 isSnippet = textLength < 300 ||
                     (hasTrackingPixel && paragraphCount <= 2) ||
                     (isNPR && paragraphCount <= 3) ||
                     isOMGUbuntu ||
+                    isBoingBoing ||
+                    hasTruncatedFooter ||
                     contentLength < 800;
             } else {
                 isSnippet = true; // No content at all
@@ -324,6 +338,9 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                     } else {
                         // Generic selectors for other sites
                         contentElement =
+                            doc.querySelector('#story') || // Boing Boing
+                            doc.querySelector('.entry-content') || // WordPress
+                            doc.querySelector('.post-content') || // WordPress
                             doc.querySelector('.story__text') || // Repubblica.it
                             doc.querySelector('.story-body') ||
                             doc.querySelector('.story') || // Repubblica.it fallback
@@ -331,8 +348,6 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                             doc.querySelector('[role="main"]') ||
                             doc.querySelector('main') ||
                             doc.querySelector('.article-body') ||
-                            doc.querySelector('.post-content') ||
-                            doc.querySelector('.entry-content') ||
                             doc.querySelector('.content') ||
                             doc.body;
                     }
