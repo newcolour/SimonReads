@@ -252,7 +252,26 @@ function App() {
 
         console.log('Setting theme to:', actualTheme);
         document.documentElement.setAttribute('data-theme', actualTheme);
-        document.documentElement.style.setProperty('--app-font', settings.font);
+
+        // Font mappings with proper fallback chains (especially for Linux)
+        const fontFamilies: Record<string, string> = {
+            'system-ui': 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
+            'Inter': '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Ubuntu, sans-serif',
+            'Arial': 'Arial, "Liberation Sans", "Noto Sans", sans-serif',
+            'Georgia': 'Georgia, "Noto Serif", "Liberation Serif", serif',
+            'Merriweather': '"Merriweather", Georgia, "Noto Serif", "Liberation Serif", serif',
+            'Roboto': '"Roboto", "Noto Sans", system-ui, -apple-system, sans-serif',
+            'Open Sans': '"Open Sans", "Noto Sans", system-ui, sans-serif',
+            'Lato': '"Lato", "Noto Sans", system-ui, sans-serif',
+            'Source Sans Pro': '"Source Sans 3", "Source Sans Pro", "Noto Sans", system-ui, sans-serif',
+            'Fira Sans': '"Fira Sans", "Noto Sans", system-ui, sans-serif',
+            'PT Sans': '"PT Sans", "Noto Sans", system-ui, sans-serif',
+            'Ubuntu': '"Ubuntu", "Noto Sans", system-ui, sans-serif',
+            'Nunito': '"Nunito", "Noto Sans", system-ui, sans-serif',
+        };
+
+        const fontFamily = fontFamilies[settings.font] || fontFamilies['system-ui'];
+        document.documentElement.style.setProperty('--app-font', fontFamily);
 
         const fontSizes = {
             small: '13px',

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, net, session } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme, net, session, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { setupEmailScheduler, updateSchedule, stopScheduler } from './emailScheduler';
@@ -599,6 +599,61 @@ let win: BrowserWindow | null;
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 
 function createWindow() {
+  // Create a minimal menu (this is required for basic keyboard shortcuts on macOS)
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === 'darwin' ? [{
+      label: app.getName(),
+      submenu: [
+        { role: 'about' as const },
+        { type: 'separator' as const },
+        { role: 'hide' as const },
+        { role: 'hideOthers' as const },
+        { role: 'unhide' as const },
+        { type: 'separator' as const },
+        { role: 'quit' as const }
+      ]
+    }] : []),
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' as const },
+        { role: 'redo' as const },
+        { type: 'separator' as const },
+        { role: 'cut' as const },
+        { role: 'copy' as const },
+        { role: 'paste' as const },
+        { role: 'selectAll' as const }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' as const },
+        { role: 'forceReload' as const },
+        { type: 'separator' as const },
+        { role: 'resetZoom' as const },
+        { role: 'zoomIn' as const },
+        { role: 'zoomOut' as const },
+        { type: 'separator' as const },
+        { role: 'togglefullscreen' as const }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' as const },
+        { role: 'close' as const },
+        ...(process.platform === 'darwin' ? [
+          { type: 'separator' as const },
+          { role: 'front' as const }
+        ] : [])
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+
   win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -608,6 +663,7 @@ function createWindow() {
     transparent: false,
     backgroundColor: '#ffffff',
     titleBarStyle: 'hiddenInset', // Native-like title bar
+    autoHideMenuBar: true, // Hide menu bar on Windows/Linux (press Alt to show)
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: true,
