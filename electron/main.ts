@@ -210,6 +210,98 @@ ipcMain.handle('share-feed', async (event, { title, url }: { title: string; url:
   }
 });
 
+// Share to Mastodon handler - shows dialog to choose Mastodon app
+ipcMain.handle('share-to-mastodon', async (event, { text }: { text: string }) => {
+  console.log('Share to Mastodon:', text.substring(0, 50) + '...');
+  const { shell, clipboard, dialog } = require('electron');
+  const { execSync } = require('child_process');
+  const encodedText = encodeURIComponent(text);
+
+  // Mastodon apps with their URL schemes, bundle identifiers, and whether they need AppleScript
+  const mastodonApps: { name: string; scheme: string; bundleId: string; useAppleScript?: boolean }[] = [
+    { name: 'Ivory', scheme: `ivory://acct/post?text=${encodedText}`, bundleId: 'com.tapbots.Ivory' },
+    { name: 'Ice Cubes', scheme: '', bundleId: 'com.thomasricouard.IceCubesApp', useAppleScript: true },
+    { name: 'Mona', scheme: `mona://post?text=${encodedText}`, bundleId: 'me.johnxnguyen.Mona' },
+    { name: 'Mastonaut', scheme: `mastonaut://compose?text=${encodedText}`, bundleId: 'com.brunoph.Mastonaut' },
+    { name: 'Toot!', scheme: `toot://compose?text=${encodedText}`, bundleId: 'com.DAtek.Toot' },
+  ];
+
+  // Find installed apps (macOS only)
+  let installedApps: typeof mastodonApps = [];
+  if (process.platform === 'darwin') {
+    for (const app of mastodonApps) {
+      try {
+        const result = execSync(`mdfind "kMDItemCFBundleIdentifier == '${app.bundleId}'"`, { encoding: 'utf8' });
+        if (result.trim().length > 0) {
+          installedApps.push(app);
+        }
+      } catch {
+        // App not found
+      }
+    }
+  }
+
+  // Build dialog buttons
+  const buttons = installedApps.map(app => app.name);
+  buttons.push('Copy to Clipboard');
+  buttons.push('Cancel');
+
+  const { response } = await dialog.showMessageBox(win!, {
+    type: 'question',
+    title: 'Share to Mastodon',
+    message: installedApps.length > 0 ? 'Choose your Mastodon app:' : 'No Mastodon app found',
+    detail: text.length > 100 ? text.substring(0, 100) + '...' : text,
+    buttons: buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1
+  });
+
+  if (response === buttons.length - 1) {
+    return { success: true, action: 'cancelled' };
+  } else if (response === buttons.length - 2) {
+    clipboard.writeText(text);
+    return { success: true, action: 'copied' };
+  } else if (response < installedApps.length) {
+    const selectedApp = installedApps[response];
+
+    if (selectedApp.useAppleScript) {
+      // For apps without URL scheme support, use AppleScript
+      // Copy text to clipboard, open the app, trigger new post shortcut (Cmd+N), then paste
+      clipboard.writeText(text);
+
+      try {
+        // AppleScript to open Ice Cubes, wait briefly, then send Cmd+N and Cmd+V
+        const appleScript = `
+          tell application "Ice Cubes" to activate
+          delay 0.5
+          tell application "System Events"
+            keystroke "n" using command down
+            delay 0.3
+            keystroke "v" using command down
+          end tell
+        `;
+        execSync(`osascript -e '${appleScript.replace(/'/g, "'\\''")}'`);
+        return { success: true, action: 'opened' };
+      } catch (err) {
+        console.error(`Failed to open ${selectedApp.name} via AppleScript:`, err);
+        return { success: true, action: 'copied' }; // Text is still in clipboard
+      }
+    } else {
+      // Use URL scheme for apps that support it
+      try {
+        await shell.openExternal(selectedApp.scheme);
+        return { success: true, action: 'opened' };
+      } catch (err) {
+        console.error(`Failed to open ${selectedApp.name}:`, err);
+        clipboard.writeText(text);
+        return { success: true, action: 'copied' };
+      }
+    }
+  }
+
+  return { success: true, action: 'cancelled' };
+});
+
 // Search proxy handler
 ipcMain.handle('perform-search', async (event, query: string) => {
   console.log('Search Proxy: Received query:', query);

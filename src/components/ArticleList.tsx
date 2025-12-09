@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star } from 'lucide-react';
+import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star, Eye, EyeOff } from 'lucide-react';
 import { Article } from '../types';
 import './ArticleList.css';
 
@@ -90,6 +90,7 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
         article: null
     });
     const contextMenuRef = useRef<HTMLDivElement>(null);
+    const [showUnreadOnly, setShowUnreadOnly] = useState(false);
 
     const sortedArticles = useMemo(() => {
         return [...articles].sort((a, b) => {
@@ -97,6 +98,17 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
             const dateB = b.pubDate?.getTime() || 0;
             return dateB - dateA;
         });
+    }, [articles]);
+
+    const filteredArticles = useMemo(() => {
+        if (showUnreadOnly) {
+            return sortedArticles.filter(article => !article.isRead);
+        }
+        return sortedArticles;
+    }, [sortedArticles, showUnreadOnly]);
+
+    const unreadCount = useMemo(() => {
+        return articles.filter(article => !article.isRead).length;
     }, [articles]);
 
     // Context menu handlers
@@ -170,6 +182,33 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
         }
     };
 
+
+    const handleShareToMastodon = async () => {
+        if (contextMenu.article) {
+            const text = `${contextMenu.article.title}\n${contextMenu.article.link}`;
+
+            const ipcRenderer = (window as any).ipcRenderer;
+            if (ipcRenderer) {
+                try {
+                    const result = await ipcRenderer.invoke('share-to-mastodon', { text });
+                    if (result.action === 'copied') {
+                        alert('Text copied to clipboard! Paste it into your Mastodon app.');
+                    }
+                } catch (error) {
+                    console.error('Mastodon share error:', error);
+                    navigator.clipboard.writeText(text);
+                    alert('Text copied to clipboard! Paste it into your Mastodon app.');
+                }
+            } else {
+                // In browser, just copy to clipboard
+                navigator.clipboard.writeText(text);
+                alert('Text copied to clipboard! Paste it into your Mastodon app.');
+            }
+
+            closeContextMenu();
+        }
+    };
+
     const handleCopyLink = async () => {
         if (contextMenu.article) {
             try {
@@ -239,29 +278,46 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                         <ChevronLeft size={20} />
                     </button>
                 )}
-                <h3>
-                    {icon && (
-                        <img
-                            src={icon}
-                            alt=""
-                            className="feed-icon-header"
-                            onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
-                        />
-                    )}
-                    {title}
-                </h3>
+                <div className="article-list-title-section">
+                    <h3>
+                        {icon && (
+                            <img
+                                src={icon}
+                                alt=""
+                                className="feed-icon-header"
+                                onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                            />
+                        )}
+                        {title}
+                    </h3>
+                    <button
+                        className={`unread-filter-btn ${showUnreadOnly ? 'active' : ''}`}
+                        onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+                        title={showUnreadOnly ? 'Show all articles' : 'Show unread only'}
+                    >
+                        {showUnreadOnly ? <EyeOff size={16} /> : <Eye size={16} />}
+                        <span className="unread-filter-label">
+                            {showUnreadOnly ? 'Unread' : 'All'}
+                        </span>
+                        {unreadCount > 0 && (
+                            <span className="unread-filter-count">{unreadCount}</span>
+                        )}
+                    </button>
+                </div>
                 {selectedArticleIds.size > 0 && (
                     <span className="selection-count">{selectedArticleIds.size} selected</span>
                 )}
             </div>
             <div className="article-list-content">
-                {sortedArticles.length === 0 ? (
+                {filteredArticles.length === 0 ? (
                     <div className="empty-state">
-                        <p>No articles found.</p>
-                        <p className="empty-hint">Try refreshing or adding more feeds.</p>
+                        <p>{showUnreadOnly ? 'No unread articles.' : 'No articles found.'}</p>
+                        <p className="empty-hint">
+                            {showUnreadOnly ? 'All caught up! Click the filter to show all articles.' : 'Try refreshing or adding more feeds.'}
+                        </p>
                     </div>
                 ) : (
-                    sortedArticles.map((article) => (
+                    filteredArticles.map((article) => (
                         <ArticleItem
                             key={article.id}
                             article={article}
@@ -289,6 +345,12 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                     <div className="context-menu-item" onClick={handleShareArticle}>
                         <Share2 size={14} />
                         <span>Share Article</span>
+                    </div>
+                    <div className="context-menu-item" onClick={handleShareToMastodon}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M21.327 8.566c0-4.339-2.843-5.61-2.843-5.61-1.433-.658-3.894-.935-6.451-.956h-.063c-2.557.021-5.016.298-6.45.956 0 0-2.843 1.272-2.843 5.61 0 .993-.019 2.181.012 3.441.103 4.243.778 8.425 4.701 9.463 1.809.479 3.362.579 4.612.51 2.268-.126 3.541-.809 3.541-.809l-.075-1.646s-1.621.511-3.441.449c-1.804-.062-3.707-.194-3.999-2.409a4.523 4.523 0 0 1-.04-.621s1.77.432 4.014.535c1.372.063 2.658-.08 3.965-.236 2.506-.299 4.688-1.843 4.962-3.254.434-2.223.398-5.424.398-5.424zm-3.353 5.59h-2.081V9.057c0-1.075-.452-1.62-1.357-1.62-1 0-1.501.647-1.501 1.927v2.791h-2.069V9.364c0-1.28-.501-1.927-1.502-1.927-.905 0-1.357.546-1.357 1.62v5.099H6.026V8.903c0-1.074.273-1.927.823-2.558.566-.631 1.307-.955 2.228-.955 1.065 0 1.872.41 2.405 1.228l.518.869.519-.869c.533-.818 1.34-1.228 2.405-1.228.92 0 1.662.324 2.228.955.549.631.822 1.484.822 2.558v5.253z" />
+                        </svg>
+                        <span>Share to Mastodon</span>
                     </div>
                     <div className="context-menu-item" onClick={handleCopyLink}>
                         <Copy size={14} />

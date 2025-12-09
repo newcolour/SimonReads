@@ -38,6 +38,60 @@
     object-fit: contain;
 }
 
+.article-list-title-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.unread-filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.unread-filter-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.unread-filter-btn.active {
+    background: var(--accent-light);
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.unread-filter-label {
+    font-weight: 500;
+}
+
+.unread-filter-count {
+    background: var(--badge-bg);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.unread-filter-btn.active .unread-filter-count {
+    background: var(--accent-primary);
+}
+
 .selection-count {
     font-size: 12px;
     color: var(--badge-bg);

@@ -11,12 +11,14 @@ A beautiful, cross-platform RSS reader with AI-powered features. Built with Elec
 - **🤖 AI-Powered Summaries** - Summarize articles using Gemini, OpenAI, or Claude
 - **💬 AI Chat** - Have conversations about articles with AI
 - **📰 Daily Newsreel** - AI-generated digest of your recent articles
-- **🎨 Multiple Themes** - Dark, Light, Sepia, Nord, Solarized, Dracula, Gruvbox, Tokyo Night
+- **🎨 Multiple Themes** - Dark, Light, Sepia, Nord, Solarized, Dracula, Gruvbox, Tokyo Night, Sorcerer
 - **🎧 Podcast Support** - Play audio and video podcasts directly in the app
 - **📱 Cross-Platform** - Works on macOS, Linux, and Android
 - **🔍 Feed Discovery** - Discover new feeds based on your interests
 - **🏷️ Smart Organization** - Folders, unread counts, and article management
 - **📧 Email Digests** - Receive daily newsreels via email (with PDF attachment)
+- **👁️ Unread Filter** - Toggle to show only unread articles in any feed
+- **🐘 Share to Mastodon** - Share articles directly to Mastodon apps (Ivory, Ice Cubes, Mona, and more)
 
 ## 🖥️ Screenshots
 
