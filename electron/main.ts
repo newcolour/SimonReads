@@ -614,6 +614,13 @@ function createWindow() {
       ]
     }] : []),
     {
+      label: 'File',
+      submenu: [
+        { role: 'close' as const },
+        ...(process.platform !== 'darwin' ? [{ role: 'quit' as const }] : []) // Quit is in App menu on Mac
+      ]
+    },
+    {
       label: 'Edit',
       submenu: [
         { role: 'undo' as const },
