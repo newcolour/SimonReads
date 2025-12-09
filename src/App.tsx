@@ -491,19 +491,44 @@ function App() {
         // This ensures we don't delete articles just because they are old
         mergedArticles.push(...Array.from(existingArticlesMap.values()));
 
+        // Apply retention policy (cleanup old read articles)
+        const retentionDays = settings.retentionPeriod;
+        let finalArticles = mergedArticles;
+
+        if (retentionDays && retentionDays > 0) {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+            finalArticles = mergedArticles.filter(article => {
+                // ALWAYS keep saved articles
+                if (article.isSaved) return true;
+
+                // Keep unread articles (user hasn't processed them yet)
+                if (!article.isRead) return true;
+
+                // For read articles, check if they are within retention period
+                const pubDate = article.pubDate ? new Date(article.pubDate) : new Date();
+                return pubDate >= cutoffDate;
+            });
+
+            if (mergedArticles.length !== finalArticles.length) {
+                console.log(`Cleaned up ${mergedArticles.length - finalArticles.length} old articles.`);
+            }
+        }
+
         // Sort by date descending
-        mergedArticles.sort((a, b) => {
+        finalArticles.sort((a, b) => {
             const dateA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
             const dateB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
             return dateB - dateA;
         });
 
-        setArticles(mergedArticles);
+        setArticles(finalArticles);
         setFeeds(updatedFeeds);
-        storage.saveArticles(mergedArticles);
+        storage.saveArticles(finalArticles);
         storage.saveFeeds(updatedFeeds);
         setIsRefreshing(false);
-    }, [feeds, articles, isRefreshing]);
+    }, [feeds, articles, isRefreshing, settings.retentionPeriod]);
 
     const handleRefreshSingleFeed = useCallback(async (feedId: string) => {
         if (isRefreshing) return;
