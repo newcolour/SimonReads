@@ -707,45 +707,60 @@ Respond in JSON format:
 }
 
 async function extractArticleImages(rankedArticles: RankedArticle[]): Promise<void> {
-    // For each article, try to extract and fetch the first image from the web page
-    for (const ranked of rankedArticles) {
+    // Only fetch images for top 10 articles to speed up generation
+    const articlesToProcess = rankedArticles.slice(0, 10);
+
+    // Process all articles in parallel for speed
+    const imagePromises = articlesToProcess.map(async (ranked) => {
         const article = ranked.article;
+        if (!article) return;
 
         try {
-            // First try to get image from RSS content
+            // First try to get image from RSS content (fast, no network needed for URL)
             const content = article.content || '';
             const imgMatch = content.match(/<img[^>]+src="([^">]+)"/);
 
             if (imgMatch && imgMatch[1]) {
-                const imageUrl = imgMatch[1];
-                // Try to fetch and convert image to base64
-                const base64Image = await fetchImageAsBase64(imageUrl);
+                const base64Image = await fetchImageAsBase64(imgMatch[1]);
                 if (base64Image) {
                     ranked.imageUrl = base64Image;
-                    continue;
+                    return;
                 }
             }
 
             // If no image in RSS, try fetching from the article URL
             if (article.link) {
-                const response = await fetch(article.link);
-                const html = await response.text();
+                // Use a timeout to avoid hanging on slow sites
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-                // Try multiple strategies to find the main image
-                const imageUrl = extractMainImageFromHTML(html, article.link);
+                try {
+                    const response = await fetch(article.link, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    const html = await response.text();
+                    const imageUrl = extractMainImageFromHTML(html, article.link);
 
-                if (imageUrl) {
-                    const base64Image = await fetchImageAsBase64(imageUrl);
-                    if (base64Image) {
-                        ranked.imageUrl = base64Image;
+                    if (imageUrl) {
+                        const base64Image = await fetchImageAsBase64(imageUrl);
+                        if (base64Image) {
+                            ranked.imageUrl = base64Image;
+                        }
                     }
+                } catch (e) {
+                    clearTimeout(timeoutId);
+                    // Timeout or fetch failed, continue without image
                 }
             }
         } catch (error) {
-            console.error(`Failed to extract image for article: ${article.title}`, error);
             // Continue without image
         }
-    }
+    });
+
+    // Wait for all image fetches to complete (with 10s overall timeout)
+    await Promise.race([
+        Promise.all(imagePromises),
+        new Promise(resolve => setTimeout(resolve, 10000))
+    ]);
 }
 
 function extractMainImageFromHTML(html: string, baseUrl: string): string | null {

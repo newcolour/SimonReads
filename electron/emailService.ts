@@ -30,7 +30,7 @@ export async function sendDailyNewsreelEmail(
 
     // Filter articles from the last N hours
     const cutoffTime = Date.now() - (emailSettings.timeHorizon * 60 * 60 * 1000);
-    const recentArticles = articles.filter(article => {
+    let recentArticles = articles.filter(article => {
         if (!article.pubDate) return false;
         const articleTime = new Date(article.pubDate).getTime();
         return articleTime >= cutoffTime;
@@ -40,6 +40,15 @@ export async function sendDailyNewsreelEmail(
         console.log('No recent articles to send');
         return;
     }
+
+    // Limit to top 20 articles for faster processing (sorted by date)
+    recentArticles = recentArticles
+        .sort((a, b) => {
+            const dateA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+            const dateB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+            return dateB - dateA;
+        })
+        .slice(0, 20);
 
     console.log(`Generating newsreel for ${recentArticles.length} articles`);
 
