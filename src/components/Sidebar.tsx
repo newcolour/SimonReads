@@ -344,6 +344,22 @@ export default function Sidebar({
         }
     }, [contextMenu.show]);
 
+    // Tooltip state
+    const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null);
+
+    const handleMouseEnter = (e: React.MouseEvent<HTMLButtonElement>, text: string) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        setTooltip({
+            text,
+            x: rect.left + rect.width / 2,
+            y: rect.bottom + 5
+        });
+    };
+
+    const handleMouseLeave = () => {
+        setTooltip(null);
+    };
+
     return (
         <div className="sidebar">
             <div className="sidebar-toolbar">
@@ -351,7 +367,8 @@ export default function Sidebar({
                     <button
                         className="toolbar-icon-btn"
                         onClick={onOpenSettings}
-                        title="Settings"
+                        onMouseEnter={(e) => handleMouseEnter(e, "Settings")}
+                        onMouseLeave={handleMouseLeave}
                     >
                         <Settings size={15} />
                     </button>
@@ -361,7 +378,8 @@ export default function Sidebar({
                         className={`toolbar-icon-btn ${isRefreshing ? 'spinning' : ''}`}
                         onClick={onRefresh}
                         disabled={isRefreshing}
-                        title="Refresh Feeds"
+                        onMouseEnter={(e) => handleMouseEnter(e, "Refresh Feeds")}
+                        onMouseLeave={handleMouseLeave}
                     >
                         <RefreshCw size={15} />
                     </button>
@@ -374,7 +392,8 @@ export default function Sidebar({
                         else if (sortOption === 'alpha-asc') setSortOption('alpha-desc');
                         else setSortOption('updated');
                     }}
-                    title={sortOption === 'updated' ? 'Sort: Last Updated' : sortOption === 'alpha-asc' ? 'Sort: A-Z' : 'Sort: Z-A'}
+                    onMouseEnter={(e) => handleMouseEnter(e, sortOption === 'updated' ? 'Sort: Last Updated' : sortOption === 'alpha-asc' ? 'Sort: A-Z' : 'Sort: Z-A')}
+                    onMouseLeave={handleMouseLeave}
                 >
                     {sortOption === 'updated' && <Clock size={15} />}
                     {sortOption === 'alpha-asc' && <ArrowDownAZ size={15} />}
@@ -384,7 +403,8 @@ export default function Sidebar({
                     <button
                         className="toolbar-icon-btn"
                         onClick={onOpenDailyNewsreel}
-                        title="Daily Newsreel"
+                        onMouseEnter={(e) => handleMouseEnter(e, "Daily Newsreel")}
+                        onMouseLeave={handleMouseLeave}
                     >
                         <Newspaper size={15} />
                     </button>
@@ -397,7 +417,8 @@ export default function Sidebar({
                                 onMarkAllAsRead();
                             }
                         }}
-                        title="Mark All as Read"
+                        onMouseEnter={(e) => handleMouseEnter(e, "Mark All as Read")}
+                        onMouseLeave={handleMouseLeave}
                     >
                         <CheckCheck size={15} />
                     </button>
@@ -405,18 +426,36 @@ export default function Sidebar({
                 <button
                     className="toolbar-icon-btn"
                     onClick={() => setShowDiscovery(true)}
-                    title="Discover Feeds"
+                    onMouseEnter={(e) => handleMouseEnter(e, "Discover Feeds")}
+                    onMouseLeave={handleMouseLeave}
                 >
                     <Sparkles size={15} />
                 </button>
                 <button
                     className="toolbar-icon-btn"
                     onClick={() => setIsAdding(!isAdding)}
-                    title="Add Feed"
+                    onMouseEnter={(e) => handleMouseEnter(e, "Add Feed")}
+                    onMouseLeave={handleMouseLeave}
                 >
                     <Plus size={15} />
                 </button>
             </div>
+
+            {tooltip && createPortal(
+                <div
+                    className="portal-tooltip"
+                    style={{
+                        position: 'fixed',
+                        top: tooltip.y,
+                        left: tooltip.x,
+                        transform: 'translateX(-50%)',
+                        zIndex: 9999
+                    }}
+                >
+                    {tooltip.text}
+                </div>,
+                document.body
+            )}
 
             <div className="search-container">
                 <div className="search-input-wrapper">
