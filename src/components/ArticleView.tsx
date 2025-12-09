@@ -54,24 +54,31 @@ const getPublicationStyle = (feedTitle: string, theme: string) => {
     };
 
     if (title.includes('new york times') || title.includes('nytimes')) {
-        style.fontFamily = '"Chomsky", "Georgia", serif';
-        style.letterSpacing = '-0.5px';
+        style.fontFamily = '"UnifrakturMaguntia", serif';
+        style.fontSize = '1.4em';
+        style.letterSpacing = '0.5px';
     } else if (title.includes('wall street journal') || title.includes('wsj')) {
-        style.fontFamily = '"Escrow", "Georgia", serif';
+        style.fontFamily = '"Playfair Display", serif';
+        style.letterSpacing = '-0.5px';
     } else if (title.includes('guardian')) {
-        style.fontFamily = '"Guardian Egyptian", "Georgia", serif';
+        style.fontFamily = '"Merriweather", serif';
+        style.fontWeight = 900;
         style.color = isDark ? '#90cfff' : '#052962';
     } else if (title.includes('bbc')) {
-        style.fontFamily = '"Reith", "Helvetica", sans-serif';
+        style.fontFamily = '"Roboto", sans-serif';
+        style.fontWeight = 700;
         style.color = '#BB1919';
     } else if (title.includes('techcrunch')) {
-        style.fontFamily = '"Helvetica Neue", sans-serif';
+        style.fontFamily = '"Helvetica Neue", "Arial", sans-serif';
+        style.fontWeight = 700;
         style.color = '#00D563';
     } else if (title.includes('verge')) {
-        style.fontFamily = '"Adelle", "Georgia", serif';
+        style.fontFamily = '"Roboto Slab", serif';
+        style.fontWeight = 700;
         style.color = '#E10600';
     } else if (title.includes('wired')) {
         style.fontFamily = '"Courier New", monospace';
+        style.letterSpacing = '-1px';
     }
 
     return style;
