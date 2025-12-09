@@ -11,6 +11,7 @@ import Toolbar from './components/Toolbar';
 import Newsreel from './components/Newsreel';
 import WelcomeTour from './components/WelcomeTour';
 import { parseOpml } from './importService';
+import { NotificationService } from './services/notificationService';
 import './App.css';
 
 function App() {
@@ -433,6 +434,7 @@ function App() {
         const existingArticlesMap = new Map(articles.map(a => [a.id, a]));
 
         // Process fetched articles
+        let newCount = 0;
         const mergedArticles: Article[] = fetchedArticles.map(newArticle => {
             const existing = existingArticlesMap.get(newArticle.id);
             if (existing) {
@@ -441,8 +443,16 @@ function App() {
                 // Update content but preserve local state (isRead)
                 return { ...newArticle, isRead: existing.isRead };
             }
+            newCount++;
             return newArticle;
         });
+
+        if (newCount > 0) {
+            NotificationService.send({
+                title: 'New Articles',
+                body: `You have ${newCount} new article${newCount > 1 ? 's' : ''}.`
+            });
+        }
 
         // Add remaining existing articles (those that fell off the RSS feed)
         // This ensures we don't delete articles just because they are old

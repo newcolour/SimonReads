@@ -29,6 +29,7 @@
     "@capacitor-community/text-to-speech": "^6.1.0",
     "@capacitor/app": "^7.1.0",
     "@capacitor/browser": "^7.0.2",
+    "@capacitor/local-notifications": "^7.0.4",
     "@capacitor/status-bar": "^7.0.3",
     "@capawesome/capacitor-badge": "^7.0.1",
     "date-fns": "^2.30.0",
