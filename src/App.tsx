@@ -822,6 +822,7 @@ function App() {
     const handleOpenDailyNewsreel = () => {
         setShowDailyNewsreel(true);
         setShowNewsreel(false);
+        setMobileView('article'); // Show newsreel in article view on mobile
     };
 
     const handleArticleClick = (article: Article) => {
@@ -938,7 +939,10 @@ function App() {
                                 return hoursAgo <= settings.dailyNewsreelTimeHorizon;
                             })}
                             settings={settings}
-                            onClose={() => setShowDailyNewsreel(false)}
+                            onClose={() => {
+                                setShowDailyNewsreel(false);
+                                setMobileView('articles');
+                            }}
                             onArticleClick={handleArticleClick}
                             isDailyNewsreel={true}
                         />
