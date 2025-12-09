@@ -185,3 +185,29 @@ ${plainText}`;
     return data.content?.[0]?.text || 'No summary generated.';
 }
 
+
+export async function generateHashtags(content: string, settings: AppSettings): Promise<string[]> {
+    const provider = settings.aiProvider || 'gemini';
+    const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 5000); // Shorter context mainly for tags
+    const prompt = "Generate 5 relevant, popular hashtags for this article. Output ONLY the hashtags separated by spaces (e.g. #tech #ai #news). Do not include any other text.";
+
+    try {
+        let text = '';
+        if (provider === 'gemini') {
+            text = await summarizeWithGemini(plainText, settings.geminiApiKey || '', settings, prompt);
+        } else if (provider === 'openai') {
+            text = await summarizeWithOpenAI(plainText, settings.openaiApiKey || '', settings, prompt);
+        } else if (provider === 'claude') {
+            text = await summarizeWithClaude(plainText, settings.claudeApiKey || '', settings, prompt);
+        } else {
+            return [];
+        }
+
+        // Extract hashtags
+        const matches = text.match(/#[a-zA-Z0-9_]+/g);
+        return matches ? matches.slice(0, 5) : [];
+    } catch (e) {
+        console.error("Failed to generate hashtags:", e);
+        return [];
+    }
+}
