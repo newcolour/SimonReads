@@ -2,8 +2,7 @@ import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star, Eye, EyeOff } from 'lucide-react';
-import { Article, AppSettings } from '../types';
-import { generateHashtags } from '../summaryService';
+import { Article } from '../types';
 import './ArticleList.css';
 
 // Helper to strip HTML tags and decode entities from titles
@@ -81,10 +80,9 @@ interface ArticleListProps {
     title?: string;
     icon?: string;
     onBack?: () => void;
-    settings: AppSettings;
 }
 
-export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack, settings }: ArticleListProps) {
+export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack }: ArticleListProps) {
     const [contextMenu, setContextMenu] = useState<{ show: boolean; x: number; y: number; article: Article | null }>({
         show: false,
         x: 0,
@@ -187,41 +185,12 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
 
     const handleShareToMastodon = async () => {
         if (contextMenu.article) {
-            // Save article reference before closing menu
-            const article = contextMenu.article;
-            closeContextMenu();
-
-            console.log('Share to Mastodon: Starting...', article.title);
-
-            let text = `${article.title}\n${article.link}`;
+            const text = `${contextMenu.article.title}\n${contextMenu.article.link}`;
 
             const ipcRenderer = (window as any).ipcRenderer;
-            console.log('ipcRenderer available:', !!ipcRenderer);
-
             if (ipcRenderer) {
-                // Try to generate hashtags if AI is configured
-                if (settings && (settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey)) {
-                    document.body.style.cursor = 'wait';
-                    console.log('Generating hashtags...');
-
-                    try {
-                        const content = article.contentSnippet || article.content || article.title;
-                        const tags = await generateHashtags(content, settings);
-                        console.log('Generated tags:', tags);
-                        if (tags.length > 0) {
-                            text += `\n\n${tags.join(' ')}`;
-                        }
-                    } catch (e) {
-                        console.error('Failed to generate tags', e);
-                    } finally {
-                        document.body.style.cursor = 'default';
-                    }
-                }
-
-                console.log('Invoking share-to-mastodon with text:', text.substring(0, 100));
                 try {
                     const result = await ipcRenderer.invoke('share-to-mastodon', { text });
-                    console.log('share-to-mastodon result:', result);
                     if (result.action === 'copied') {
                         alert('Text copied to clipboard! Paste it into your Mastodon app.');
                     }
@@ -231,10 +200,12 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                     alert('Text copied to clipboard! Paste it into your Mastodon app.');
                 }
             } else {
-                console.log('No ipcRenderer - copying to clipboard');
+                // In browser, just copy to clipboard
                 navigator.clipboard.writeText(text);
                 alert('Text copied to clipboard! Paste it into your Mastodon app.');
             }
+
+            closeContextMenu();
         }
     };
 
