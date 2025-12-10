@@ -187,21 +187,27 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
 
     const handleShareToMastodon = async () => {
         if (contextMenu.article) {
-            // Close menu immediately
+            // Save article reference before closing menu
+            const article = contextMenu.article;
             closeContextMenu();
 
-            let text = `${contextMenu.article.title}\n${contextMenu.article.link}`;
+            console.log('Share to Mastodon: Starting...', article.title);
+
+            let text = `${article.title}\n${article.link}`;
 
             const ipcRenderer = (window as any).ipcRenderer;
+            console.log('ipcRenderer available:', !!ipcRenderer);
+
             if (ipcRenderer) {
                 // Try to generate hashtags if AI is configured
                 if (settings && (settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey)) {
-                    // Change cursor to wait
                     document.body.style.cursor = 'wait';
+                    console.log('Generating hashtags...');
 
                     try {
-                        const content = contextMenu.article.contentSnippet || contextMenu.article.content || contextMenu.article.title;
+                        const content = article.contentSnippet || article.content || article.title;
                         const tags = await generateHashtags(content, settings);
+                        console.log('Generated tags:', tags);
                         if (tags.length > 0) {
                             text += `\n\n${tags.join(' ')}`;
                         }
@@ -212,8 +218,10 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                     }
                 }
 
+                console.log('Invoking share-to-mastodon with text:', text.substring(0, 100));
                 try {
                     const result = await ipcRenderer.invoke('share-to-mastodon', { text });
+                    console.log('share-to-mastodon result:', result);
                     if (result.action === 'copied') {
                         alert('Text copied to clipboard! Paste it into your Mastodon app.');
                     }
@@ -223,7 +231,7 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                     alert('Text copied to clipboard! Paste it into your Mastodon app.');
                 }
             } else {
-                // In browser, just copy to clipboard
+                console.log('No ipcRenderer - copying to clipboard');
                 navigator.clipboard.writeText(text);
                 alert('Text copied to clipboard! Paste it into your Mastodon app.');
             }
