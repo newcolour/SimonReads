@@ -223,13 +223,38 @@ ipcMain.handle('share-feed', async (event, { title, url }: { title: string; url:
   }
 });
 
-// Share to Mastodon handler - directly opens web share
+// Share to Mastodon handler - automatically opens Ice Cubes or web share
 ipcMain.handle('share-to-mastodon', async (event, { text }: { text: string }) => {
   console.log('Share to Mastodon:', text.substring(0, 50) + '...');
-  const { shell } = require('electron');
+  const { shell, clipboard } = require('electron');
+  const { execSync } = require('child_process');
   const encodedText = encodeURIComponent(text);
 
-  // Directly open Mastodon web share (works with any instance, user can redirect)
+  // Check if Ice Cubes is installed (macOS)
+  let hasIceCubes = false;
+  if (process.platform === 'darwin') {
+    try {
+      const result = execSync('mdfind "kMDItemCFBundleIdentifier == \'com.thomasricouard.IceCubesApp\'"', { encoding: 'utf8' });
+      hasIceCubes = result.trim().length > 0;
+    } catch {
+      // Not found
+    }
+  }
+
+  if (hasIceCubes) {
+    // Use AppleScript to open Ice Cubes and paste text
+    clipboard.writeText(text);
+    try {
+      const appleScript = 'tell application "Ice Cubes" to activate\ndelay 0.5\ntell application "System Events"\nkeystroke "n" using command down\ndelay 0.3\nkeystroke "v" using command down\nend tell';
+      execSync(`osascript -e '${appleScript}'`);
+      return { success: true, action: 'opened' };
+    } catch (err) {
+      console.error('Failed to open Ice Cubes:', err);
+      // Fall through to web share
+    }
+  }
+
+  // Fallback: open web share
   await shell.openExternal(`https://mastodon.social/share?text=${encodedText}`);
   return { success: true, action: 'opened' };
 });
