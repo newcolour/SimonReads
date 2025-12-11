@@ -36,16 +36,30 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
 
     // Generate inline summary for Conversational Curator
     useEffect(() => {
-        if (personalityConfig.showInlineSummary && !inlineSummary && !article.isRead) {
+        if (personalityConfig.showInlineSummary && !inlineSummary) {
+            // Check if API key is configured
+            const hasApiKey = settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey;
+            if (!hasApiKey) {
+                console.warn('Inline summaries require an AI API key to be configured in Settings → AI');
+                return;
+            }
+
             setLoadingSummary(true);
             generateInlineSummary(article, settings, personalityConfig.maxSummaryLines || 3)
                 .then(summary => {
                     setInlineSummary(summary);
                     setLoadingSummary(false);
                 })
-                .catch(() => setLoadingSummary(false));
+                .catch((error) => {
+                    console.error('Failed to generate inline summary:', error);
+                    setLoadingSummary(false);
+                    // Fallback to snippet
+                    if (article.contentSnippet) {
+                        setInlineSummary(article.contentSnippet.slice(0, 240) + '...');
+                    }
+                });
         }
-    }, [article.id, personalityConfig.showInlineSummary, article.isRead, settings, inlineSummary]);
+    }, [article.id, personalityConfig.showInlineSummary, settings.geminiApiKey, settings.openaiApiKey, settings.claudeApiKey, inlineSummary, article.contentSnippet]);
 
     // Calculate importance score for Daily Brief
     useEffect(() => {
