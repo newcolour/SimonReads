@@ -32,6 +32,7 @@ interface ArticleViewProps {
     onClose: () => void;
     onDelete: (articleId: string) => void;
     onToggleSaved?: (articleId: string) => void;
+    onSelectArticle?: (article: Article) => void;
 }
 
 const getPublicationStyle = (feedTitle: string, theme: string) => {
@@ -80,7 +81,7 @@ const getPublicationStyle = (feedTitle: string, theme: string) => {
     return style;
 };
 
-export default function ArticleView({ article, feed, settings, allArticles = [], onClose, onDelete, onToggleSaved }: ArticleViewProps) {
+export default function ArticleView({ article, feed, settings, allArticles = [], onClose, onDelete, onToggleSaved, onSelectArticle }: ArticleViewProps) {
     const feedTitle = feed?.title || article?.feedTitle;
     const personalityConfig = usePersonalityConfig(settings.readingPersonality);
 
@@ -1020,11 +1021,14 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                                             className="related-article-item"
                                             onClick={() => {
                                                 // Navigate to the related article
-                                                onClose(); // Close current article
-                                                // Ideally we would select the new article here
-                                                // But since we don't have passing control back up easily
-                                                // We'll just close for now - user can find it in list
-                                                // Future todo: Add onSelectArticle prop
+                                                if (onSelectArticle) {
+                                                    onSelectArticle(related);
+                                                    // Scroll to top
+                                                    const contentContainer = document.querySelector('.article-view-content');
+                                                    if (contentContainer) {
+                                                        contentContainer.scrollTop = 0;
+                                                    }
+                                                }
                                             }}
                                         >
                                             <div className="related-article-title">

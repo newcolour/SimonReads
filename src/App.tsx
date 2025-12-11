@@ -1067,6 +1067,7 @@ function App() {
                             }}
                             onDelete={handleDeleteArticle}
                             onToggleSaved={handleToggleSaved}
+                            onSelectArticle={(article) => handleArticleClick(article)}
                         />
                     )}
                 </div>
