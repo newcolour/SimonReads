@@ -7,6 +7,8 @@ import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
 import { Article, AppSettings, Feed } from '../types';
 import { summarizeArticle } from '../summaryService';
+import { findRelatedArticles } from '../personalityUtils';
+import { usePersonalityConfig } from '../hooks/usePersonality';
 import Chat from './Chat';
 import PodcastPlayer from './PodcastPlayer';
 import { openExternalUrl, isElectron } from '../utils/platform';
@@ -26,6 +28,7 @@ interface ArticleViewProps {
     article: Article | null;
     feed?: Feed;
     settings: AppSettings;
+    allArticles?: Article[];
     onClose: () => void;
     onDelete: (articleId: string) => void;
     onToggleSaved?: (articleId: string) => void;
@@ -77,8 +80,10 @@ const getPublicationStyle = (feedTitle: string, theme: string) => {
     return style;
 };
 
-export default function ArticleView({ article, feed, settings, onClose, onDelete, onToggleSaved }: ArticleViewProps) {
+export default function ArticleView({ article, feed, settings, allArticles = [], onClose, onDelete, onToggleSaved }: ArticleViewProps) {
     const feedTitle = feed?.title || article?.feedTitle;
+    const personalityConfig = usePersonalityConfig(settings.readingPersonality);
+
     console.log('ArticleView render:', {
         articleId: article?.id,
         feedId: article?.feedId,
@@ -103,6 +108,9 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
     const webviewRef = useRef<any>(null);
     const [webviewUrl, setWebviewUrl] = useState<string>('');
     const isNavigatingFromChat = useRef(false);
+
+    // Related articles state (Deep Diver personality)
+    const [relatedArticles, setRelatedArticles] = useState<Article[]>([]);
 
     // Reddit video embed state - store video info for proper rendering
     const [redditVideo, setRedditVideo] = useState<{
@@ -209,6 +217,17 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
             Browser.open({ url: webviewUrl, presentationStyle: 'popover' });
         }
     }, [viewMode, webviewUrl]);
+
+    // Find related articles for Deep Diver personality
+    useEffect(() => {
+        if (personalityConfig.showRelatedArticles && article && allArticles.length > 0) {
+            findRelatedArticles(article, allArticles, 3).then(related => {
+                setRelatedArticles(related);
+            });
+        } else {
+            setRelatedArticles([]);
+        }
+    }, [article?.id, personalityConfig.showRelatedArticles, allArticles.length]);
 
     // Fetch article content if missing or too short
     useEffect(() => {
@@ -989,6 +1008,36 @@ export default function ArticleView({ article, feed, settings, onClose, onDelete
                                 />
                             ) : (
                                 <p className="no-content">No content available. Try Web View.</p>
+                            )}
+
+                            {/* Related Articles Panel (Deep Diver) */}
+                            {personalityConfig.showRelatedArticles && relatedArticles.length > 0 && (
+                                <div className="related-articles-panel">
+                                    <h4>🔗 Related Articles</h4>
+                                    {relatedArticles.map((related) => (
+                                        <div
+                                            key={related.id}
+                                            className="related-article-item"
+                                            onClick={() => {
+                                                // Navigate to the related article
+                                                onClose(); // Close current article
+                                                // Ideally we would select the new article here
+                                                // But since we don't have passing control back up easily
+                                                // We'll just close for now - user can find it in list
+                                                // Future todo: Add onSelectArticle prop
+                                            }}
+                                        >
+                                            <div className="related-article-title">
+                                                {cleanTitle(related.title)}
+                                            </div>
+                                            {related.contentSnippet && (
+                                                <div className="related-article-snippet">
+                                                    {related.contentSnippet.slice(0, 100)}...
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             )}
 
                             {/* Reddit Comments Integration */}

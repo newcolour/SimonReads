@@ -1060,6 +1060,7 @@ function App() {
                             article={selectedArticle}
                             feed={feeds.find(f => f.id === selectedArticle?.feedId)}
                             settings={settings}
+                            allArticles={filteredArticles}
                             onClose={() => {
                                 setSelectedArticle(null);
                                 setMobileView('articles');
