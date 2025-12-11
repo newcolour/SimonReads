@@ -5,6 +5,8 @@ import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircl
 import { Article, AppSettings } from '../types';
 import { generateHashtags } from '../summaryService';
 import { usePersonalityConfig } from '../hooks/usePersonality';
+import { generateInlineSummary, calculateImportanceScore, shuffleArray, getPlayfulMicrocopy } from '../personalityUtils';
+import { PersonalityConfig } from '../personalityConfig';
 import './ArticleList.css';
 import '../components/Personality.css';
 
@@ -23,9 +25,49 @@ interface ArticleItemProps {
     isMultiSelected: boolean;
     onSelect: (article: Article, ctrlKey: boolean) => void;
     onContextMenu: (e: React.MouseEvent, article: Article) => void;
+    settings: AppSettings;
+    personalityConfig: PersonalityConfig;
 }
 
-const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onContextMenu }: ArticleItemProps) => {
+const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onContextMenu, settings, personalityConfig }: ArticleItemProps) => {
+    const [inlineSummary, setInlineSummary] = useState<string>('');
+    const [importanceScore, setImportanceScore] = useState<number>(50);
+    const [loadingSummary, setLoadingSummary] = useState(false);
+
+    // Generate inline summary for Conversational Curator
+    useEffect(() => {
+        if (personalityConfig.showInlineSummary && !inlineSummary && !article.isRead) {
+            setLoadingSummary(true);
+            generateInlineSummary(article, settings, personalityConfig.maxSummaryLines || 3)
+                .then(summary => {
+                    setInlineSummary(summary);
+                    setLoadingSummary(false);
+                })
+                .catch(() => setLoadingSummary(false));
+        }
+    }, [article.id, personalityConfig.showInlineSummary, article.isRead, settings, inlineSummary]);
+
+    // Calculate importance score for Daily Brief
+    useEffect(() => {
+        if (personalityConfig.showImportanceScore) {
+            calculateImportanceScore(article).then(setImportanceScore);
+        }
+    }, [article.id, personalityConfig.showImportanceScore, article]);
+
+    const getImportanceLevel = (score: number): 'high' | 'medium' | 'low' => {
+        if (score > 70) return 'high';
+        if (score > 40) return 'medium';
+        return 'low';
+    };
+
+    const getImportanceIcon = (level: string): string => {
+        switch (level) {
+            case 'high': return '🔥';
+            case 'medium': return '⭐';
+            default: return '📄';
+        }
+    };
+
     return (
         <div
             className={`article-item ${isSelected ? 'active' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${!article.isRead ? 'unread' : ''}`}
@@ -34,6 +76,7 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
         >
             {!article.isRead && <div className="unread-marker"></div>}
             {isMultiSelected && <div className="multi-select-marker">✓</div>}
+
             <h4 className="article-title">
                 {article.mediaType === 'audio' && (
                     <span className="media-badge audio" title="Audio Podcast">
@@ -51,7 +94,15 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
                     </span>
                 )}
                 {cleanTitle(article.title)}
+
+                {/* Importance Badge (Daily Brief) */}
+                {personalityConfig.showImportanceScore && (
+                    <span className={`article-importance-badge ${getImportanceLevel(importanceScore)}`}>
+                        {getImportanceIcon(getImportanceLevel(importanceScore))} {Math.round(importanceScore)}
+                    </span>
+                )}
             </h4>
+
             <div className="article-meta">
                 {article.creator && (
                     <span className="article-creator">{article.creator}</span>
@@ -65,8 +116,28 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
                     </span>
                 )}
             </div>
+
             {article.contentSnippet && (
                 <p className="article-snippet">{article.contentSnippet.slice(0, 150)}...</p>
+            )}
+
+            {/* Inline Summary (Conversational Curator) */}
+            {personalityConfig.showInlineSummary && inlineSummary && (
+                <div className="article-inline-summary">
+                    {loadingSummary ? 'Generating friendly summary...' : inlineSummary}
+                </div>
+            )}
+
+            {/* Quick Actions (Conversational Curator) */}
+            {personalityConfig.showQuickActions && (
+                <div className="article-quick-actions">
+                    <button className="article-quick-action" onClick={(e) => { e.stopPropagation(); /* Share logic */ }}>
+                        <Share2 size={14} /> Share
+                    </button>
+                    <button className="article-quick-action" onClick={(e) => { e.stopPropagation(); /* Save logic */ }}>
+                        <Star size={14} /> Save
+                    </button>
+                </div>
             )}
         </div>
     );
@@ -98,14 +169,33 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
     });
     const contextMenuRef = useRef<HTMLDivElement>(null);
     const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+    const [playfulMessage, setPlayfulMessage] = useState<string>('');
+
+    // Get playful microcopy for Serendipity Explorer
+    useEffect(() => {
+        if (personalityConfig.showPlayfulMicrocopy) {
+            const messages = getPlayfulMicrocopy();
+            setPlayfulMessage(messages[Math.floor(Math.random() * messages.length)]);
+        }
+    }, [personalityConfig.showPlayfulMicrocopy]);
 
     const sortedArticles = useMemo(() => {
-        return [...articles].sort((a, b) => {
-            const dateA = a.pubDate?.getTime() || 0;
-            const dateB = b.pubDate?.getTime() || 0;
-            return dateB - dateA;
-        });
-    }, [articles]);
+        let sorted = [...articles];
+
+        // Apply shuffle for Serendipity Explorer
+        if (personalityConfig.enableShuffleMode) {
+            sorted = shuffleArray(sorted);
+        } else {
+            // Default: sort by date descending
+            sorted.sort((a, b) => {
+                const dateA = a.pubDate?.getTime() || 0;
+                const dateB = b.pubDate?.getTime() || 0;
+                return dateB - dateA;
+            });
+        }
+
+        return sorted;
+    }, [articles, personalityConfig.enableShuffleMode]);
 
     const filteredArticles = useMemo(() => {
         if (showUnreadOnly) {
@@ -325,6 +415,12 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                         )}
                     </button>
                 </div>
+
+                {/* Playful Microcopy (Serendipity Explorer) */}
+                {personalityConfig.showPlayfulMicrocopy && playfulMessage && (
+                    <div className="playful-header">{playfulMessage}</div>
+                )}
+
                 {selectedArticleIds.size > 0 && (
                     <span className="selection-count">{selectedArticleIds.size} selected</span>
                 )}
@@ -346,6 +442,8 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                             isMultiSelected={selectedArticleIds.has(article.id)}
                             onSelect={onSelectArticle}
                             onContextMenu={handleContextMenu}
+                            settings={settings}
+                            personalityConfig={personalityConfig}
                         />
                     ))
                 )}
