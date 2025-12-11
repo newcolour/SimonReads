@@ -4,7 +4,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star, Eye, EyeOff } from 'lucide-react';
 import { Article, AppSettings } from '../types';
 import { generateHashtags } from '../summaryService';
+import { usePersonalityConfig } from '../hooks/usePersonality';
 import './ArticleList.css';
+import '../components/Personality.css';
 
 // Helper to strip HTML tags and decode entities from titles
 const cleanTitle = (title: string): string => {
@@ -85,6 +87,9 @@ interface ArticleListProps {
 }
 
 export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack, settings }: ArticleListProps) {
+    // Get personality configuration
+    const personalityConfig = usePersonalityConfig(settings.readingPersonality);
+
     const [contextMenu, setContextMenu] = useState<{ show: boolean; x: number; y: number; article: Article | null }>({
         show: false,
         x: 0,
@@ -275,8 +280,19 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
         }
     }, [contextMenu.show]);
 
+
+    // Generate personality CSS classes
+    const personalityClasses = [
+        `personality-layout-${personalityConfig.layoutMode}`,
+        `personality-metadata-${personalityConfig.showMetadata}`,
+        `personality-font-${personalityConfig.fontSize}`,
+        personalityConfig.highContrast ? 'personality-high-contrast' : '',
+        personalityConfig.keyboardFirst ? 'personality-keyboard-first' : '',
+        `personality-${settings.readingPersonality}` // Specific personality class
+    ].filter(Boolean).join(' ');
+
     return (
-        <div className="article-list">
+        <div className={`article-list ${personalityClasses}`}>
             <div className="article-list-header">
                 {onBack && (
                     <button className="mobile-back-btn" onClick={onBack}>

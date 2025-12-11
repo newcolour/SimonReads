@@ -19,6 +19,14 @@ export interface PersonalityConfig {
     // Visual style
     themeHint?: string; // Suggested theme for this personality
     accentColor?: string;
+    // Layout & Display
+    layoutMode: 'single-column' | 'multi-column' | 'cards' | 'list';
+    showMetadata: 'full' | 'minimal' | 'none';
+    fontSize: 'small' | 'medium' | 'large' | 'xlarge';
+    highContrast: boolean;
+    showInlineSummary: boolean;
+    showQuickActions: boolean;
+    keyboardFirst: boolean;
 }
 
 export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> = {
@@ -36,7 +44,15 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         autoCollapseRead: true,
         showOnlyUnread: true,
         themeHint: 'light',
-        accentColor: '#2563eb'
+        accentColor: '#2563eb',
+        // Focused Minimalist specific
+        layoutMode: 'single-column',
+        showMetadata: 'minimal',
+        fontSize: 'large',
+        highContrast: true,
+        showInlineSummary: false,
+        showQuickActions: false,
+        keyboardFirst: true
     },
     'conversational-curator': {
         id: 'conversational-curator',
@@ -52,7 +68,15 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         autoCollapseRead: false,
         showOnlyUnread: false,
         themeHint: 'sorcerer',
-        accentColor: '#8b5cf6'
+        accentColor: '#8b5cf6',
+        // Conversational Curator specific
+        layoutMode: 'cards',
+        showMetadata: 'full',
+        fontSize: 'medium',
+        highContrast: false,
+        showInlineSummary: true,
+        showQuickActions: true,
+        keyboardFirst: false
     },
     'deep-diver': {
         id: 'deep-diver',
@@ -68,7 +92,14 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         autoCollapseRead: false,
         showOnlyUnread: false,
         themeHint: 'sepia',
-        accentColor: '#059669'
+        accentColor: '#059669',
+        layoutMode: 'multi-column',
+        showMetadata: 'full',
+        fontSize: 'medium',
+        highContrast: false,
+        showInlineSummary: false,
+        showQuickActions: false,
+        keyboardFirst: false
     },
     'daily-brief': {
         id: 'daily-brief',
@@ -84,7 +115,14 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         autoCollapseRead: true,
         showOnlyUnread: true,
         themeHint: 'light',
-        accentColor: '#dc2626'
+        accentColor: '#dc2626',
+        layoutMode: 'list',
+        showMetadata: 'minimal',
+        fontSize: 'small',
+        highContrast: false,
+        showInlineSummary: false,
+        showQuickActions: false,
+        keyboardFirst: false
     },
     'serendipity-explorer': {
         id: 'serendipity-explorer',
@@ -100,7 +138,14 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         autoCollapseRead: false,
         showOnlyUnread: false,
         themeHint: 'tokyo-night',
-        accentColor: '#f59e0b'
+        accentColor: '#f59e0b',
+        layoutMode: 'cards',
+        showMetadata: 'full',
+        fontSize: 'medium',
+        highContrast: false,
+        showInlineSummary: false,
+        showQuickActions: false,
+        keyboardFirst: false
     }
 };
 

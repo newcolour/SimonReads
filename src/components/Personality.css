@@ -1,0 +1,215 @@
+/* Personality-specific styling */
+
+/* Layout Modes */
+.personality-layout-single-column .article-list-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.personality-layout-multi-column .article-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 16px;
+}
+
+.personality-layout-cards .article-list-item {
+    border-radius: 12px;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s;
+}
+
+.personality-layout-cards .article-list-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.personality-layout-list .article-list-item {
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px 0;
+}
+
+/* High Contrast Mode */
+.personality-high-contrast {
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f5;
+    --border-color: #cccccc;
+}
+
+[data-theme="dark"] .personality-high-contrast {
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --bg-primary: #000000;
+    --bg-secondary: #1a1a1a;
+    --border-color: #444444;
+}
+
+/* Font Sizes */
+.personality-font-small {
+    font-size: 13px;
+}
+
+.personality-font-medium {
+    font-size: 14px;
+}
+
+.personality-font-large {
+    font-size: 16px;
+}
+
+.personality-font-xlarge {
+    font-size: 18px;
+}
+
+/* Metadata Display */
+.personality-metadata-none .article-meta,
+.personality-metadata-none .article-feed-title {
+    display: none;
+}
+
+.personality-metadata-minimal .article-meta {
+    display: flex;
+    gap: 8px;
+}
+
+.personality-metadata-minimal .article-meta-item:not(:first-child) {
+    display: none;
+}
+
+.personality-metadata-full .article-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Inline Summary */
+.article-inline-summary {
+    margin-top: 8px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--accent-primary);
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.article-inline-summary-loading {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+/* Quick Actions */
+.article-quick-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.article-quick-action {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-secondary);
+}
+
+.article-quick-action:hover {
+    background: var(--accent-background);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.article-quick-action svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Keyboard First Mode */
+.personality-keyboard-first {
+    outline-offset: 2px;
+}
+
+.personality-keyboard-first .article-list-item:focus-within {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+.personality-keyboard-first .keyboard-hint {
+    display: inline-block;
+    padding: 2px 6px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--text-secondary);
+    margin-left: 8px;
+}
+
+/* Focused Minimalist Specific */
+.personality-focused-minimalist .article-list-item {
+    padding: 24px 0;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.personality-focused-minimalist .article-title {
+    font-size: 1.5em;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 12px;
+}
+
+.personality-focused-minimalist .article-snippet {
+    font-size: 1.1em;
+    line-height: 1.7;
+    color: var(--text-primary);
+}
+
+/* Conversational Curator Specific */
+.personality-conversational-curator .article-list-item {
+    position: relative;
+}
+
+.personality-conversational-curator .article-list-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--accent-primary);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.personality-conversational-curator .article-list-item:hover::before {
+    opacity: 1;
+}
+
+.personality-conversational-curator .article-snippet {
+    color: var(--text-secondary);
+    font-style: normal;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .personality-layout-multi-column .article-list {
+        grid-template-columns: 1fr;
+    }
+
+    .personality-layout-single-column .article-list-container {
+        max-width: 100%;
+    }
+}
