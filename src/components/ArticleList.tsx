@@ -131,16 +131,18 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
                 )}
             </div>
 
-            {article.contentSnippet && (
-                <p className="article-snippet">{article.contentSnippet.slice(0, 150)}...</p>
-            )}
 
-            {/* Inline Summary (Conversational Curator) */}
-            {personalityConfig.showInlineSummary && inlineSummary && (
+            {/* Show either inline summary OR regular snippet, not both */}
+            {personalityConfig.showInlineSummary && (inlineSummary || loadingSummary) ? (
                 <div className="article-inline-summary">
                     {loadingSummary ? 'Generating friendly summary...' : inlineSummary}
                 </div>
+            ) : (
+                article.contentSnippet && (
+                    <p className="article-snippet">{article.contentSnippet.slice(0, 150)}...</p>
+                )
             )}
+
 
             {/* Quick Actions (Conversational Curator) */}
             {personalityConfig.showQuickActions && (
