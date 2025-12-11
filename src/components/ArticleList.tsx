@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star, Eye, EyeOff } from 'lucide-react';
-import { Article } from '../types';
+import { Article, AppSettings } from '../types';
+import { generateHashtags } from '../summaryService';
 import './ArticleList.css';
 
 // Helper to strip HTML tags and decode entities from titles
@@ -80,9 +81,10 @@ interface ArticleListProps {
     title?: string;
     icon?: string;
     onBack?: () => void;
+    settings: AppSettings;
 }
 
-export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack }: ArticleListProps) {
+export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack, settings }: ArticleListProps) {
     const [contextMenu, setContextMenu] = useState<{ show: boolean; x: number; y: number; article: Article | null }>({
         show: false,
         x: 0,
@@ -185,27 +187,30 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
 
     const handleShareToMastodon = async () => {
         if (contextMenu.article) {
-            const text = `${contextMenu.article.title}\n${contextMenu.article.link}`;
+            const article = contextMenu.article;
+            closeContextMenu();
 
-            const ipcRenderer = (window as any).ipcRenderer;
-            if (ipcRenderer) {
+            let text = `${article.title}\n${article.link}`;
+
+            // Generate hashtags if AI is configured
+            if (settings && (settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey)) {
+                document.body.style.cursor = 'wait';
                 try {
-                    const result = await ipcRenderer.invoke('share-to-mastodon', { text });
-                    if (result.action === 'copied') {
-                        alert('Text copied to clipboard! Paste it into your Mastodon app.');
+                    const content = article.contentSnippet || article.content || article.title;
+                    const tags = await generateHashtags(content, settings);
+                    if (tags.length > 0) {
+                        text += `\n\n${tags.join(' ')}`;
                     }
-                } catch (error) {
-                    console.error('Mastodon share error:', error);
-                    navigator.clipboard.writeText(text);
-                    alert('Text copied to clipboard! Paste it into your Mastodon app.');
+                } catch (e) {
+                    console.error('Failed to generate tags', e);
+                } finally {
+                    document.body.style.cursor = 'default';
                 }
-            } else {
-                // In browser, just copy to clipboard
-                navigator.clipboard.writeText(text);
-                alert('Text copied to clipboard! Paste it into your Mastodon app.');
             }
 
-            closeContextMenu();
+            // Copy to clipboard
+            await navigator.clipboard.writeText(text);
+            alert('Copied to clipboard with AI hashtags! Paste into your Mastodon app.');
         }
     };
 

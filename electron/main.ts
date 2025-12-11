@@ -230,10 +230,10 @@ ipcMain.handle('share-to-mastodon', async (event, { text }: { text: string }) =>
   const { execSync } = require('child_process');
   const encodedText = encodeURIComponent(text);
 
-  // Mastodon apps with their URL schemes, bundle identifiers, and whether they need AppleScript
-  const mastodonApps: { name: string; scheme: string; bundleId: string; useAppleScript?: boolean }[] = [
+  // Mastodon apps with their URL schemes and bundle identifiers
+  const mastodonApps: { name: string; scheme: string; bundleId: string }[] = [
     { name: 'Ivory', scheme: `ivory://acct/post?text=${encodedText}`, bundleId: 'com.tapbots.Ivory' },
-    { name: 'Ice Cubes', scheme: '', bundleId: 'com.thomasricouard.IceCubesApp', useAppleScript: true },
+    { name: 'Ice Cubes', scheme: `icecubesapp://compose?text=${encodedText}`, bundleId: 'com.thomasricouard.IceCubesApp' },
     { name: 'Mona', scheme: `mona://post?text=${encodedText}`, bundleId: 'me.johnxnguyen.Mona' },
     { name: 'Mastonaut', scheme: `mastonaut://compose?text=${encodedText}`, bundleId: 'com.brunoph.Mastonaut' },
     { name: 'Toot!', scheme: `toot://compose?text=${encodedText}`, bundleId: 'com.DAtek.Toot' },
@@ -277,38 +277,14 @@ ipcMain.handle('share-to-mastodon', async (event, { text }: { text: string }) =>
   } else if (response < installedApps.length) {
     const selectedApp = installedApps[response];
 
-    if (selectedApp.useAppleScript) {
-      // For apps without URL scheme support, use AppleScript
-      // Copy text to clipboard, open the app, trigger new post shortcut (Cmd+N), then paste
+    // Use URL scheme for the selected app
+    try {
+      await shell.openExternal(selectedApp.scheme);
+      return { success: true, action: 'opened' };
+    } catch (err) {
+      console.error(`Failed to open ${selectedApp.name}:`, err);
       clipboard.writeText(text);
-
-      try {
-        // AppleScript to open Ice Cubes, wait briefly, then send Cmd+N and Cmd+V
-        const appleScript = `
-          tell application "Ice Cubes" to activate
-          delay 0.5
-          tell application "System Events"
-            keystroke "n" using command down
-            delay 0.3
-            keystroke "v" using command down
-          end tell
-        `;
-        execSync(`osascript -e '${appleScript.replace(/'/g, "'\\''")}'`);
-        return { success: true, action: 'opened' };
-      } catch (err) {
-        console.error(`Failed to open ${selectedApp.name} via AppleScript:`, err);
-        return { success: true, action: 'copied' }; // Text is still in clipboard
-      }
-    } else {
-      // Use URL scheme for apps that support it
-      try {
-        await shell.openExternal(selectedApp.scheme);
-        return { success: true, action: 'opened' };
-      } catch (err) {
-        console.error(`Failed to open ${selectedApp.name}:`, err);
-        clipboard.writeText(text);
-        return { success: true, action: 'copied' };
-      }
+      return { success: true, action: 'copied' };
     }
   }
 
@@ -931,7 +907,7 @@ function createWindow() {
     // Production mode – load the bundled index.html correctly
     const indexPath = app.isPackaged
       ? path.join(process.resourcesPath, 'app.asar', 'dist', 'index.html')
-      : path.join(__dirname, '../dist/index.html');
+      : path.join(__dirname, '../../dist/index.html');
     win.loadFile(indexPath).catch(err => {
       console.error('Failed to load index.html:', err);
     });

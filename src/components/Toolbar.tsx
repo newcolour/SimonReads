@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AppSettings, Feed, Article } from '../types';
 import { exportToOPML, exportToJSON, downloadFile } from '../exportService';
+import PersonalitySelector from './PersonalitySelector';
 import './Toolbar.css';
 import packageJson from '../../package.json';
 
@@ -50,7 +51,7 @@ const TIME_HORIZONS: { value: number; label: string }[] = [
 export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial, hideButtons, setOpenSettingsRef }: ToolbarProps) {
     const [showSettings, setShowSettings] = useState(false);
     const [tempSettings, setTempSettings] = useState(settings);
-    const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'ai' | 'email' | 'about'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'personality' | 'ai' | 'email' | 'about'>('general');
     const [geminiModels, setGeminiModels] = useState<string[]>([]);
     const [openaiModels, setOpenaiModels] = useState<string[]>([]);
     const [claudeModels, setClaudeModels] = useState<string[]>([]);
@@ -278,12 +279,19 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                         Appearance
                     </button>
                     <button
+                        className={`tab-btn ${activeTab === 'personality' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('personality')}
+                    >
+                        Personality
+                    </button>
+                    <button
                         className={`tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
                         onClick={() => setActiveTab('ai')}
                     >
                         AI
                     </button>
-                    {(window as any).ipcRenderer && (
+                    {/* Email tab hidden - feature temporarily disabled */}
+                    {false && (window as any).ipcRenderer && (
                         <button
                             className={`tab-btn ${activeTab === 'email' ? 'active' : ''}`}
                             onClick={() => setActiveTab('email')}
@@ -425,6 +433,31 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 <p className="setting-hint">Apply subtle brand colors from the original publication to the article view</p>
                             </div>
                         </>
+                    )}
+
+                    {activeTab === 'personality' && (
+                        <PersonalitySelector
+                            currentPersonality={tempSettings.readingPersonality}
+                            autoSwitchEnabled={tempSettings.autoSwitchEnabled}
+                            autoSwitchTrigger={tempSettings.autoSwitchTrigger}
+                            personalitySchedule={tempSettings.personalitySchedule}
+                            onPersonalityChange={(personality) => {
+                                setTempSettings({ ...tempSettings, readingPersonality: personality });
+                            }}
+                            onAutoSwitchChange={(enabled, trigger) => {
+                                setTempSettings({
+                                    ...tempSettings,
+                                    autoSwitchEnabled: enabled,
+                                    autoSwitchTrigger: trigger
+                                });
+                            }}
+                            onScheduleChange={(schedule) => {
+                                setTempSettings({
+                                    ...tempSettings,
+                                    personalitySchedule: schedule
+                                });
+                            }}
+                        />
                     )}
 
                     {activeTab === 'ai' && (

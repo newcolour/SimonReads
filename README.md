@@ -18,7 +18,7 @@ A beautiful, cross-platform RSS reader with AI-powered features. Built with Elec
 - **🏷️ Smart Organization** - Folders, unread counts, and article management
 - **📧 Email Digests** - Receive daily newsreels via email (with PDF attachment)
 - **👁️ Unread Filter** - Toggle to show only unread articles in any feed
-- **🐘 Share to Mastodon** - Share articles directly to Mastodon apps (Ivory, Ice Cubes, Mona, and more)
+- **🐘 Share to Mastodon** - Share articles directly to Mastodon apps (Ivory, Ice Cubes, Mona, and more) with AI-generated hashtags
 
 ## 🖥️ Screenshots
 

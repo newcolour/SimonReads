@@ -12,6 +12,7 @@ import Newsreel from './components/Newsreel';
 import WelcomeTour from './components/WelcomeTour';
 import { parseOpml } from './importService';
 import { NotificationService } from './services/notificationService';
+import { usePersonalityAutoSwitch } from './hooks/usePersonality';
 import './App.css';
 
 function App() {
@@ -48,7 +49,18 @@ function App() {
         emailFrom: '',
         emailTo: '',
         emailSendTime: '08:00',
-        emailTimeHorizon: 12
+        emailTimeHorizon: 12,
+        // Reading Personality defaults
+        readingPersonality: 'conversational-curator',
+        autoSwitchEnabled: false,
+        autoSwitchTrigger: 'manual',
+        personalitySchedule: {
+            enabled: false,
+            morning: 'daily-brief',
+            afternoon: 'conversational-curator',
+            evening: 'deep-diver',
+            night: 'focused-minimalist'
+        }
     });
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showWelcomeTour, setShowWelcomeTour] = useState(false);
@@ -56,6 +68,7 @@ function App() {
     const [mobileView, setMobileView] = useState<'feeds' | 'articles' | 'article'>('feeds');
     // Ref to hold the openSettings function from Toolbar
     const openSettingsRef = useRef<(() => void) | null>(null);
+
     // Load data from storage on mount
     // Load data from storage on mount
     useEffect(() => {
@@ -116,7 +129,18 @@ function App() {
                         emailFrom: savedSettings.emailFrom ?? '',
                         emailTo: savedSettings.emailTo ?? '',
                         emailSendTime: savedSettings.emailSendTime ?? '08:00',
-                        emailTimeHorizon: savedSettings.emailTimeHorizon ?? 12
+                        emailTimeHorizon: savedSettings.emailTimeHorizon ?? 12,
+                        // Reading Personality settings
+                        readingPersonality: savedSettings.readingPersonality ?? 'conversational-curator',
+                        autoSwitchEnabled: savedSettings.autoSwitchEnabled ?? false,
+                        autoSwitchTrigger: savedSettings.autoSwitchTrigger ?? 'manual',
+                        personalitySchedule: savedSettings.personalitySchedule ?? {
+                            enabled: false,
+                            morning: 'daily-brief',
+                            afternoon: 'conversational-curator',
+                            evening: 'deep-diver',
+                            night: 'focused-minimalist'
+                        }
                     });
                 }
             } catch (e) {
@@ -653,6 +677,9 @@ function App() {
         storage.saveSettings(newSettings);
     };
 
+    // Personality auto-switching
+    usePersonalityAutoSwitch(settings, handleSettingsChange);
+
     const handleSelectArticle = (article: Article, isMultiSelect: boolean = false) => {
         if (isMultiSelect) {
             // Multi-select mode
@@ -994,6 +1021,7 @@ function App() {
                         title={!selectedFeedId ? 'All Articles' : selectedFeedId === 'read' ? 'Read Articles' : selectedFeedId === 'saved' ? 'Saved Articles' : feeds.find(f => f.id === selectedFeedId)?.title || 'Articles'}
                         icon={!selectedFeedId ? undefined : selectedFeedId === 'read' || selectedFeedId === 'saved' ? undefined : feeds.find(f => f.id === selectedFeedId)?.icon}
                         onBack={() => setMobileView('feeds')}
+                        settings={settings}
                     />
                 </div>
 

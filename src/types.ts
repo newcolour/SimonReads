@@ -43,6 +43,24 @@ export type SummaryTone = 'neutral' | 'formal' | 'witty' | 'critical' | 'eli5';
 export type SummaryLength = 'short' | 'medium' | 'long';
 export type SummaryDepth = 'brief' | 'detailed' | 'comprehensive';
 
+// Reading Personalities
+export type ReadingPersonality =
+    | 'focused-minimalist'
+    | 'conversational-curator'
+    | 'deep-diver'
+    | 'daily-brief'
+    | 'serendipity-explorer';
+
+export type AutoSwitchTrigger = 'time' | 'device' | 'manual';
+
+export interface PersonalitySchedule {
+    enabled: boolean;
+    morning?: ReadingPersonality; // 6am-12pm
+    afternoon?: ReadingPersonality; // 12pm-6pm
+    evening?: ReadingPersonality; // 6pm-12am
+    night?: ReadingPersonality; // 12am-6am
+}
+
 export interface AppSettings {
     autoRefreshInterval: RefreshInterval; // in minutes, 0 = disabled
     retentionPeriod: RetentionPeriod;
@@ -78,4 +96,9 @@ export interface AppSettings {
     emailTo: string;
     emailSendTime: string; // Format: "HH:MM"
     emailTimeHorizon: number; // Hours to look back
+    // Reading Personality settings
+    readingPersonality: ReadingPersonality;
+    autoSwitchEnabled: boolean;
+    autoSwitchTrigger: AutoSwitchTrigger;
+    personalitySchedule: PersonalitySchedule;
 }

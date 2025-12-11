@@ -92,6 +92,7 @@ const tourSteps = [
         highlight: '.newsreel-btn',
         requiresArticle: false
     },
+    /* Email Digests step - feature temporarily disabled
     {
         title: 'Email Digests',
         description: 'Schedule daily email digests to be sent automatically. Configure SMTP settings in the settings menu.',
@@ -99,6 +100,7 @@ const tourSteps = [
         highlight: '.settings-btn',
         requiresArticle: false
     },
+    */
     {
         title: 'Customize Everything',
         description: 'Configure AI providers (Gemini, OpenAI, Claude), themes, fonts, TTS settings, and more in the settings menu.',

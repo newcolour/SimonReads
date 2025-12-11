@@ -189,7 +189,10 @@ ${plainText}`;
 export async function generateHashtags(content: string, settings: AppSettings): Promise<string[]> {
     const provider = settings.aiProvider || 'gemini';
     const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 5000); // Shorter context mainly for tags
-    const prompt = "Generate 5 relevant, popular hashtags for this article. Output ONLY the hashtags separated by spaces (e.g. #tech #ai #news). Do not include any other text.";
+    const prompt = `Generate 5 relevant, popular hashtags for this article. 
+IMPORTANT: The hashtags MUST be in the SAME LANGUAGE as the article content.
+Output ONLY the hashtags separated by spaces (e.g. #tech #ai #news or #tecnología #inteligenciaartificial for Spanish articles). 
+Do not include any other text.`;
 
     try {
         let text = '';
@@ -203,8 +206,8 @@ export async function generateHashtags(content: string, settings: AppSettings): 
             return [];
         }
 
-        // Extract hashtags
-        const matches = text.match(/#[a-zA-Z0-9_]+/g);
+        // Extract hashtags - support unicode characters for non-English languages
+        const matches = text.match(/#[\p{L}\p{N}_]+/gu);
         return matches ? matches.slice(0, 5) : [];
     } catch (e) {
         console.error("Failed to generate hashtags:", e);

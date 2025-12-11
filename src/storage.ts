@@ -86,7 +86,18 @@ export const storage = {
                 emailFrom: '',
                 emailTo: '',
                 emailSendTime: '08:00',
-                emailTimeHorizon: 12
+                emailTimeHorizon: 12,
+                // Reading Personality defaults
+                readingPersonality: 'conversational-curator',
+                autoSwitchEnabled: false,
+                autoSwitchTrigger: 'manual',
+                personalitySchedule: {
+                    enabled: false,
+                    morning: 'daily-brief',
+                    afternoon: 'conversational-curator',
+                    evening: 'deep-diver',
+                    night: 'focused-minimalist'
+                }
             };
         }
         return settings;
