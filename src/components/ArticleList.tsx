@@ -384,45 +384,47 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
     return (
         <div className={`article-list ${personalityClasses}`}>
             <div className="article-list-header">
-                {onBack && (
-                    <button className="mobile-back-btn" onClick={onBack}>
-                        <ChevronLeft size={20} />
-                    </button>
-                )}
-                <div className="article-list-title-section">
-                    <h3>
-                        {icon && (
-                            <img
-                                src={icon}
-                                alt=""
-                                className="feed-icon-header"
-                                onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
-                            />
-                        )}
-                        {title}
-                    </h3>
-                    <button
-                        className={`unread-filter-btn ${showUnreadOnly ? 'active' : ''}`}
-                        onClick={() => setShowUnreadOnly(!showUnreadOnly)}
-                        title={showUnreadOnly ? 'Show all articles' : 'Show unread only'}
-                    >
-                        {showUnreadOnly ? <EyeOff size={16} /> : <Eye size={16} />}
-                        <span className="unread-filter-label">
-                            {showUnreadOnly ? 'Unread' : 'All'}
-                        </span>
-                        {unreadCount > 0 && (
-                            <span className="unread-filter-count">{unreadCount}</span>
-                        )}
-                    </button>
+                <div className="article-list-header-row">
+                    {onBack && (
+                        <button className="mobile-back-btn" onClick={onBack}>
+                            <ChevronLeft size={20} />
+                        </button>
+                    )}
+                    <div className="article-list-title-section">
+                        <h3>
+                            {icon && (
+                                <img
+                                    src={icon}
+                                    alt=""
+                                    className="feed-icon-header"
+                                    onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                                />
+                            )}
+                            {title}
+                        </h3>
+                        <button
+                            className={`unread-filter-btn ${showUnreadOnly ? 'active' : ''}`}
+                            onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+                            title={showUnreadOnly ? 'Show all articles' : 'Show unread only'}
+                        >
+                            {showUnreadOnly ? <EyeOff size={16} /> : <Eye size={16} />}
+                            <span className="unread-filter-label">
+                                {showUnreadOnly ? 'Unread' : 'All'}
+                            </span>
+                            {unreadCount > 0 && (
+                                <span className="unread-filter-count">{unreadCount}</span>
+                            )}
+                        </button>
+                    </div>
+
+                    {selectedArticleIds.size > 0 && (
+                        <span className="selection-count">{selectedArticleIds.size} selected</span>
+                    )}
                 </div>
 
-                {/* Playful Microcopy (Serendipity Explorer) */}
+                {/* Playful Microcopy (Serendipity Explorer) - Shows on its own row */}
                 {personalityConfig.showPlayfulMicrocopy && playfulMessage && (
                     <div className="playful-header">{playfulMessage}</div>
-                )}
-
-                {selectedArticleIds.size > 0 && (
-                    <span className="selection-count">{selectedArticleIds.size} selected</span>
                 )}
             </div>
             <div className="article-list-content">
