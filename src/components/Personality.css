@@ -213,3 +213,75 @@
         max-width: 100%;
     }
 }
+/* ========== PHASE 2: Advanced Features ========== */
+
+/* Importance Score Badge (Daily Brief) */
+.article-importance-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.article-importance-badge.high {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.article-importance-badge.medium {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.article-importance-badge.low {
+    background: #e5e7eb;
+    color: #4b5563;
+}
+
+/* Related Articles Panel (Deep Diver) */
+.related-articles-panel {
+    margin-top: 24px;
+    padding: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.related-articles-panel h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+}
+
+/* Morning Palette (Daily Brief) */
+.personality-daily-brief {
+    --accent-primary: #dc2626;
+}
+
+.personality-daily-brief .article-list-header {
+    background: linear-gradient(135deg, #fef3c7 0%, #fcd34d 100%);
+    padding: 16px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+}
+
+/* Serendipity Explorer Animations */
+.personality-serendipity-explorer .article-list-item {
+    animation: slideIn 0.5s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

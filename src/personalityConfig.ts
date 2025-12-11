@@ -27,6 +27,14 @@ export interface PersonalityConfig {
     showInlineSummary: boolean;
     showQuickActions: boolean;
     keyboardFirst: boolean;
+    // Phase 2: Advanced Features
+    showRelatedArticles?: boolean;
+    showImportanceScore?: boolean;
+    showThumbnails?: boolean;
+    enableCitationMode?: boolean;
+    enableShuffleMode?: boolean;
+    maxSummaryLines?: number; // For brief summaries
+    showPlayfulMicrocopy?: boolean;
 }
 
 export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> = {
@@ -52,7 +60,13 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         highContrast: true,
         showInlineSummary: false,
         showQuickActions: false,
-        keyboardFirst: true
+        keyboardFirst: true,
+        // Phase 2
+        showRelatedArticles: false,
+        showImportanceScore: false,
+        showThumbnails: false,
+        enableCitationMode: false,
+        enableShuffleMode: false
     },
     'conversational-curator': {
         id: 'conversational-curator',
@@ -76,7 +90,14 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         highContrast: false,
         showInlineSummary: true,
         showQuickActions: true,
-        keyboardFirst: false
+        keyboardFirst: false,
+        // Phase 2: Auto-generate inline summaries
+        showRelatedArticles: false,
+        showImportanceScore: false,
+        showThumbnails: false,
+        enableCitationMode: false,
+        enableShuffleMode: false,
+        maxSummaryLines: 3
     },
     'deep-diver': {
         id: 'deep-diver',
@@ -99,7 +120,13 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         highContrast: false,
         showInlineSummary: false,
         showQuickActions: false,
-        keyboardFirst: false
+        keyboardFirst: false,
+        // Phase 2: Research mode
+        showRelatedArticles: true,
+        showImportanceScore: false,
+        showThumbnails: false,
+        enableCitationMode: true,
+        enableShuffleMode: false
     },
     'daily-brief': {
         id: 'daily-brief',
@@ -122,7 +149,14 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         highContrast: false,
         showInlineSummary: false,
         showQuickActions: false,
-        keyboardFirst: false
+        keyboardFirst: false,
+        // Phase 2: Morning briefing
+        showRelatedArticles: false,
+        showImportanceScore: true,
+        showThumbnails: false,
+        enableCitationMode: false,
+        enableShuffleMode: false,
+        maxSummaryLines: 3
     },
     'serendipity-explorer': {
         id: 'serendipity-explorer',
@@ -145,7 +179,14 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         highContrast: false,
         showInlineSummary: false,
         showQuickActions: false,
-        keyboardFirst: false
+        keyboardFirst: false,
+        // Phase 2: Discovery mode
+        showRelatedArticles: false,
+        showImportanceScore: false,
+        showThumbnails: true,
+        enableCitationMode: false,
+        enableShuffleMode: true,
+        showPlayfulMicrocopy: true
     }
 };
 
