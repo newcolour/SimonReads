@@ -161,6 +161,41 @@ export default function PersonalitySelector({
                     )}
                 </div>
             )}
+
+            {/* Icon Legend */}
+            <div className="icon-legend">
+                <h4>Article Icons Guide</h4>
+                <div className="legend-items">
+                    <div className="legend-item">
+                        <span className="legend-icon">🎧</span>
+                        <span className="legend-text">Audio Podcast</span>
+                    </div>
+                    <div className="legend-item">
+                        <span className="legend-icon">🎥</span>
+                        <span className="legend-text">Video Podcast</span>
+                    </div>
+                    <div className="legend-item">
+                        <span className="legend-icon">⭐</span>
+                        <span className="legend-text">Saved Article</span>
+                    </div>
+                    <div className="legend-item">
+                        <span className="legend-icon">🔥 85</span>
+                        <span className="legend-text">High Priority (Daily Brief only)</span>
+                    </div>
+                    <div className="legend-item">
+                        <span className="legend-icon">⭐ 55</span>
+                        <span className="legend-text">Medium Priority (Daily Brief only)</span>
+                    </div>
+                    <div className="legend-item">
+                        <span className="legend-icon">📄 30</span>
+                        <span className="legend-text">Low Priority (Daily Brief only)</span>
+                    </div>
+                </div>
+                <p className="legend-note">
+                    <strong>Priority Score (0-100):</strong> Higher numbers = more important.
+                    Based on unread status, saved, recency, and media content.
+                </p>
+            </div>
         </div>
     );
 }
