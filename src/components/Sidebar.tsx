@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, ChevronDown, ChevronRight, FoldVertical, UnfoldVertical } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
 import { usePersonalityConfig } from '../hooks/usePersonality';
 import FeedDiscovery from './FeedDiscovery';
@@ -133,6 +133,23 @@ export default function Sidebar({
             }
             return next;
         });
+    };
+
+    // Toggle all categories expanded/collapsed
+    const allCategories = useMemo(() => {
+        return new Set(feeds.map(f => f.category || 'Uncategorized'));
+    }, [feeds]);
+
+    const areAllCollapsed = collapsedCategories.size >= allCategories.size;
+
+    const toggleAllCategories = () => {
+        if (areAllCollapsed) {
+            // Expand all
+            setCollapsedCategories(new Set());
+        } else {
+            // Collapse all
+            setCollapsedCategories(new Set(allCategories));
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -468,6 +485,14 @@ export default function Sidebar({
                         <CheckCheck size={15} />
                     </button>
                 )}
+                <button
+                    className="toolbar-icon-btn"
+                    onClick={toggleAllCategories}
+                    onMouseEnter={(e) => handleMouseEnter(e, areAllCollapsed ? "Expand All Categories" : "Collapse All Categories")}
+                    onMouseLeave={handleMouseLeave}
+                >
+                    {areAllCollapsed ? <UnfoldVertical size={15} /> : <FoldVertical size={15} />}
+                </button>
                 <button
                     className="toolbar-icon-btn"
                     onClick={() => setShowDiscovery(true)}
