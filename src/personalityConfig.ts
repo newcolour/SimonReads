@@ -35,6 +35,9 @@ export interface PersonalityConfig {
     enableShuffleMode?: boolean;
     maxSummaryLines?: number; // For brief summaries
     showPlayfulMicrocopy?: boolean;
+    // Distraction-free options
+    collapseFeedsByDefault?: boolean;
+    hideReadCount?: boolean;
 }
 
 export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> = {
@@ -61,12 +64,14 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         showInlineSummary: false,
         showQuickActions: false,
         keyboardFirst: true,
-        // Phase 2
+        // Phase 2 - Distraction-free
         showRelatedArticles: false,
         showImportanceScore: false,
         showThumbnails: false,
         enableCitationMode: false,
-        enableShuffleMode: false
+        enableShuffleMode: false,
+        collapseFeedsByDefault: true,
+        hideReadCount: true
     },
     'conversational-curator': {
         id: 'conversational-curator',

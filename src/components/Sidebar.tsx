@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper } from 'lucide-react';
+import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, ChevronDown, ChevronRight } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
+import { usePersonalityConfig } from '../hooks/usePersonality';
 import FeedDiscovery from './FeedDiscovery';
 import './Sidebar.css';
 
@@ -69,6 +70,10 @@ export default function Sidebar({
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, feed: null });
     const contextMenuRef = useRef<HTMLDivElement>(null);
 
+    // Personality-aware features
+    const personalityConfig = usePersonalityConfig(settings.readingPersonality);
+    const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
     const sortedFeeds = useMemo(() => {
         const sorted = [...feeds].sort((a, b) => {
             switch (sortOption) {
@@ -104,6 +109,31 @@ export default function Sidebar({
 
         return grouped;
     }, [feeds, sortOption, articles]);
+
+    // Initialize collapsed categories based on personality
+    useEffect(() => {
+        if (personalityConfig.collapseFeedsByDefault) {
+            // Collapse all categories when in distraction-free mode
+            const allCategories = new Set(feeds.map(f => f.category || 'Uncategorized'));
+            setCollapsedCategories(allCategories);
+        } else {
+            // Expand all when not in distraction-free mode
+            setCollapsedCategories(new Set());
+        }
+    }, [personalityConfig.collapseFeedsByDefault, feeds.length]);
+
+    // Toggle a category's collapsed state
+    const toggleCategory = (category: string) => {
+        setCollapsedCategories(prev => {
+            const next = new Set(prev);
+            if (next.has(category)) {
+                next.delete(category);
+            } else {
+                next.add(category);
+            }
+            return next;
+        });
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -544,15 +574,21 @@ export default function Sidebar({
                     const currentCategory = feed.category || 'Uncategorized';
                     const previousCategory = index > 0 ? (sortedFeeds[index - 1].category || 'Uncategorized') : null;
                     const showCategoryHeader = currentCategory !== previousCategory;
+                    const isCategoryCollapsed = collapsedCategories.has(currentCategory);
 
                     return (
                         <div key={feed.id}>
                             {showCategoryHeader && (
                                 <div
-                                    className="category-header"
-                                    onDoubleClick={() => startRenamingCategory(currentCategory)}
-                                    title={currentCategory !== 'Uncategorized' ? 'Double-click to rename' : undefined}
+                                    className={`category-header ${isCategoryCollapsed ? 'collapsed' : ''}`}
+                                    onClick={() => toggleCategory(currentCategory)}
+                                    onDoubleClick={(e) => {
+                                        e.stopPropagation();
+                                        startRenamingCategory(currentCategory);
+                                    }}
+                                    title={currentCategory !== 'Uncategorized' ? 'Click to expand/collapse, double-click to rename' : 'Click to expand/collapse'}
                                 >
+                                    {isCategoryCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                                     <Folder size={14} />
                                     {renamingCategory === currentCategory ? (
                                         <input
@@ -577,100 +613,103 @@ export default function Sidebar({
                                     )}
                                 </div>
                             )}
-                            <div
-                                className={`feed-item has-actions ${selectedFeedId === feed.id ? 'active' : ''} ${renamingFeedId === feed.id ? 'renaming' : ''}`}
-                                onClick={() => {
-                                    if (renamingFeedId !== feed.id) {
-                                        onSelectFeed(feed.id);
-                                    }
-                                }}
-                                onContextMenu={(e) => handleContextMenu(e, feed)}
-                            >
-                                {feed.icon ? (
-                                    <img
-                                        src={feed.icon}
-                                        alt=""
-                                        className="feed-icon"
-                                        onError={(e) => {
-                                            (e.target as HTMLImageElement).style.display = 'none';
-                                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                                        }}
-                                    />
-                                ) : null}
-                                <Rss size={16} className={feed.icon ? 'hidden' : ''} />
-                                {renamingFeedId === feed.id ? (
-                                    <input
-                                        type="text"
-                                        value={newFeedTitle}
-                                        onChange={(e) => setNewFeedTitle(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                handleRename(feed.id);
-                                            } else if (e.key === 'Escape') {
-                                                setRenamingFeedId(null);
-                                                setNewFeedTitle('');
-                                            }
-                                        }}
-                                        onBlur={() => handleRename(feed.id)}
-                                        className="rename-input"
-                                        autoFocus
-                                        onClick={(e) => e.stopPropagation()}
-                                    />
-                                ) : categorizingFeedId === feed.id ? (
-                                    <div className="category-input-container" onClick={(e) => e.stopPropagation()}>
-                                        <span className="feed-title" title={feed.title}>{feed.title}</span>
+                            {/* Only render feed item if category is expanded */}
+                            {!isCategoryCollapsed && (
+                                <div
+                                    className={`feed-item has-actions ${selectedFeedId === feed.id ? 'active' : ''} ${renamingFeedId === feed.id ? 'renaming' : ''}`}
+                                    onClick={() => {
+                                        if (renamingFeedId !== feed.id) {
+                                            onSelectFeed(feed.id);
+                                        }
+                                    }}
+                                    onContextMenu={(e) => handleContextMenu(e, feed)}
+                                >
+                                    {feed.icon ? (
+                                        <img
+                                            src={feed.icon}
+                                            alt=""
+                                            className="feed-icon"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                            }}
+                                        />
+                                    ) : null}
+                                    <Rss size={16} className={feed.icon ? 'hidden' : ''} />
+                                    {renamingFeedId === feed.id ? (
                                         <input
                                             type="text"
-                                            value={newCategory}
-                                            onChange={(e) => setNewCategory(e.target.value)}
+                                            value={newFeedTitle}
+                                            onChange={(e) => setNewFeedTitle(e.target.value)}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
-                                                    handleCategorySubmit(feed.id);
+                                                    handleRename(feed.id);
                                                 } else if (e.key === 'Escape') {
-                                                    setCategorizingFeedId(null);
-                                                    setNewCategory('');
+                                                    setRenamingFeedId(null);
+                                                    setNewFeedTitle('');
                                                 }
                                             }}
-                                            onBlur={() => handleCategorySubmit(feed.id)}
-                                            className="category-input"
-                                            placeholder="Enter category (or leave empty)"
+                                            onBlur={() => handleRename(feed.id)}
+                                            className="rename-input"
                                             autoFocus
-                                            list={`categories-${feed.id}`}
+                                            onClick={(e) => e.stopPropagation()}
                                         />
-                                        <datalist id={`categories-${feed.id}`}>
-                                            {existingCategories.map(cat => (
-                                                <option key={cat} value={cat} />
-                                            ))}
-                                        </datalist>
+                                    ) : categorizingFeedId === feed.id ? (
+                                        <div className="category-input-container" onClick={(e) => e.stopPropagation()}>
+                                            <span className="feed-title" title={feed.title}>{feed.title}</span>
+                                            <input
+                                                type="text"
+                                                value={newCategory}
+                                                onChange={(e) => setNewCategory(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        handleCategorySubmit(feed.id);
+                                                    } else if (e.key === 'Escape') {
+                                                        setCategorizingFeedId(null);
+                                                        setNewCategory('');
+                                                    }
+                                                }}
+                                                onBlur={() => handleCategorySubmit(feed.id)}
+                                                className="category-input"
+                                                placeholder="Enter category (or leave empty)"
+                                                autoFocus
+                                                list={`categories-${feed.id}`}
+                                            />
+                                            <datalist id={`categories-${feed.id}`}>
+                                                {existingCategories.map(cat => (
+                                                    <option key={cat} value={cat} />
+                                                ))}
+                                            </datalist>
+                                        </div>
+                                    ) : (
+                                        <span className="feed-title" title={feed.title}>{feed.title}</span>
+                                    )}
+                                    {getUnreadCount(feed.id) > 0 && (
+                                        <span className="unread-count">{getUnreadCount(feed.id)}</span>
+                                    )}
+                                    <div className="feed-actions">
+                                        <button
+                                            className="edit-feed-btn"
+                                            onClick={(e) => startRenaming(feed, e)}
+                                            data-tooltip="Rename feed"
+                                        >
+                                            <Edit2 size={14} />
+                                        </button>
+                                        <button
+                                            className="remove-feed-btn"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (confirm('Are you sure you want to remove this feed?')) {
+                                                    onRemoveFeed(feed.id);
+                                                }
+                                            }}
+                                            data-tooltip="Remove feed"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
                                     </div>
-                                ) : (
-                                    <span className="feed-title" title={feed.title}>{feed.title}</span>
-                                )}
-                                {getUnreadCount(feed.id) > 0 && (
-                                    <span className="unread-count">{getUnreadCount(feed.id)}</span>
-                                )}
-                                <div className="feed-actions">
-                                    <button
-                                        className="edit-feed-btn"
-                                        onClick={(e) => startRenaming(feed, e)}
-                                        data-tooltip="Rename feed"
-                                    >
-                                        <Edit2 size={14} />
-                                    </button>
-                                    <button
-                                        className="remove-feed-btn"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (confirm('Are you sure you want to remove this feed?')) {
-                                                onRemoveFeed(feed.id);
-                                            }
-                                        }}
-                                        data-tooltip="Remove feed"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     );
                 })}

@@ -339,7 +339,7 @@ function App() {
         document.documentElement.style.setProperty('--app-font-size', fontSizes[settings.fontSize] || '14px');
     }, [settings.theme, settings.font, settings.fontSize]);
 
-    // Auto-refresh logic
+    // Auto-refresh logic (interval-based)
     useEffect(() => {
         if (settings.autoRefreshInterval > 0) {
             const intervalMs = settings.autoRefreshInterval * 60 * 1000;
@@ -350,6 +350,19 @@ function App() {
             return () => clearInterval(intervalId);
         }
     }, [settings.autoRefreshInterval, feeds]);
+
+    // Auto-refresh on app launch
+    const hasRefreshedOnLaunch = useRef(false);
+    useEffect(() => {
+        if (feeds.length > 0 && !hasRefreshedOnLaunch.current) {
+            hasRefreshedOnLaunch.current = true;
+            // Small delay to let the UI settle first
+            setTimeout(() => {
+                console.log('Auto-refreshing feeds on app launch...');
+                handleRefresh();
+            }, 1000);
+        }
+    }, [feeds.length]);
 
     // Data Integrity Check: Duplicate Feed IDs
     useEffect(() => {
