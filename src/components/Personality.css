@@ -178,11 +178,11 @@
 }
 
 /* Conversational Curator Specific */
-.personality-conversational-curator .article-list-item {
+.personality-conversational-curator .article-item {
     position: relative;
 }
 
-.personality-conversational-curator .article-list-item::before {
+.personality-conversational-curator .article-item::before {
     content: '';
     position: absolute;
     left: 0;
@@ -194,7 +194,7 @@
     transition: opacity 0.2s;
 }
 
-.personality-conversational-curator .article-list-item:hover::before {
+.personality-conversational-curator .article-item:hover::before {
     opacity: 1;
 }
 
