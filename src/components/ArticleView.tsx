@@ -100,9 +100,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
     const [summaryError, setSummaryError] = useState<string | null>(null);
     const [currentArticleId, setCurrentArticleId] = useState<string | null>(null);
     const [showChat, setShowChat] = useState(false);
-    const [summaryMode, setSummaryMode] = useState<'popup' | 'inline'>(
-        Capacitor.isNativePlatform() ? 'inline' : 'popup' // Inline on mobile, popup on desktop
-    );
+    const [summaryMode, setSummaryMode] = useState<'popup' | 'inline'>('inline'); // Inline by default
     const [showInlineSummary, setShowInlineSummary] = useState(false);
     const [fetchedContent, setFetchedContent] = useState<string | null>(null);
     const [isFetchingContent, setIsFetchingContent] = useState(false);
