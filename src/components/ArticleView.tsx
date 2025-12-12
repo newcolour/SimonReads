@@ -1015,7 +1015,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             {personalityConfig.showRelatedArticles && relatedArticles.length > 0 && (
                                 <div className="related-articles-panel">
                                     <h4>🔗 Related Articles</h4>
-                                    {relatedArticles.map((related) => (
+                                    {relatedArticles.map((related, index) => (
                                         <div
                                             key={related.id}
                                             className="related-article-item"
@@ -1031,14 +1031,17 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                                                 }
                                             }}
                                         >
-                                            <div className="related-article-title">
-                                                {cleanTitle(related.title)}
-                                            </div>
-                                            {related.contentSnippet && (
-                                                <div className="related-article-snippet">
-                                                    {related.contentSnippet.slice(0, 100)}...
+                                            <span className="related-article-number">{index + 1}</span>
+                                            <div className="related-article-content">
+                                                <div className="related-article-title">
+                                                    {cleanTitle(related.title)}
                                                 </div>
-                                            )}
+                                                {related.contentSnippet && (
+                                                    <div className="related-article-snippet">
+                                                        {related.contentSnippet.slice(0, 100)}...
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

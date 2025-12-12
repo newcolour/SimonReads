@@ -213,6 +213,7 @@
         max-width: 100%;
     }
 }
+
 /* ========== PHASE 2: Advanced Features ========== */
 
 /* Importance Score Badge (Daily Brief) */
@@ -258,6 +259,62 @@
     margin: 0 0 16px 0;
 }
 
+.related-article-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.related-article-item:last-child {
+    margin-bottom: 0;
+}
+
+.related-article-item:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-primary);
+    transform: translateX(4px);
+}
+
+.related-article-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    background: var(--accent-primary);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.related-article-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.related-article-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.4;
+    margin-bottom: 4px;
+}
+
+.related-article-snippet {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
 /* Morning Palette (Daily Brief) */
 .personality-daily-brief {
     --accent-primary: #dc2626;
@@ -280,6 +337,7 @@
         opacity: 0;
         transform: translateY(10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
