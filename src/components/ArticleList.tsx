@@ -25,11 +25,12 @@ interface ArticleItemProps {
     isMultiSelected: boolean;
     onSelect: (article: Article, ctrlKey: boolean) => void;
     onContextMenu: (e: React.MouseEvent, article: Article) => void;
+    onToggleSaved?: (articleId: string) => void;
     settings: AppSettings;
     personalityConfig: PersonalityConfig;
 }
 
-const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onContextMenu, settings, personalityConfig }: ArticleItemProps) => {
+const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onContextMenu, onToggleSaved, settings, personalityConfig }: ArticleItemProps) => {
     const [inlineSummary, setInlineSummary] = useState<string>('');
     const [importanceScore, setImportanceScore] = useState<number>(50);
     const [loadingSummary, setLoadingSummary] = useState(false);
@@ -147,11 +148,40 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
             {/* Quick Actions (Conversational Curator) */}
             {personalityConfig.showQuickActions && (
                 <div className="article-quick-actions">
-                    <button className="article-quick-action" onClick={(e) => { e.stopPropagation(); /* Share logic */ }}>
+                    <button
+                        className="article-quick-action"
+                        onClick={async (e) => {
+                            e.stopPropagation();
+                            // Share logic
+                            const shareData = {
+                                title: article.title,
+                                text: article.contentSnippet?.slice(0, 100) || '',
+                                url: article.link
+                            };
+                            try {
+                                if (navigator.share) {
+                                    await navigator.share(shareData);
+                                } else {
+                                    await navigator.clipboard.writeText(article.link);
+                                    alert('Link copied to clipboard!');
+                                }
+                            } catch (err) {
+                                console.error('Share failed:', err);
+                            }
+                        }}
+                    >
                         <Share2 size={14} /> Share
                     </button>
-                    <button className="article-quick-action" onClick={(e) => { e.stopPropagation(); /* Save logic */ }}>
-                        <Star size={14} /> Save
+                    <button
+                        className={`article-quick-action ${article.isSaved ? 'saved' : ''}`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onToggleSaved) {
+                                onToggleSaved(article.id);
+                            }
+                        }}
+                    >
+                        <Star size={14} fill={article.isSaved ? 'currentColor' : 'none'} /> {article.isSaved ? 'Saved' : 'Save'}
                     </button>
                 </div>
             )}
@@ -460,6 +490,7 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                             isMultiSelected={selectedArticleIds.has(article.id)}
                             onSelect={onSelectArticle}
                             onContextMenu={handleContextMenu}
+                            onToggleSaved={onToggleSaved}
                             settings={settings}
                             personalityConfig={personalityConfig}
                         />
