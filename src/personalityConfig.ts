@@ -13,7 +13,7 @@ export interface PersonalityConfig {
     contentDensity: 'compact' | 'comfortable' | 'spacious';
     emphasizeUnread: boolean;
     // Article filtering & sorting
-    sortPreference: 'recent' | 'unread-first' | 'random' | 'oldest-first';
+    sortPreference: 'recent' | 'unread-first' | 'random' | 'oldest-first' | 'importance';
     autoCollapseRead: boolean;
     showOnlyUnread: boolean;
     // Visual style
@@ -143,7 +143,7 @@ export const personalityConfigs: Record<ReadingPersonality, PersonalityConfig> =
         summaryDepth: 'brief',
         contentDensity: 'compact',
         emphasizeUnread: true,
-        sortPreference: 'recent',
+        sortPreference: 'importance',
         autoCollapseRead: true,
         showOnlyUnread: true,
         themeHint: 'light',

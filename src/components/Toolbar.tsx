@@ -55,6 +55,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
     const [geminiModels, setGeminiModels] = useState<string[]>([]);
     const [openaiModels, setOpenaiModels] = useState<string[]>([]);
     const [claudeModels, setClaudeModels] = useState<string[]>([]);
+    const [ollamaModels, setOllamaModels] = useState<string[]>([]);
     const [isLoadingModels, setIsLoadingModels] = useState(false);
 
     // Expose the openSettings function to parent
@@ -68,7 +69,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
         setOpenSettingsRef(openSettings);
     }
 
-    const fetchModels = async (provider: 'gemini' | 'openai' | 'claude') => {
+    const fetchModels = async (provider: 'gemini' | 'openai' | 'claude' | 'ollama') => {
         setIsLoadingModels(true);
         const ipcRenderer = (window as any).ipcRenderer;
 
@@ -127,6 +128,24 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                 setClaudeModels(models);
                 if (models.length > 0 && (!tempSettings.claudeModel || !models.includes(tempSettings.claudeModel))) {
                     setTempSettings(prev => ({ ...prev, claudeModel: models[0] }));
+                }
+            } else if (provider === 'ollama') {
+                // Fetch from local Ollama instance
+                const baseUrl = tempSettings.ollamaUrl || 'http://localhost:11434';
+                const cleanUrl = baseUrl.replace(/\/$/, '');
+                try {
+                    const response = await fetch(`${cleanUrl}/api/tags`);
+                    if (!response.ok) throw new Error('Failed to fetch Ollama models');
+                    const data = await response.json();
+                    // Data format: { models: [ { name: "llama3:latest", ... } ] }
+                    models = data.models.map((m: any) => m.name);
+                    setOllamaModels(models);
+                    if (models.length > 0 && (!tempSettings.ollamaModel || !models.includes(tempSettings.ollamaModel))) {
+                        setTempSettings(prev => ({ ...prev, ollamaModel: models[0] }));
+                    }
+                } catch (e) {
+                    console.error('Ollama fetch error:', e);
+                    throw new Error('Failed to connect to Ollama. Make sure it is running and accessible (check CORS settings if needed).');
                 }
             }
         } catch (error) {
@@ -471,6 +490,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     <option value="gemini">Google Gemini (Free Tier Available)</option>
                                     <option value="openai">OpenAI (GPT-4o/mini)</option>
                                     <option value="claude">Anthropic Claude</option>
+                                    <option value="ollama">Ollama (Local LLM)</option>
                                 </select>
                             </div>
 
@@ -623,6 +643,58 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                                 <RefreshCw size={16} className={isLoadingModels ? 'spin' : ''} />
                                             </button>
                                         </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {tempSettings.aiProvider === 'ollama' && (
+                                <>
+                                    <div className="setting-group">
+                                        <label>Ollama Server URL</label>
+                                        <input
+                                            type="text"
+                                            value={tempSettings.ollamaUrl || 'http://localhost:11434'}
+                                            onChange={e => setTempSettings({ ...tempSettings, ollamaUrl: e.target.value })}
+                                            placeholder="http://localhost:11434"
+                                            className="api-key-input"
+                                        />
+                                        <p className="setting-hint">Default is http://localhost:11434</p>
+                                    </div>
+                                    <div className="setting-group">
+                                        <label>Ollama Model</label>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            {ollamaModels.length > 0 ? (
+                                                <select
+                                                    value={tempSettings.ollamaModel || 'llama3'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, ollamaModel: e.target.value })}
+                                                    className="api-key-input"
+                                                    style={{ flex: 1 }}
+                                                >
+                                                    {ollamaModels.map(model => (
+                                                        <option key={model} value={model}>{model}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={tempSettings.ollamaModel || 'llama3'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, ollamaModel: e.target.value })}
+                                                    placeholder="e.g. llama3"
+                                                    className="api-key-input"
+                                                    style={{ flex: 1 }}
+                                                />
+                                            )}
+                                            <button
+                                                className="icon-btn"
+                                                onClick={() => fetchModels('ollama')}
+                                                disabled={isLoadingModels}
+                                                title="Fetch available models"
+                                                style={{ height: '38px', width: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            >
+                                                <RefreshCw size={16} className={isLoadingModels ? 'spin' : ''} />
+                                            </button>
+                                        </div>
+                                        <p className="setting-hint">Make sure you have pulled this model (e.g. `ollama pull llama3`)</p>
                                     </div>
                                 </>
                             )}

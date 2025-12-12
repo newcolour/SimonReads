@@ -28,16 +28,43 @@ interface ArticleItemProps {
     onToggleSaved?: (articleId: string) => void;
     settings: AppSettings;
     personalityConfig: PersonalityConfig;
+    allowInlineSummary: boolean;
 }
 
-const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onContextMenu, onToggleSaved, settings, personalityConfig }: ArticleItemProps) => {
+const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onContextMenu, onToggleSaved, settings, personalityConfig, allowInlineSummary }: ArticleItemProps) => {
     const [inlineSummary, setInlineSummary] = useState<string>('');
     const [importanceScore, setImportanceScore] = useState<number>(50);
     const [loadingSummary, setLoadingSummary] = useState(false);
+    const [isVisible, setIsVisible] = useState(false);
+    const itemRef = useRef<HTMLDivElement>(null);
+
+    // Intersection Observer to detect visibility
+    useEffect(() => {
+        // Only setup observer if we actually need to generate a summary
+        if (!personalityConfig.showInlineSummary || !allowInlineSummary || inlineSummary) {
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setIsVisible(true);
+                    observer.disconnect(); // Once visible, we trigger load and stop observing
+                }
+            },
+            { rootMargin: '50px' } // Load slightly before it comes into view
+        );
+
+        if (itemRef.current) {
+            observer.observe(itemRef.current);
+        }
+
+        return () => observer.disconnect();
+    }, [personalityConfig.showInlineSummary, allowInlineSummary, inlineSummary]);
 
     // Generate inline summary for Conversational Curator
     useEffect(() => {
-        if (personalityConfig.showInlineSummary && !inlineSummary) {
+        if (personalityConfig.showInlineSummary && allowInlineSummary && isVisible && !inlineSummary) {
             // Check if API key is configured
             const hasApiKey = settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey;
             if (!hasApiKey) {
@@ -60,7 +87,7 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
                     }
                 });
         }
-    }, [article.id, personalityConfig.showInlineSummary, settings.geminiApiKey, settings.openaiApiKey, settings.claudeApiKey, inlineSummary, article.contentSnippet]);
+    }, [article.id, personalityConfig.showInlineSummary, allowInlineSummary, isVisible, settings.geminiApiKey, settings.openaiApiKey, settings.claudeApiKey, inlineSummary, article.contentSnippet]);
 
     // Calculate importance score for Daily Brief
     useEffect(() => {
@@ -85,6 +112,7 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
 
     return (
         <div
+            ref={itemRef}
             className={`article-item ${isSelected ? 'active' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${!article.isRead ? 'unread' : ''}`}
             onClick={(e) => onSelect(article, e.ctrlKey || e.metaKey)}
             onContextMenu={(e) => onContextMenu(e, article)}
@@ -201,9 +229,10 @@ interface ArticleListProps {
     icon?: string;
     onBack?: () => void;
     settings: AppSettings;
+    isFeedSelected?: boolean;
 }
 
-export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack, settings }: ArticleListProps) {
+export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack, settings, isFeedSelected = false }: ArticleListProps) {
     // Get personality configuration
     const personalityConfig = usePersonalityConfig(settings.readingPersonality);
 
@@ -225,12 +254,39 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
         }
     }, [personalityConfig.showPlayfulMicrocopy]);
 
+    // Pre-calculate importance scores for Daily Brief sorting
+    const [importanceScores, setImportanceScores] = useState<Map<string, number>>(new Map());
+
+    useEffect(() => {
+        if (personalityConfig.sortPreference === 'importance') {
+            // Calculate scores for all articles
+            const calculateScores = async () => {
+                const scores = new Map<string, number>();
+                await Promise.all(
+                    articles.map(async (article) => {
+                        const score = await calculateImportanceScore(article);
+                        scores.set(article.id, score);
+                    })
+                );
+                setImportanceScores(scores);
+            };
+            calculateScores();
+        }
+    }, [articles, personalityConfig.sortPreference]);
+
     const sortedArticles = useMemo(() => {
         let sorted = [...articles];
 
         // Apply shuffle for Serendipity Explorer
         if (personalityConfig.enableShuffleMode) {
             sorted = shuffleArray(sorted);
+        } else if (personalityConfig.sortPreference === 'importance' && importanceScores.size > 0) {
+            // Sort by importance score descending
+            sorted.sort((a, b) => {
+                const scoreA = importanceScores.get(a.id) || 50;
+                const scoreB = importanceScores.get(b.id) || 50;
+                return scoreB - scoreA; // Higher score first
+            });
         } else {
             // Default: sort by date descending
             sorted.sort((a, b) => {
@@ -241,7 +297,7 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
         }
 
         return sorted;
-    }, [articles, personalityConfig.enableShuffleMode]);
+    }, [articles, personalityConfig.enableShuffleMode, personalityConfig.sortPreference, importanceScores]);
 
     const filteredArticles = useMemo(() => {
         if (showUnreadOnly) {
@@ -493,6 +549,7 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                             onToggleSaved={onToggleSaved}
                             settings={settings}
                             personalityConfig={personalityConfig}
+                            allowInlineSummary={isFeedSelected}
                         />
                     ))
                 )}

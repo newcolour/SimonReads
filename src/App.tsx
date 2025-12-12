@@ -1035,6 +1035,7 @@ function App() {
                         icon={!selectedFeedId ? undefined : selectedFeedId === 'read' || selectedFeedId === 'saved' ? undefined : feeds.find(f => f.id === selectedFeedId)?.icon}
                         onBack={() => setMobileView('feeds')}
                         settings={settings}
+                        isFeedSelected={!!selectedFeedId && selectedFeedId !== 'read' && selectedFeedId !== 'saved'}
                     />
                 </div>
 

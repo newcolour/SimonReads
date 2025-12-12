@@ -9,6 +9,8 @@ export async function summarizeArticle(content: string, apiKey: string, settings
         return summarizeWithOpenAI(content, settings.openaiApiKey || '', settings, instructionOverride);
     } else if (provider === 'claude') {
         return summarizeWithClaude(content, settings.claudeApiKey || '', settings, instructionOverride);
+    } else if (provider === 'ollama') {
+        return summarizeWithOllama(content, settings, instructionOverride);
     }
 
     throw new Error(`Unsupported AI provider: ${provider}`);
@@ -185,6 +187,64 @@ ${plainText}`;
     return data.content?.[0]?.text || 'No summary generated.';
 }
 
+async function summarizeWithOllama(content: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
+    const { summaryTone, summaryLanguage, summaryLength, summaryDepth, summaryPrompt, ollamaModel, ollamaUrl } = settings;
+    const model = ollamaModel || 'llama3';
+    const baseUrl = ollamaUrl || 'http://localhost:11434';
+    // Ensure base URL doesn't have trailing slash
+    const cleanUrl = baseUrl.replace(/\/$/, '');
+
+    // Increased limit to handle newsreels with many articles and topic grouping
+    // Shorter limit for local models by default to avoid OOM or slow processing
+    const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 32000);
+
+    let systemPrompt = `You are a helpful AI assistant that summarizes news articles.
+Target Language: ${summaryLanguage || 'English'}
+Tone: ${summaryTone || 'neutral'}
+Length: ${summaryLength || 'medium'}
+Depth: ${summaryDepth || 'detailed'}`;
+
+    if (summaryPrompt) {
+        systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
+    }
+
+    const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
+Format the output as a clean, readable summary (using bullet points if appropriate).
+IMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.
+
+Article Content:
+${plainText}`;
+
+    // Use /api/chat for better instruction following with system prompt if supported by model
+    try {
+        const response = await fetch(`${cleanUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: model,
+                stream: false,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ]
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to generate summary with Ollama: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        return data.message?.content || 'No summary generated.';
+    } catch (e: any) {
+        console.error('Ollama summary failed:', e);
+        throw new Error(`Ollama summary failed: ${e.message}. ensure Ollama is running at ${cleanUrl}.`);
+    }
+}
+
 
 export async function generateHashtags(content: string, settings: AppSettings): Promise<string[]> {
     const provider = settings.aiProvider || 'gemini';
@@ -202,6 +262,8 @@ Do not include any other text.`;
             text = await summarizeWithOpenAI(plainText, settings.openaiApiKey || '', settings, prompt);
         } else if (provider === 'claude') {
             text = await summarizeWithClaude(plainText, settings.claudeApiKey || '', settings, prompt);
+        } else if (provider === 'ollama') {
+            text = await summarizeWithOllama(plainText, settings, prompt);
         } else {
             return [];
         }

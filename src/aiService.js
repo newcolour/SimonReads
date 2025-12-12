@@ -46,6 +46,9 @@ async function summarizeArticle(content, apiKey, settings, instructionOverride) 
     else if (provider === 'claude') {
         return summarizeWithClaude(content, settings.claudeApiKey || '', settings, instructionOverride);
     }
+    else if (provider === 'ollama') {
+        return summarizeWithOllama(content, settings, instructionOverride);
+    }
     throw new Error(`Unsupported AI provider: ${provider}`);
 }
 async function summarizeWithGemini(content, apiKey, settings, instructionOverride) {
@@ -200,6 +203,9 @@ async function chatWithArticle(article, userMessage, previousMessages, apiKey, s
     }
     else if (provider === 'claude') {
         return chatWithClaude(article, userMessage, previousMessages, settings.claudeApiKey || '', settings);
+    }
+    else if (provider === 'ollama') {
+        return chatWithOllama(article, userMessage, previousMessages, settings);
     }
     throw new Error(`Unsupported AI provider: ${provider}`);
 }
@@ -503,6 +509,28 @@ Answer with just YES or NO:`;
                 return answer.includes('NO');
             }
         }
+        else if (provider === 'ollama') {
+            const model = settings.ollamaModel || 'llama3';
+            const baseUrl = settings.ollamaUrl || 'http://localhost:11434';
+            // Ensure base URL doesn't have trailing slash
+            const cleanUrl = baseUrl.replace(/\/$/, '');
+
+            const response = await fetch(`${cleanUrl}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: model,
+                    stream: false,
+                    messages: [{ role: 'user', content: checkPrompt }]
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const answer = data.message?.content?.trim().toUpperCase() || 'YES';
+                return answer.includes('NO');
+            }
+        }
     }
     catch (error) {
         // If check fails, default to no search (prioritize article)
@@ -535,6 +563,8 @@ IMPORTANT: Return ONLY the raw JSON array. Do not include markdown formatting (l
         responseText = await suggestWithOpenAI(prompt, settings.openaiApiKey || '', settings);
     } else if (provider === 'claude') {
         responseText = await suggestWithClaude(prompt, settings.claudeApiKey || '', settings);
+    } else if (provider === 'ollama') {
+        responseText = await suggestWithOllama(prompt, settings);
     } else {
         throw new Error(`Unsupported AI provider: ${provider}`);
     }
@@ -623,6 +653,149 @@ async function suggestWithClaude(prompt, apiKey, settings) {
 
     const data = await response.json();
     return data.content?.[0]?.text || '[]';
+}
+
+async function summarizeWithOllama(content, settings, instructionOverride) {
+    const { summaryTone, summaryLanguage, summaryLength, summaryDepth, summaryPrompt, ollamaModel, ollamaUrl } = settings;
+    const model = ollamaModel || 'llama3';
+    const baseUrl = ollamaUrl || 'http://localhost:11434';
+    const cleanUrl = baseUrl.replace(/\/$/, '');
+
+    const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 60000);
+    let systemPrompt = `You are a helpful AI assistant that summarizes news articles.
+Target Language: ${summaryLanguage || 'English'}
+Tone: ${summaryTone || 'neutral'}
+Length: ${summaryLength || 'medium'}
+Depth: ${summaryDepth || 'detailed'}`;
+
+    if (summaryPrompt) {
+        systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
+    }
+
+    const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
+Format the output as a clean, readable summary (using bullet points if appropriate).
+IMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.
+
+Article Content:
+${plainText}`;
+
+    const response = await fetch(`${cleanUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: model,
+            stream: false,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ]
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to generate summary with Ollama: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.message?.content || 'No summary generated.';
+}
+
+async function chatWithOllama(article, userMessage, previousMessages, settings) {
+    const model = settings.ollamaModel || 'llama3';
+    const baseUrl = settings.ollamaUrl || 'http://localhost:11434';
+    const cleanUrl = baseUrl.replace(/\/$/, '');
+
+    const language = settings.summaryLanguage || 'English';
+    const plainText = (article.content || article.contentSnippet || '').replace(/<[^>]+>/g, ' ').slice(0, 8000);
+
+    const needsWebSearch = await shouldSearchWeb(userMessage, plainText, '', settings, 'ollama');
+    let searchContext = '';
+
+    if (needsWebSearch) {
+        const { searchAndSummarize } = await Promise.resolve().then(() => __importStar(require('./searchService')));
+        searchContext = await searchAndSummarize(userMessage);
+    }
+
+    let systemPrompt = `You are a helpful AI assistant discussing the following news article with the user.
+
+Article Title: ${article.title}
+Published: ${article.pubDate ? new Date(article.pubDate).toLocaleDateString() : 'Unknown'}
+Source: ${article.creator || 'Unknown'}
+
+Article Content:
+${plainText}`;
+
+    if (searchContext) {
+        systemPrompt += `\n\nAdditional Web Search Results (from DuckDuckGo):\n${searchContext}`;
+        systemPrompt += `\n\nIMPORTANT: The article content above is your PRIMARY source. Only use web search results to supplement or provide additional context when the article doesn't contain the answer. Always prioritize information from the article.`;
+    }
+
+    systemPrompt += `\n\nPlease answer the user's questions about this article in ${language}. 
+
+IMPORTANT GUIDELINES:
+- Your PRIMARY focus is the article content above
+- Answer questions based on what's IN the article first and foremost
+- If the user asks about something mentioned in the article, explain it using the article's context
+- Only mention that information is "not in the article" if they're asking about something completely unrelated
+- Be conversational and helpful, relating your answers back to the article's main points
+- When using web search results, provide your answer first, then add a references section at the end
+- Format the references section as: "If you want to know more:" followed by markdown links on separate lines
+- Example reference format:
+  If you want to know more:
+  - [Source Title](URL)
+  - [Another Source](URL)`;
+
+    const messages = [];
+    messages.push({ role: 'system', content: systemPrompt });
+
+    previousMessages.forEach(msg => {
+        messages.push({ role: msg.role, content: msg.content });
+    });
+
+    messages.push({ role: 'user', content: userMessage });
+
+    const response = await fetch(`${cleanUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: model,
+            stream: false,
+            messages: messages
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to generate response with Ollama: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.message?.content || 'No response generated.';
+}
+
+async function suggestWithOllama(prompt, settings) {
+    const model = settings.ollamaModel || 'llama3';
+    const baseUrl = settings.ollamaUrl || 'http://localhost:11434';
+    const cleanUrl = baseUrl.replace(/\/$/, '');
+
+    const response = await fetch(`${cleanUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: model,
+            stream: false,
+            messages: [{ role: 'user', content: prompt }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get suggestions from Ollama: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.message?.content || '[]';
 }
 
 exports.suggestFeeds = suggestFeeds;

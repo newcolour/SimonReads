@@ -73,7 +73,9 @@ export interface AppSettings {
     openaiModel?: string;
     claudeApiKey?: string;
     claudeModel?: string;
-    aiProvider: 'gemini' | 'openai' | 'claude';
+    ollamaUrl?: string;
+    ollamaModel?: string;
+    aiProvider: 'gemini' | 'openai' | 'claude' | 'ollama';
     ttsProvider: 'system' | 'openai' | 'free';
     summaryTone: SummaryTone;
     summaryLanguage: string;

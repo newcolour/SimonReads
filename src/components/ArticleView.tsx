@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star } from 'lucide-react';
+import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
@@ -889,13 +889,42 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
 
                             {/* Podcast Player - show if article has audio/video enclosure */}
                             {article.enclosure && article.mediaType && article.mediaType !== 'article' && (
-                                <PodcastPlayer
-                                    url={article.enclosure.url}
-                                    type={article.mediaType}
-                                    title={article.title}
-                                    duration={article.duration}
-                                    artwork={article.image}
-                                />
+                                article.enclosure.type === 'text/html' ? (
+                                    <div className="podcast-player external-link">
+                                        <div className="audio-artwork">
+                                            {article.image ? (
+                                                <img src={article.image} alt={article.title} />
+                                            ) : (
+                                                <div className="artwork-placeholder">
+                                                    <Volume2 size={48} />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="player-controls">
+                                            <div className="player-info">
+                                                <h4 className="player-title">{article.title}</h4>
+                                                <div className="player-time">External Podcast</div>
+                                            </div>
+                                            <button
+                                                className="play-btn"
+                                                onClick={() => openExternalUrl(article.enclosure!.url)}
+                                                title="Open Podcast Website"
+                                                style={{ width: 'auto', padding: '0 20px', borderRadius: '20px', fontSize: '14px' }}
+                                            >
+                                                <Play size={16} style={{ marginRight: '8px' }} />
+                                                Listen on Website
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <PodcastPlayer
+                                        url={article.enclosure.url}
+                                        type={article.mediaType}
+                                        title={article.title}
+                                        duration={article.duration}
+                                        artwork={article.image}
+                                    />
+                                )
                             )}
 
                             {/* Reddit Video Embed - for YouTube links and Reddit-hosted videos */}

@@ -198,6 +198,33 @@ function parseRSSFeed(xml: Document, feedId: string, feedTitle: string): Article
             }
         }
 
+        // Fallback: Check Media RSS (media:content) for audio/video if no standard enclosure found
+        if (!enclosure) {
+            const mediaContents = item.getElementsByTagNameNS('http://search.yahoo.com/mrss/', 'content');
+            for (let i = 0; i < mediaContents.length; i++) {
+                const mc = mediaContents[i];
+                const url = mc.getAttribute('url');
+                const type = mc.getAttribute('type');
+                const medium = mc.getAttribute('medium');
+                const fileSize = mc.getAttribute('fileSize') || mc.getAttribute('length');
+
+                // Check for audio/video
+                const isAudio = (type && type.startsWith('audio/')) || medium === 'audio';
+                const isVideo = (type && type.startsWith('video/')) || medium === 'video';
+
+                if (url && (isAudio || isVideo)) {
+                    enclosure = {
+                        url,
+                        // If type is missing but medium is known, guess a common mime type or leave generic
+                        type: type || (isAudio ? 'audio/mpeg' : 'video/mp4'),
+                        length: fileSize ? parseInt(fileSize) : undefined
+                    };
+                    mediaType = isAudio ? 'audio' : 'video';
+                    break; // Use the first valid media found
+                }
+            }
+        }
+
         // Extract iTunes duration (common in podcasts)
         const duration = item.querySelector('duration')?.textContent ||
             item.getElementsByTagNameNS('http://www.itunes.com/dtds/podcast-1.0.dtd', 'duration')[0]?.textContent;
@@ -247,6 +274,28 @@ function parseRSSFeed(xml: Document, feedId: string, feedTitle: string): Article
             const enclosureType = enclosureElement.getAttribute('type');
             if (enclosureUrl && enclosureType && enclosureType.startsWith('image/')) {
                 image = enclosureUrl;
+            }
+        }
+
+        // 5. Special handling for "Podcast" items without enclosure (e.g. Six Colors)
+        if (!enclosure) {
+            const itunesEpisode = item.getElementsByTagNameNS('http://www.itunes.com/dtds/podcast-1.0.dtd', 'episodeType')[0]?.textContent;
+            const category = item.querySelector('category')?.textContent;
+            const isPodcastType = itunesEpisode === 'full' || category === 'Podcast' || title.includes('(Podcast)');
+
+            if (isPodcastType) {
+                // Look for "Go to the podcast page" link or similar
+                const linkMatch = content?.match(/<a href="([^"]+)">Go to the podcast page<\/a>/i) ||
+                    content?.match(/<a href="([^"]+)">Listen to .*<\/a>/i);
+
+                if (linkMatch && linkMatch[1]) {
+                    enclosure = {
+                        url: linkMatch[1],
+                        type: 'text/html', // Marker for external link
+                        length: 0
+                    };
+                    mediaType = 'audio';
+                }
             }
         }
 
