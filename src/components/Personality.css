@@ -1,18 +1,19 @@
 /* Personality-specific styling */
 
 /* Layout Modes */
-.personality-layout-single-column .article-list-container {
+.article-list.personality-layout-single-column .article-list-content {
     max-width: 800px;
     margin: 0 auto;
 }
 
-.personality-layout-multi-column .article-list {
+.article-list.personality-layout-multi-column .article-list-content {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+    padding: 8px;
 }
 
-.personality-layout-cards .article-list-item {
+.article-list.personality-layout-cards .article-item {
     border-radius: 12px;
     padding: 16px;
     background: var(--bg-secondary);
@@ -21,12 +22,12 @@
     transition: all 0.2s;
 }
 
-.personality-layout-cards .article-list-item:hover {
+.article-list.personality-layout-cards .article-item:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.personality-layout-list .article-list-item {
+.article-list.personality-layout-list .article-item {
     border-bottom: 1px solid var(--border-color);
     padding: 12px 0;
 }
@@ -211,11 +212,11 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-    .personality-layout-multi-column .article-list {
+    .article-list.personality-layout-multi-column .article-list-content {
         grid-template-columns: 1fr;
     }
 
-    .personality-layout-single-column .article-list-container {
+    .article-list.personality-layout-single-column .article-list-content {
         max-width: 100%;
     }
 }
