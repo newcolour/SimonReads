@@ -69,6 +69,12 @@ function App() {
     // Ref to hold the openSettings function from Toolbar
     const openSettingsRef = useRef<(() => void) | null>(null);
 
+    // Ref to track latest articles state for async callbacks (prevents stale closure issues)
+    const articlesRef = useRef<Article[]>(articles);
+    useEffect(() => {
+        articlesRef.current = articles;
+    }, [articles]);
+
     // Load data from storage on mount
     // Load data from storage on mount
     useEffect(() => {
@@ -525,7 +531,9 @@ function App() {
         }
 
         // Create a map of existing articles for quick lookup
-        const existingArticlesMap = new Map(articles.map(a => [a.id, a]));
+        // Use articlesRef.current to get the LATEST state (prevents stale closure issues)
+        const currentArticles = articlesRef.current;
+        const existingArticlesMap = new Map(currentArticles.map(a => [a.id, a]));
 
         // Process fetched articles
         let newCount = 0;
@@ -603,7 +611,9 @@ function App() {
             const updatedFeed = { ...feed, lastFetched: new Date() };
 
             // Create a map of existing articles for quick lookup
-            const existingArticlesMap = new Map(articles.map(a => [a.id, a]));
+            // Use articlesRef.current to get the LATEST state (prevents stale closure issues)
+            const currentArticles = articlesRef.current;
+            const existingArticlesMap = new Map(currentArticles.map(a => [a.id, a]));
 
             // Process fetched articles
             const mergedNewArticles: Article[] = feedArticles.map(newArticle => {
@@ -616,7 +626,8 @@ function App() {
             });
 
             // Remove old articles from this feed and add the new/updated ones
-            const otherArticles = articles.filter(a => a.feedId !== feedId);
+            // Use currentArticles (latest state) for filtering
+            const otherArticles = currentArticles.filter(a => a.feedId !== feedId);
             const allArticles = [...otherArticles, ...mergedNewArticles];
 
             // Sort by date descending
