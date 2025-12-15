@@ -253,6 +253,30 @@ function App() {
     // This behavior has been removed to keep read articles indefinitely.
 
 
+    // Detect platform and apply appropriate class for platform-specific CSS
+    useEffect(() => {
+        const ipcRenderer = (window as any).ipcRenderer;
+
+        if (ipcRenderer) {
+            // In Electron, we can get the actual platform from process.platform
+            // The preload script should expose this, but we can also detect via navigator
+            const userAgent = navigator.userAgent.toLowerCase();
+            if (userAgent.includes('mac os x') || userAgent.includes('macintosh')) {
+                document.documentElement.classList.add('platform-darwin');
+            } else if (userAgent.includes('linux')) {
+                document.documentElement.classList.add('platform-linux');
+            } else if (userAgent.includes('windows')) {
+                document.documentElement.classList.add('platform-win32');
+            }
+        } else {
+            // Web browser - detect from navigator
+            const userAgent = navigator.userAgent.toLowerCase();
+            if (userAgent.includes('mac os x')) {
+                document.documentElement.classList.add('platform-darwin');
+            }
+        }
+    }, []);
+
     // Apply theme and font settings
     useEffect(() => {
         console.log('Theme useEffect triggered. Current theme setting:', settings.theme);

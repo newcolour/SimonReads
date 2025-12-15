@@ -7,17 +7,26 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px 0 80px;
-    /* Add left padding for macOS traffic lights */
+    padding: 0 16px;
+    /* Default padding for all platforms */
     -webkit-app-region: drag;
     /* Allow dragging window */
     position: relative;
 }
 
+/* macOS-specific: Add extra left padding for traffic lights (hidden title bar) */
+.platform-darwin .toolbar {
+    padding-left: 80px;
+}
+
 /* Minimal toolbar - just for macOS traffic lights and window dragging */
 .toolbar.toolbar-minimal {
     height: 38px;
-    padding: 0 16px 0 80px;
+    padding: 0 16px;
+}
+
+.platform-darwin .toolbar.toolbar-minimal {
+    padding-left: 80px;
 }
 
 .toolbar-title {
