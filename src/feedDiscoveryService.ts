@@ -1,14 +1,91 @@
 import { AppSettings, Feed } from './types';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 export interface FeedSuggestion {
     title: string;
     url: string;
     description: string;
     category: string;
+    verificationStatus?: 'pending' | 'valid' | 'invalid';
 }
 
 export interface CategorizedSuggestions {
     [category: string]: FeedSuggestion[];
+}
+
+/**
+ * Validates if a URL is a valid RSS/Atom feed by attempting to fetch and parse it
+ */
+export async function validateFeed(url: string): Promise<boolean> {
+    try {
+        let text = '';
+
+        // Use ipcRenderer if available (in Electron) to bypass CORS
+        if ((window as any).ipcRenderer) {
+            const result = await (window as any).ipcRenderer.invoke('fetch-url', url);
+            if (result.success === false) {
+                return false;
+            }
+            text = (typeof result === 'string') ? result : result.content;
+        } else if (Capacitor.isNativePlatform()) {
+            const response = await CapacitorHttp.get({ url: url });
+            text = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+        } else {
+            // Web fallback - may fail due to CORS
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml' }
+                });
+                if (!response.ok) return false;
+                text = await response.text();
+            } catch {
+                return false;
+            }
+        }
+
+        if (!text || text.length < 100) return false;
+
+        // Check if it looks like RSS or Atom
+        const hasRssMarkers = text.includes('<rss') || text.includes('<channel') || text.includes('<rdf:RDF');
+        const hasAtomMarkers = text.includes('<feed') && text.includes('xmlns="http://www.w3.org/2005/Atom"');
+        const hasJsonFeed = text.includes('"version"') && text.includes('jsonfeed.org');
+
+        return hasRssMarkers || hasAtomMarkers || hasJsonFeed;
+    } catch (error) {
+        console.log(`Feed validation failed for ${url}:`, error);
+        return false;
+    }
+}
+
+/**
+ * Validates a list of feed suggestions and returns only valid ones
+ * Calls the onProgress callback with validated suggestions as they are checked
+ */
+export async function validateSuggestions(
+    suggestions: FeedSuggestion[],
+    onProgress?: (validated: FeedSuggestion[], currentIndex: number, total: number) => void
+): Promise<FeedSuggestion[]> {
+    const validatedSuggestions: FeedSuggestion[] = [];
+
+    for (let i = 0; i < suggestions.length; i++) {
+        const suggestion = suggestions[i];
+        const isValid = await validateFeed(suggestion.url);
+
+        if (isValid) {
+            validatedSuggestions.push({
+                ...suggestion,
+                verificationStatus: 'valid'
+            });
+        }
+
+        // Report progress
+        if (onProgress) {
+            onProgress(validatedSuggestions, i + 1, suggestions.length);
+        }
+    }
+
+    return validatedSuggestions;
 }
 
 export async function suggestFeeds(

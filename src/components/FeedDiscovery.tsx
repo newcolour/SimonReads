@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader, Plus, Check, Sparkles } from 'lucide-react';
+import { X, Loader, Plus, Check, Sparkles, CheckCircle } from 'lucide-react';
 import { Feed, AppSettings } from '../types';
-import { suggestFeeds, FeedSuggestion } from '../feedDiscoveryService';
+import { suggestFeeds, FeedSuggestion, validateSuggestions } from '../feedDiscoveryService';
 import './FeedDiscovery.css';
 
 interface FeedDiscoveryProps {
@@ -15,6 +15,8 @@ interface FeedDiscoveryProps {
 export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFeed }: FeedDiscoveryProps) {
     const [suggestions, setSuggestions] = useState<FeedSuggestion[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
+    const [validationProgress, setValidationProgress] = useState({ current: 0, total: 0 });
     const [error, setError] = useState<string | null>(null);
     const [addedUrls, setAddedUrls] = useState<Set<string>>(new Set());
     const [addingUrl, setAddingUrl] = useState<string | null>(null);
@@ -23,8 +25,10 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
 
     const fetchSuggestions = async (searchKeyword?: string) => {
         setIsLoading(true);
+        setIsValidating(false);
         setError(null);
         setHasSearched(true);
+        setSuggestions([]);
 
         try {
             // Get API key based on provider (Ollama doesn't need one)
@@ -42,12 +46,32 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
                 return;
             }
 
-            const results = await suggestFeeds(currentFeeds, apiKey, settings, searchKeyword);
-            setSuggestions(results);
+            // Get AI suggestions
+            const rawResults = await suggestFeeds(currentFeeds, apiKey, settings, searchKeyword);
+
+            // Now validate the feeds
+            setIsLoading(false);
+            setIsValidating(true);
+            setValidationProgress({ current: 0, total: rawResults.length });
+
+            const validatedResults = await validateSuggestions(
+                rawResults,
+                (validated, current, total) => {
+                    setValidationProgress({ current, total });
+                    // Update suggestions with validated ones as they come in
+                    setSuggestions([...validated]);
+                }
+            );
+
+            setIsValidating(false);
+
+            if (validatedResults.length === 0 && rawResults.length > 0) {
+                setError(`Found ${rawResults.length} suggestions, but none could be verified. The AI may have suggested non-existent feeds.`);
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load suggestions');
-        } finally {
             setIsLoading(false);
+            setIsValidating(false);
         }
     };
 
@@ -115,9 +139,9 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
                         <button
                             onClick={handleSearch}
                             className="discovery-search-btn"
-                            disabled={isLoading}
+                            disabled={isLoading || isValidating}
                         >
-                            {isLoading ? <Loader className="spin" size={16} /> : 'Search'}
+                            {isLoading || isValidating ? <Loader className="spin" size={16} /> : 'Search'}
                         </button>
                     </div>
 
@@ -125,6 +149,14 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
                         <div className="discovery-loading">
                             <Loader className="spin" size={32} />
                             <p>Analyzing your interests and finding new feeds...</p>
+                        </div>
+                    ) : isValidating ? (
+                        <div className="discovery-loading">
+                            <CheckCircle size={32} className="text-accent" />
+                            <p>Verifying feeds... ({validationProgress.current}/{validationProgress.total})</p>
+                            <p className="discovery-loading-sub">
+                                {suggestions.length} valid feed{suggestions.length !== 1 ? 's' : ''} found so far
+                            </p>
                         </div>
                     ) : error ? (
                         <div className="discovery-error">
@@ -149,7 +181,15 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
                                         {categoryFeeds.map((suggestion, index) => (
                                             <div key={index} className="suggestion-item">
                                                 <div className="suggestion-header">
-                                                    <span className="suggestion-title">{suggestion.title}</span>
+                                                    <span className="suggestion-title">
+                                                        {suggestion.title}
+                                                        {suggestion.verificationStatus === 'valid' && (
+                                                            <span className="verified-badge">
+                                                                <CheckCircle size={12} />
+                                                                Verified
+                                                            </span>
+                                                        )}
+                                                    </span>
                                                     <button
                                                         className={`add-suggestion-btn ${addedUrls.has(suggestion.url) ? 'added' : ''}`}
                                                         onClick={() => handleAdd(suggestion)}
