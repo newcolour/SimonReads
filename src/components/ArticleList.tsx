@@ -168,7 +168,7 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
                 </div>
             ) : (
                 article.contentSnippet && (
-                    <p className="article-snippet">{article.contentSnippet.slice(0, 150)}...</p>
+                    <p className="article-snippet">{cleanTitle(article.contentSnippet).slice(0, 150)}...</p>
                 )
             )}
 

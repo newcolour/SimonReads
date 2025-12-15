@@ -27,14 +27,17 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
         setHasSearched(true);
 
         try {
-            // Get API key based on provider
+            // Get API key based on provider (Ollama doesn't need one)
             let apiKey = '';
-            if (settings.aiProvider === 'gemini') apiKey = settings.geminiApiKey || '';
-            else if (settings.aiProvider === 'openai') apiKey = settings.openaiApiKey || '';
-            else if (settings.aiProvider === 'claude') apiKey = settings.claudeApiKey || '';
+            const provider = settings.aiProvider || 'gemini';
 
-            if (!apiKey) {
-                setError(`Please set your ${settings.aiProvider || 'Gemini'} API Key in Settings to use Feed Discovery.`);
+            if (provider === 'gemini') apiKey = settings.geminiApiKey || '';
+            else if (provider === 'openai') apiKey = settings.openaiApiKey || '';
+            else if (provider === 'claude') apiKey = settings.claudeApiKey || '';
+            else if (provider === 'ollama') apiKey = 'local'; // Ollama doesn't need an API key
+
+            if (!apiKey && provider !== 'ollama') {
+                setError(`Please set your ${provider} API Key in Settings to use Feed Discovery.`);
                 setIsLoading(false);
                 return;
             }

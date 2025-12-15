@@ -621,13 +621,52 @@ async function fetchUrlViaWindow(url: string): Promise<{ success: boolean; conte
 
     await fetchWin.loadURL(url, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' });
 
-    // Wait a moment for dynamic content
-    await new Promise(r => setTimeout(r, 1000));
+    // Determine wait time based on site - NYT needs more time for images to load
+    const isNYT = url.includes('nytimes.com');
+    const waitTime = isNYT ? 3000 : 1000;
+
+    // Wait for content to load
+    await new Promise(r => setTimeout(r, waitTime));
 
     if (!fetchWin || fetchWin.isDestroyed()) throw new Error('Window destroyed/timeout');
 
-    // Get HTML
-    const content = await fetchWin.webContents.executeJavaScript('document.documentElement.outerHTML');
+    // For NYT, scroll down to trigger lazy loading of images, then scroll back up
+    if (isNYT) {
+      try {
+        await fetchWin.webContents.executeJavaScript(`
+          window.scrollTo(0, document.body.scrollHeight / 2);
+          setTimeout(() => window.scrollTo(0, 0), 500);
+        `);
+        await new Promise(r => setTimeout(r, 1000));
+      } catch (e) {
+        console.log('Scroll failed:', e);
+      }
+    }
+
+    if (!fetchWin || fetchWin.isDestroyed()) throw new Error('Window destroyed/timeout');
+
+    // Get HTML - for NYT, also try to extract image URLs from lazy loading attributes
+    let content = await fetchWin.webContents.executeJavaScript(`
+      // Convert lazy-loaded images to regular images
+      document.querySelectorAll('img[data-src]').forEach(img => {
+        img.src = img.getAttribute('data-src');
+      });
+      document.querySelectorAll('img[data-lazy-src]').forEach(img => {
+        img.src = img.getAttribute('data-lazy-src');
+      });
+      // Also handle picture elements
+      document.querySelectorAll('picture source[srcset]').forEach(source => {
+        const img = source.parentElement.querySelector('img');
+        if (img && !img.src) {
+          const srcset = source.getAttribute('srcset');
+          if (srcset) {
+            const firstUrl = srcset.split(',')[0].trim().split(' ')[0];
+            img.src = firstUrl;
+          }
+        }
+      });
+      document.documentElement.outerHTML;
+    `);
 
     clearTimeout(timeout);
     if (fetchWin && !fetchWin.isDestroyed()) fetchWin.destroy();
@@ -767,6 +806,7 @@ function createWindow() {
       submenu: [
         { role: 'reload' as const },
         { role: 'forceReload' as const },
+        { role: 'toggleDevTools' as const },
         { type: 'separator' as const },
         { role: 'resetZoom' as const },
         { role: 'zoomIn' as const },

@@ -120,7 +120,7 @@
 }
 
 .article-item {
-    padding: 16px 16px 16px 24px;
+    padding: 16px 16px 16px 36px;
     border-bottom: 1px solid var(--border-color);
     cursor: pointer;
     transition: all 0.2s;
@@ -266,6 +266,7 @@
         justify-content: center;
     }
 }
+
 /* Playful Header for Serendipity Explorer */
 .playful-header {
     width: 100%;
@@ -283,6 +284,7 @@
         opacity: 0;
         transform: translateY(-10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);

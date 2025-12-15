@@ -91,7 +91,9 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
         feedProp: feed,
         feedTitleProp: feed?.title,
         articleFeedTitle: article?.feedTitle,
-        finalFeedTitle: feedTitle
+        finalFeedTitle: feedTitle,
+        articleImage: article?.image,
+        articleMediaType: article?.mediaType
     });
 
     const [viewMode, setViewMode] = useState<'reader' | 'browser'>('reader');
@@ -272,6 +274,11 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                 const isBoingBoing = article.link.includes('boingboing.net') ||
                     article.feedTitle?.toLowerCase().includes('boing boing');
 
+                // Check for NYT (always provides snippets without images in RSS)
+                const isNYT = article.link.includes('nytimes.com') ||
+                    article.feedTitle?.toLowerCase().includes('new york times') ||
+                    article.feedTitle?.toLowerCase().includes('nyt');
+
                 // Check for generic "truncated feed" footer pattern common in WordPress
                 // distinct enough to not trigger false positives
                 const hasTruncatedFooter = article.content.includes('appeared first on');
@@ -284,6 +291,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                     isNPR,
                     isOMGUbuntu,
                     isBoingBoing,
+                    isNYT,
                     hasTruncatedFooter,
                     feedTitle: article.feedTitle,
                     domain: new URL(article.link).hostname
@@ -295,6 +303,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                 // - Is NPR article with less than 3 paragraphs (NPR typically provides snippets), OR
                 // - Is OMG! Ubuntu article (they always provide snippets with "You're reading" footer), OR
                 // - Is Boing Boing (always truncated), OR
+                // - Is NYT (RSS only has text description, no images), OR
                 // - Has generic truncated footer text, OR
                 // - Content is less than 800 characters total
                 isSnippet = textLength < 300 ||
@@ -302,6 +311,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                     (isNPR && paragraphCount <= 3) ||
                     isOMGUbuntu ||
                     isBoingBoing ||
+                    isNYT ||
                     hasTruncatedFooter ||
                     contentLength < 800;
             } else {
@@ -354,20 +364,31 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                         contentElement = nprStorytextId;
                         console.log('Using NPR #storytext for content');
                     } else {
-                        // Generic selectors for other sites
-                        contentElement =
-                            doc.querySelector('#story') || // Boing Boing
-                            doc.querySelector('.entry-content') || // WordPress
-                            doc.querySelector('.post-content') || // WordPress
-                            doc.querySelector('.story__text') || // Repubblica.it
-                            doc.querySelector('.story-body') ||
-                            doc.querySelector('.story') || // Repubblica.it fallback
-                            doc.querySelector('article') ||
-                            doc.querySelector('[role="main"]') ||
-                            doc.querySelector('main') ||
-                            doc.querySelector('.article-body') ||
-                            doc.querySelector('.content') ||
-                            doc.body;
+                        // Site-specific selectors for various publishers
+                        // NYT selectors
+                        const nytStory = doc.querySelector('[data-testid="article-body"]') ||
+                            doc.querySelector('section[name="articleBody"]') ||
+                            doc.querySelector('.StoryBodyCompanionColumn');
+
+                        if (nytStory) {
+                            contentElement = nytStory;
+                            console.log('Using NYT article body for content');
+                        } else {
+                            // Generic selectors for other sites
+                            contentElement =
+                                doc.querySelector('#story') || // Boing Boing
+                                doc.querySelector('.entry-content') || // WordPress
+                                doc.querySelector('.post-content') || // WordPress
+                                doc.querySelector('.story__text') || // Repubblica.it
+                                doc.querySelector('.story-body') ||
+                                doc.querySelector('.story') || // Repubblica.it fallback
+                                doc.querySelector('article') ||
+                                doc.querySelector('[role="main"]') ||
+                                doc.querySelector('main') ||
+                                doc.querySelector('.article-body') ||
+                                doc.querySelector('.content') ||
+                                doc.body;
+                        }
                     }
 
                     if (contentElement) {
@@ -396,7 +417,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                         });
 
                         // Get HTML content
-                        const extractedContent = contentElement.innerHTML;
+                        let extractedContent = contentElement.innerHTML;
                         console.log('Successfully extracted content, length:', extractedContent.length);
 
                         // Debug: Show image-related HTML
@@ -405,6 +426,80 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                         imgMatches.slice(0, 5).forEach((match, i) => {
                             console.log(`[DEBUG] Image ${i}:`, match.substring(0, 200));
                         });
+
+                        // Proactively proxy NYT images (they block hotlinking)
+                        if (article.link.includes('nytimes.com') && ipcRenderer) {
+                            console.log('[NYT] Processing images...');
+                            const parser = new DOMParser();
+                            const tempDoc = parser.parseFromString(extractedContent, 'text/html');
+
+                            // FIRST: Convert <picture> elements to <img> so we can proxy them
+                            tempDoc.querySelectorAll('picture').forEach(picture => {
+                                const source = picture.querySelector('source[srcset]');
+                                const img = picture.querySelector('img');
+
+                                if (source) {
+                                    const srcset = source.getAttribute('srcset') || '';
+                                    const srcsetParts = srcset.split(',').map(s => s.trim());
+                                    let bestUrl = '';
+                                    let bestSize = 0;
+
+                                    for (const part of srcsetParts) {
+                                        const match = part.match(/^(.+?)\s+(\d+)(w|x)?$/);
+                                        if (match) {
+                                            const url = match[1];
+                                            const size = parseInt(match[2]);
+                                            if (size > bestSize || !bestUrl) {
+                                                bestSize = size;
+                                                bestUrl = url;
+                                            }
+                                        } else if (!bestUrl) {
+                                            bestUrl = part;
+                                        }
+                                    }
+
+                                    if (bestUrl) {
+                                        const newImg = tempDoc.createElement('img');
+                                        newImg.setAttribute('src', bestUrl);
+                                        if (img) {
+                                            newImg.setAttribute('alt', img.getAttribute('alt') || '');
+                                        }
+                                        picture.replaceWith(newImg);
+                                        console.log('[NYT] Converted picture to img:', bestUrl.substring(0, 60));
+                                    }
+                                }
+                            });
+
+                            // SECOND: Proxy all NYT images (now including the converted ones)
+                            const imgs = tempDoc.querySelectorAll('img');
+                            console.log('[NYT] Found', imgs.length, 'images to proxy');
+
+                            for (const img of Array.from(imgs)) {
+                                const src = img.getAttribute('src');
+                                if (src && src.includes('nyt.com') && !src.startsWith('data:')) {
+                                    try {
+                                        console.log('[NYT] Proxying image:', src.substring(0, 80));
+                                        const result = await ipcRenderer.invoke('proxy-image', src);
+                                        if (result.success && result.dataUrl) {
+                                            img.setAttribute('src', result.dataUrl);
+                                            console.log('[NYT] Successfully proxied image');
+                                        }
+                                    } catch (err) {
+                                        console.error('[NYT] Failed to proxy image:', err);
+                                    }
+                                }
+                            }
+
+                            // THIRD: Remove "Image" placeholder text elements
+                            tempDoc.querySelectorAll('span, div').forEach(el => {
+                                const text = el.textContent?.trim() || '';
+                                if (text === 'Image' || text === 'image') {
+                                    el.remove();
+                                }
+                            });
+
+                            extractedContent = tempDoc.body.innerHTML;
+                        }
 
                         setFetchedContent(extractedContent);
                     } else {
@@ -668,27 +763,148 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
+        // Skip picture processing if content already has proxied images (data URLs)
+        // This prevents overwriting already-proxied NYT images
+        const hasProxiedImages = html.includes('data:image/');
+
+        // 1. Handle <picture> elements: extract best source or img and convert to standalone img
+        // Skip if we already have proxied images (NYT processing already done)
+        if (!hasProxiedImages) {
+            doc.querySelectorAll('picture').forEach(picture => {
+                // Get the img inside picture (fallback)
+                const img = picture.querySelector('img');
+                // Get the first source with srcset
+                const source = picture.querySelector('source[srcset]');
+
+                if (source) {
+                    const srcset = source.getAttribute('srcset') || '';
+                    // Parse srcset and get the largest/best image
+                    // Format: "url1 1x, url2 2x" or "url1 100w, url2 200w"
+                    const srcsetParts = srcset.split(',').map(s => s.trim());
+                    let bestUrl = '';
+                    let bestSize = 0;
+
+                    for (const part of srcsetParts) {
+                        const match = part.match(/^(.+?)\s+(\d+)(w|x)?$/);
+                        if (match) {
+                            const url = match[1];
+                            const size = parseInt(match[2]);
+                            if (size > bestSize || !bestUrl) {
+                                bestSize = size;
+                                bestUrl = url;
+                            }
+                        } else if (!bestUrl) {
+                            // No size descriptor, just use the URL
+                            bestUrl = part;
+                        }
+                    }
+
+                    if (bestUrl) {
+                        // Create a new img element to replace the picture
+                        const newImg = doc.createElement('img');
+                        newImg.setAttribute('src', bestUrl);
+                        if (img) {
+                            newImg.setAttribute('alt', img.getAttribute('alt') || '');
+                        }
+                        picture.replaceWith(newImg);
+                        console.log('[processLazyImages] Converted picture to img:', bestUrl.substring(0, 80));
+                    }
+                } else if (img && img.getAttribute('src')) {
+                    // No source, just unwrap the img from picture
+                    picture.replaceWith(img);
+                }
+            });
+        } // End hasProxiedImages check
+
+        // 2. Handle images with various data-* lazy loading attributes
         doc.querySelectorAll('img').forEach(img => {
-            const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
             const currentSrc = img.getAttribute('src') || '';
 
-            // If there's a data-src and current src looks like a placeholder
-            if (dataSrc && (
+            // Check various lazy-loading attribute patterns
+            const lazySrcAttrs = [
+                'data-src', 'data-lazy-src', 'data-original', 'data-image',
+                'data-src-medium', 'data-src-large', 'data-full-src',
+                'data-hi-res-src', 'data-srcset'
+            ];
+
+            let newSrc = '';
+            for (const attr of lazySrcAttrs) {
+                const value = img.getAttribute(attr);
+                if (value && value.startsWith('http')) {
+                    newSrc = value;
+                    break;
+                }
+            }
+
+            // Check if current src is a placeholder or missing
+            const isPlaceholder = !currentSrc ||
+                currentSrc.length < 10 ||
                 currentSrc.includes('placeholder') ||
                 currentSrc.includes('image-placeholders') ||
                 currentSrc.includes('lazy') ||
                 currentSrc.includes('loading') ||
                 currentSrc.includes('blank') ||
-                currentSrc.length < 10 ||
-                !currentSrc
-            )) {
-                console.log('[processLazyImages] Converting data-src to src:', dataSrc.substring(0, 80));
-                img.setAttribute('src', dataSrc);
+                currentSrc.includes('data:image/gif') ||
+                currentSrc.includes('data:image/svg') ||
+                currentSrc.includes('1x1') ||
+                currentSrc.includes('pixel');
+
+            if (newSrc && isPlaceholder) {
+                console.log('[processLazyImages] Converting data-src to src:', newSrc.substring(0, 80));
+                img.setAttribute('src', newSrc);
+            }
+
+            // Also check srcset if src is missing
+            if (isPlaceholder && !newSrc) {
+                const srcset = img.getAttribute('srcset') || img.getAttribute('data-srcset');
+                if (srcset) {
+                    // Parse srcset and get a good image
+                    const srcsetParts = srcset.split(',').map(s => s.trim());
+                    let bestUrl = '';
+                    let bestSize = 0;
+
+                    for (const part of srcsetParts) {
+                        const match = part.match(/^(.+?)\s+(\d+)(w|x)?$/);
+                        if (match) {
+                            const url = match[1];
+                            const size = parseInt(match[2]);
+                            if (size > bestSize || !bestUrl) {
+                                bestSize = size;
+                                bestUrl = url;
+                            }
+                        } else if (!bestUrl) {
+                            bestUrl = part;
+                        }
+                    }
+
+                    if (bestUrl) {
+                        console.log('[processLazyImages] Using srcset for src:', bestUrl.substring(0, 80));
+                        img.setAttribute('src', bestUrl);
+                    }
+                }
             }
         });
 
-        // Remove promotional/navigation elements
-        // Remove VIDEO banners and related video sections
+        // 3. Handle noscript images (many sites put real images in noscript for SEO)
+        doc.querySelectorAll('noscript').forEach(noscript => {
+            const content = noscript.textContent || '';
+            const imgMatch = content.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+            if (imgMatch) {
+                // Check if there's a placeholder img before this noscript
+                const prevSibling = noscript.previousElementSibling;
+                if (prevSibling?.tagName === 'IMG') {
+                    const prevSrc = prevSibling.getAttribute('src') || '';
+                    if (prevSrc.includes('placeholder') || prevSrc.includes('data:')) {
+                        // Replace placeholder with real image
+                        (prevSibling as HTMLImageElement).setAttribute('src', imgMatch[1]);
+                        console.log('[processLazyImages] Replaced placeholder from noscript:', imgMatch[1].substring(0, 80));
+                        noscript.remove();
+                    }
+                }
+            }
+        });
+
+        // 4. Remove promotional/navigation elements (VIDEO banners, etc.)
         doc.querySelectorAll('img').forEach(img => {
             const src = img.getAttribute('src') || '';
             const alt = img.getAttribute('alt') || '';
@@ -696,7 +912,6 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
             if (src.includes('video-overlay') ||
                 src.includes('icon-gn-video') ||
                 alt.toUpperCase() === 'VIDEO') {
-                // Remove the image and its container
                 const parent = img.parentElement;
                 if (parent) {
                     parent.remove();
@@ -706,13 +921,47 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
             }
         });
 
-        // Remove elements by text content (promotional sections)
-        // Be very careful - only remove small elements with exact matches
+        // 5. Remove NYT-specific "Image" text labels/placeholders
+        // NYT shows "Image" as text when the actual image can't load
+        doc.querySelectorAll('span, div, p').forEach(el => {
+            const text = el.textContent?.trim() || '';
+            // Remove elements that just say "Image" (NYT placeholder)
+            if (text === 'Image' || text === 'image') {
+                // Check if this is likely an image label, not article content
+                // It should be short and possibly inside a figure
+                const parent = el.parentElement;
+                const isInFigure = parent?.tagName === 'FIGURE' ||
+                    parent?.parentElement?.tagName === 'FIGURE' ||
+                    parent?.classList.contains('image') ||
+                    el.classList.contains('visually-hidden') ||
+                    el.getAttribute('role') === 'img';
+                if (isInFigure || el.classList.length > 0) {
+                    console.log('[processLazyImages] Removing NYT "Image" placeholder');
+                    el.remove();
+                }
+            }
+        });
+
+        // 6. Handle NYT figure elements that might have role="img" but no actual img
+        doc.querySelectorAll('figure, [role="img"]').forEach(el => {
+            // Check if there's an actual img inside
+            const hasImg = el.querySelector('img[src]');
+            const hasValidImg = hasImg && hasImg.getAttribute('src')?.startsWith('http');
+
+            // If no valid image but has "Image" text, it's a broken placeholder
+            if (!hasValidImg) {
+                const textContent = el.textContent?.trim() || '';
+                if (textContent.startsWith('Image') && textContent.length < 20) {
+                    console.log('[processLazyImages] Removing broken NYT figure');
+                    el.remove();
+                }
+            }
+        });
+
+        // 7. Remove other promotional elements by text content
         doc.querySelectorAll('h2, h3, h4, p, span').forEach(el => {
             const text = el.textContent?.trim() || '';
-            // Only check small elements (to avoid removing article content)
             if (text.length < 100) {
-                // Remove exact matches for promotional text
                 if (text === 'I migliori video scelti dal nostro canale' ||
                     text === 'VIDEO' ||
                     text === 'FC Inter 1908') {
@@ -1013,27 +1262,42 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                                     <p>Loading article content...</p>
                                 </div>
                             ) : sanitizedContent ? (
-                                <div
-                                    className="article-content"
-                                    dangerouslySetInnerHTML={{ __html: sanitizedContent }}
-                                    onClick={(e) => {
-                                        // Intercept link clicks in article content
-                                        const target = e.target as HTMLElement;
-                                        if (target.tagName === 'A') {
-                                            e.preventDefault();
-                                            const href = (target as HTMLAnchorElement).href;
+                                <>
+                                    {/* Featured image for articles that have media:content but no inline images */}
+                                    {article.image &&
+                                        article.mediaType !== 'audio' &&
+                                        article.mediaType !== 'video' &&
+                                        !sanitizedContent.includes('<img') && (
+                                            <div className="article-featured-image">
+                                                <img
+                                                    src={article.image}
+                                                    alt={article.title}
+                                                    onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                                                />
+                                            </div>
+                                        )}
+                                    <div
+                                        className="article-content"
+                                        dangerouslySetInnerHTML={{ __html: sanitizedContent }}
+                                        onClick={(e) => {
+                                            // Intercept link clicks in article content
+                                            const target = e.target as HTMLElement;
+                                            if (target.tagName === 'A') {
+                                                e.preventDefault();
+                                                const href = (target as HTMLAnchorElement).href;
 
-                                            // If it's the article's own link or a "read more" link, switch to browser view
-                                            if (href && (href === article.link || href.includes(new URL(article.link).hostname))) {
-                                                setViewMode('browser');
-                                                setWebviewUrl(href);
-                                            } else {
-                                                // External link - open in system browser
-                                                openExternalUrl(href);
+                                                // If it's the article's own link or a "read more" link, switch to browser view
+                                                if (href && (href === article.link || href.includes(new URL(article.link).hostname))) {
+                                                    setViewMode('browser');
+                                                    setWebviewUrl(href);
+                                                } else {
+                                                    // External link - open in system browser
+                                                    openExternalUrl(href);
+                                                }
                                             }
-                                        }
-                                    }}
-                                />
+                                        }}
+                                    />
+                                </>
                             ) : (
                                 <p className="no-content">No content available. Try Web View.</p>
                             )}

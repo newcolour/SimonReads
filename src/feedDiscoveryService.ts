@@ -63,6 +63,8 @@ IMPORTANT: Return ONLY the raw JSON array. Do not include markdown formatting (l
         responseText = await suggestWithOpenAI(prompt, settings.openaiApiKey || '', settings);
     } else if (provider === 'claude') {
         responseText = await suggestWithClaude(prompt, settings.claudeApiKey || '', settings);
+    } else if (provider === 'ollama') {
+        responseText = await suggestWithOllama(prompt, settings);
     } else {
         throw new Error(`Unsupported AI provider: ${provider}`);
     }
@@ -151,4 +153,27 @@ async function suggestWithClaude(prompt: string, apiKey: string, settings: AppSe
 
     const data = await response.json();
     return data.content?.[0]?.text || '[]';
+}
+
+async function suggestWithOllama(prompt: string, settings: AppSettings): Promise<string> {
+    const model = settings.ollamaModel || 'llama3';
+    const baseUrl = (settings.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: model,
+            stream: false,
+            messages: [{ role: 'user', content: prompt }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get suggestions from Ollama: ${response.status} ${response.statusText} - ${errorText}. Make sure Ollama is running at ${baseUrl}.`);
+    }
+
+    const data = await response.json();
+    return data.message?.content || '[]';
 }

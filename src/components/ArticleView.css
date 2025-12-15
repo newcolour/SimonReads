@@ -277,6 +277,21 @@
     font-style: italic;
 }
 
+/* Featured image for RSS feeds that provide images via media:content but not in content */
+.article-featured-image {
+    margin-bottom: 24px;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.article-featured-image img {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: cover;
+    max-height: 500px;
+}
+
 .loading-content {
     display: flex;
     flex-direction: column;
