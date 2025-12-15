@@ -530,10 +530,12 @@ function App() {
             }
         }
 
-        // Create a map of existing articles for quick lookup
-        // Use articlesRef.current to get the LATEST state (prevents stale closure issues)
-        const currentArticles = articlesRef.current;
-        const existingArticlesMap = new Map(currentArticles.map(a => [a.id, a]));
+        // IMPORTANT: Read the LATEST articles from STORAGE, not from React state.
+        // This ensures we get the most up-to-date read/saved states, even if the user
+        // marked articles as read while the refresh fetch was in progress.
+        // This follows RavenReader's pattern of using storage as the single source of truth.
+        const storedArticles = storage.getArticles();
+        const existingArticlesMap = new Map(storedArticles.map(a => [a.id, a]));
 
         // Process fetched articles
         let newCount = 0;
@@ -610,10 +612,11 @@ function App() {
             const feedArticles = await fetchFeed(feed);
             const updatedFeed = { ...feed, lastFetched: new Date() };
 
-            // Create a map of existing articles for quick lookup
-            // Use articlesRef.current to get the LATEST state (prevents stale closure issues)
-            const currentArticles = articlesRef.current;
-            const existingArticlesMap = new Map(currentArticles.map(a => [a.id, a]));
+            // IMPORTANT: Read the LATEST articles from STORAGE, not from React state.
+            // This ensures we get the most up-to-date read/saved states, even if the user
+            // marked articles as read while the refresh fetch was in progress.
+            const storedArticles = storage.getArticles();
+            const existingArticlesMap = new Map(storedArticles.map(a => [a.id, a]));
 
             // Process fetched articles
             const mergedNewArticles: Article[] = feedArticles.map(newArticle => {
@@ -626,8 +629,8 @@ function App() {
             });
 
             // Remove old articles from this feed and add the new/updated ones
-            // Use currentArticles (latest state) for filtering
-            const otherArticles = currentArticles.filter(a => a.feedId !== feedId);
+            // Use storedArticles (from storage) for filtering
+            const otherArticles = storedArticles.filter(a => a.feedId !== feedId);
             const allArticles = [...otherArticles, ...mergedNewArticles];
 
             // Sort by date descending
