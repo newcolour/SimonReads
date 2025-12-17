@@ -853,6 +853,10 @@ function createWindow() {
     },
   });
 
+  // Set a modern user agent for the session to avoid being blocked by sites (like Google Login)
+  const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 SimonReads/1.0';
+  win.webContents.session.setUserAgent(userAgent);
+
   // Strip X-Frame-Options and CSP headers to allow embedding sites like omgubuntu
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = { ...details.responseHeaders };
@@ -926,6 +930,26 @@ function createWindow() {
 
   // Handle external links - open in default browser
   win.webContents.setWindowOpenHandler(({ url }) => {
+    // List of domains that should be allowed to open in a new Electron window (popups)
+    // These are typically authentication providers
+    const authProviders = [
+      'accounts.google.com',
+      'facebook.com/v',
+      'facebook.com/dialog',
+      'appleid.apple.com',
+      'p.repubblica.it', // Specific for repubblica.it login
+      'login.live.com',
+      'github.com/login/oauth'
+    ];
+
+    const isAuthProvider = authProviders.some(domain => url.includes(domain));
+
+    // If it's an auth provider, allow it to open in a new guest window
+    if (isAuthProvider) {
+      console.log('Allowing auth popup in-app:', url);
+      return { action: 'allow' };
+    }
+
     // If the URL starts with http/https, open in default browser
     if (url.startsWith('http:') || url.startsWith('https:')) {
       require('electron').shell.openExternal(url);

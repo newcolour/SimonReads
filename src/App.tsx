@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { NavigationBar } from '@hugotomazi/capacitor-navigation-bar';
 import { Badge } from '@capawesome/capacitor-badge';
 import { Feed, Article, AppSettings } from './types';
 import { fetchFeed, fetchFeedIcon, fetchFeedDetails } from './rssService';
@@ -367,6 +369,56 @@ function App() {
             xlarge: '18px'
         };
         document.documentElement.style.setProperty('--app-font-size', fontSizes[settings.fontSize] || '14px');
+
+        // Update native status bar for Android/iOS
+        const updateNativeBars = async (theme: string) => {
+            if (!Capacitor.isNativePlatform()) return;
+
+            try {
+                // Determine if theme is dark
+                const isDark = !['light', 'sepia'].includes(theme);
+
+                // Map theme to solid background color (StatusBar doesn't like transparency)
+                const themeColors: Record<string, string> = {
+                    'dark': '#1c1c1e',
+                    'light': '#ffffff',
+                    'sepia': '#f4ecd8',
+                    'black': '#000000',
+                    'nord': '#2e3440',
+                    'solarized-dark': '#002b36',
+                    'dracula': '#282a36',
+                    'gruvbox': '#282828',
+                    'tokyo-night': '#1a1b26',
+                    'sorcerer': '#1e0c32'
+                };
+
+                const bgColor = themeColors[theme] || (isDark ? '#000000' : '#ffffff');
+
+                await StatusBar.setStyle({
+                    style: isDark ? Style.Dark : Style.Light
+                });
+
+                if (Capacitor.getPlatform() === 'android') {
+                    await StatusBar.setBackgroundColor({
+                        color: bgColor
+                    });
+
+                    // Update Navigation Bar (bottom bar)
+                    try {
+                        await NavigationBar.setColor({
+                            color: bgColor,
+                            darkButtons: !isDark // Light theme needs dark buttons, dark theme needs light buttons
+                        });
+                    } catch (navError) {
+                        console.warn('NavigationBar plugin error:', navError);
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to update native bars:', error);
+            }
+        };
+
+        updateNativeBars(actualTheme);
     }, [settings.theme, settings.font, settings.fontSize]);
 
     // Auto-refresh logic (interval-based)

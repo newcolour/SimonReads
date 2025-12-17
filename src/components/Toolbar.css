@@ -359,3 +359,41 @@
     background: #ef4444;
     color: white;
 }
+
+@media (max-width: 600px) {
+    .modal-content {
+        width: 95vw;
+        max-width: 95vw;
+        height: 85vh;
+        max-height: 85vh;
+        padding: 16px;
+        border-radius: 12px;
+    }
+
+    .modal-header {
+        margin-bottom: 12px;
+    }
+
+    .settings-tabs {
+        padding: 0 4px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        margin-bottom: 12px;
+    }
+
+    .settings-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tab-btn {
+        padding: 10px 12px;
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 13px;
+    }
+
+    .modal-body {
+        padding: 0 12px 12px 12px;
+    }
+}
