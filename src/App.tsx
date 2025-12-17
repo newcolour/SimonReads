@@ -516,6 +516,7 @@ function App() {
     const handleRefresh = useCallback(async () => {
         if (feeds.length === 0 || isRefreshing) return;
 
+        console.log('=== REFRESH STARTED ===');
         setIsRefreshing(true);
         const fetchedArticles: Article[] = [];
         const updatedFeeds = [...feeds];
@@ -537,19 +538,52 @@ function App() {
         const storedArticles = storage.getArticles();
         const existingArticlesMap = new Map(storedArticles.map(a => [a.id, a]));
 
+        // Secondary Map for matching by Link (fallback if ID changes)
+        const existingArticlesLinkMap = new Map<string, Article>();
+        storedArticles.forEach(a => {
+            if (a.link) existingArticlesLinkMap.set(a.link, a);
+        });
+
+        console.log('=== REFRESH: Storage State ===');
+        console.log('[Refresh] Stored articles:', storedArticles.length,
+            'Read:', storedArticles.filter(a => a.isRead).length,
+            'Unread:', storedArticles.filter(a => !a.isRead).length);
+        console.log('[Refresh] Fetched articles:', fetchedArticles.length);
+
         // Process fetched articles
         let newCount = 0;
+        let matchedCount = 0;
+        let linkMatchedCount = 0;
+
         const mergedArticles: Article[] = fetchedArticles.map(newArticle => {
-            const existing = existingArticlesMap.get(newArticle.id);
+            let existing = existingArticlesMap.get(newArticle.id);
+            let matchedByLink = false;
+
+            // Fallback: Match by Link if ID match fails
+            if (!existing && newArticle.link) {
+                const linkMatch = existingArticlesLinkMap.get(newArticle.link);
+                // Verify the link match wasn't already consumed (removed from ID map)
+                if (linkMatch && existingArticlesMap.has(linkMatch.id)) {
+                    existing = linkMatch;
+                    matchedByLink = true;
+                }
+            }
+
             if (existing) {
+                matchedCount++;
+                if (matchedByLink) linkMatchedCount++;
+
                 // Remove from map to track what's left (articles no longer in feed)
-                existingArticlesMap.delete(newArticle.id);
+                existingArticlesMap.delete(existing.id);
                 // Update content but preserve local state (isRead, isSaved)
                 return { ...newArticle, isRead: existing.isRead, isSaved: existing.isSaved };
             }
             newCount++;
             return newArticle;
         });
+
+        console.log('[Refresh] Matched:', matchedCount, `(by Link: ${linkMatchedCount})`, 'New:', newCount,
+            'Remaining in storage (old):', existingArticlesMap.size);
 
         if (newCount > 0) {
             NotificationService.send({
@@ -562,28 +596,82 @@ function App() {
         // This ensures we don't delete articles just because they are old
         mergedArticles.push(...Array.from(existingArticlesMap.values()));
 
-        // Apply retention policy (cleanup old read articles)
+        // CRITICAL: Re-read the latest isRead/isSaved states from storage RIGHT NOW,
+        // BEFORE the retention policy runs. This catches any mark-as-read operations
+        // that happened while we were fetching feeds.
+        // Without this, the retention policy would use stale isRead states and might
+        // incorrectly delete articles that the user just marked as read.
+        const latestStoredArticles = storage.getArticles();
+        const latestStatesMap = new Map(latestStoredArticles.map(a => [a.id, { isRead: a.isRead, isSaved: a.isSaved }]));
+
+        // Also build a link map for specific latest state lookup
+        const latestStatesLinkMap = new Map<string, { isRead: boolean, isSaved: boolean }>();
+        latestStoredArticles.forEach(a => {
+            if (a.link) latestStatesLinkMap.set(a.link, { isRead: a.isRead || false, isSaved: a.isSaved || false });
+        });
+
+        // Apply the latest read/saved states to our mergedArticles
+        const articlesWithLatestStates = mergedArticles.map(article => {
+            // Try matching by ID first
+            let latestState = latestStatesMap.get(article.id);
+
+            // Fallback to link match if not found directly
+            if (!latestState && article.link) {
+                latestState = latestStatesLinkMap.get(article.link);
+            }
+
+            if (latestState) {
+                // If the article exists in the latest storage, use the MOST READ state
+                // (if either our merge or the latest storage says it's read, keep it read)
+                return {
+                    ...article,
+                    isRead: article.isRead || latestState.isRead,
+                    isSaved: article.isSaved || latestState.isSaved
+                };
+            }
+            return article;
+        });
+
+        console.log('[Refresh] After applying latest states:',
+            'Read:', articlesWithLatestStates.filter(a => a.isRead).length,
+            'Unread:', articlesWithLatestStates.filter(a => !a.isRead).length);
+
+        // Apply retention policy (cleanup old read articles that have FALLEN OFF the RSS feed)
+        // We only delete articles that are:
+        // 1. Read (user has processed them)
+        // 2. Older than retention period
+        // 3. NOT in the current feed fetch (they've "fallen off" the RSS)
+        // If an article is still being served by the RSS, we keep it - otherwise it would
+        // just come back as "new unread" on the next refresh!
         const retentionDays = settings.retentionPeriod;
-        let finalArticles = mergedArticles;
+        let finalArticles = articlesWithLatestStates;
 
         if (retentionDays && retentionDays > 0) {
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
-            finalArticles = mergedArticles.filter(article => {
+            // Create a set of article IDs that are currently in the RSS feed
+            const currentFeedArticleIds = new Set(fetchedArticles.map(a => a.id));
+
+            finalArticles = articlesWithLatestStates.filter(article => {
                 // ALWAYS keep saved articles
                 if (article.isSaved) return true;
 
                 // Keep unread articles (user hasn't processed them yet)
                 if (!article.isRead) return true;
 
-                // For read articles, check if they are within retention period
+                // Keep articles that are still in the current RSS feed
+                // (even if they're old and read - deleting them would just bring them back)
+                if (currentFeedArticleIds.has(article.id)) return true;
+
+                // For read articles that have fallen off the RSS feed,
+                // check if they are within retention period
                 const pubDate = article.pubDate ? new Date(article.pubDate) : new Date();
                 return pubDate >= cutoffDate;
             });
 
-            if (mergedArticles.length !== finalArticles.length) {
-                console.log(`Cleaned up ${mergedArticles.length - finalArticles.length} old articles.`);
+            if (articlesWithLatestStates.length !== finalArticles.length) {
+                console.log(`Cleaned up ${articlesWithLatestStates.length - finalArticles.length} old articles that fell off feeds.`);
             }
         }
 
@@ -594,11 +682,17 @@ function App() {
             return dateB - dateA;
         });
 
+        console.log('=== REFRESH: Saving Final State ===');
+        console.log('[Refresh] Final articles:', finalArticles.length,
+            'Read:', finalArticles.filter(a => a.isRead).length,
+            'Unread:', finalArticles.filter(a => !a.isRead).length);
+
         setArticles(finalArticles);
         setFeeds(updatedFeeds);
         storage.saveArticles(finalArticles);
         storage.saveFeeds(updatedFeeds);
         setIsRefreshing(false);
+        console.log('=== REFRESH COMPLETED ===');
     }, [feeds, articles, isRefreshing, settings.retentionPeriod]);
 
     const handleRefreshSingleFeed = useCallback(async (feedId: string) => {
@@ -618,9 +712,20 @@ function App() {
             const storedArticles = storage.getArticles();
             const existingArticlesMap = new Map(storedArticles.map(a => [a.id, a]));
 
+            // Link fallback map
+            const existingArticlesLinkMap = new Map<string, Article>();
+            storedArticles.forEach(a => {
+                if (a.link) existingArticlesLinkMap.set(a.link, a);
+            });
+
             // Process fetched articles
             const mergedNewArticles: Article[] = feedArticles.map(newArticle => {
-                const existing = existingArticlesMap.get(newArticle.id);
+                let existing = existingArticlesMap.get(newArticle.id);
+
+                // Fallback: Match by Link
+                if (!existing && newArticle.link) {
+                    existing = existingArticlesLinkMap.get(newArticle.link);
+                }
                 if (existing) {
                     // Update content but preserve local state (isRead, isSaved)
                     return { ...newArticle, isRead: existing.isRead, isSaved: existing.isSaved };
@@ -643,9 +748,37 @@ function App() {
             // Update feeds array
             const updatedFeeds = feeds.map(f => f.id === feedId ? updatedFeed : f);
 
-            setArticles(allArticles);
+            // CRITICAL: Re-read the latest isRead/isSaved states from storage RIGHT BEFORE saving.
+            // This catches any mark-as-read operations that happened while we were fetching.
+            const latestStoredArticles = storage.getArticles();
+            const latestStatesMap = new Map(latestStoredArticles.map(a => [a.id, { isRead: a.isRead || false, isSaved: a.isSaved || false }]));
+
+            // Link fallback map for latest states
+            const latestStatesLinkMap = new Map<string, { isRead: boolean, isSaved: boolean }>();
+            latestStoredArticles.forEach(a => {
+                if (a.link) latestStatesLinkMap.set(a.link, { isRead: a.isRead || false, isSaved: a.isSaved || false });
+            });
+
+            const articlesToSave = allArticles.map(article => {
+                let latestState = latestStatesMap.get(article.id);
+
+                if (!latestState && article.link) {
+                    latestState = latestStatesLinkMap.get(article.link);
+                }
+
+                if (latestState) {
+                    return {
+                        ...article,
+                        isRead: article.isRead || latestState.isRead,
+                        isSaved: article.isSaved || latestState.isSaved
+                    };
+                }
+                return article;
+            });
+
+            setArticles(articlesToSave);
             setFeeds(updatedFeeds);
-            storage.saveArticles(allArticles);
+            storage.saveArticles(articlesToSave);
             storage.saveFeeds(updatedFeeds);
         } catch (error) {
             console.error(`Failed to refresh feed: ${feed.title}`, error);
@@ -757,7 +890,9 @@ function App() {
 
             // Mark as read
             if (!article.isRead) {
-                const updatedArticles = articles.map(a =>
+                // Use articlesRef.current to get the LATEST articles, avoiding stale closure issues
+                const currentArticles = articlesRef.current;
+                const updatedArticles = currentArticles.map(a =>
                     a.id === article.id ? { ...a, isRead: true } : a
                 );
                 setArticles(updatedArticles);
@@ -791,7 +926,9 @@ function App() {
     };
 
     const handleToggleRead = (articleId: string) => {
-        const updatedArticles = articles.map(a =>
+        // Use articlesRef.current to get the LATEST articles, avoiding stale closure issues
+        const currentArticles = articlesRef.current;
+        const updatedArticles = currentArticles.map(a =>
             a.id === articleId ? { ...a, isRead: !a.isRead } : a
         );
         setArticles(updatedArticles);
@@ -799,7 +936,9 @@ function App() {
     };
 
     const handleToggleSaved = (articleId: string) => {
-        const updatedArticles = articles.map(a =>
+        // Use articlesRef.current to get the LATEST articles, avoiding stale closure issues
+        const currentArticles = articlesRef.current;
+        const updatedArticles = currentArticles.map(a =>
             a.id === articleId ? { ...a, isSaved: !a.isSaved } : a
         );
         setArticles(updatedArticles);
@@ -998,18 +1137,38 @@ function App() {
     };
 
     const handleMarkAllAsRead = () => {
-        const updatedArticles = articles.map(article => ({
+        // Use articlesRef.current to get the LATEST articles, avoiding stale closure issues
+        const currentArticles = articlesRef.current;
+        console.log('[MarkAllAsRead] Starting with', currentArticles.length, 'articles,',
+            currentArticles.filter(a => a.isRead).length, 'read,',
+            currentArticles.filter(a => !a.isRead).length, 'unread');
+
+        const updatedArticles = currentArticles.map(article => ({
             ...article,
             isRead: true
         }));
+
+        console.log('[MarkAllAsRead] After marking:', updatedArticles.length, 'articles,',
+            updatedArticles.filter(a => a.isRead).length, 'read,',
+            updatedArticles.filter(a => !a.isRead).length, 'unread');
+
         setArticles(updatedArticles);
         storage.saveArticles(updatedArticles);
     };
 
     const handleMarkFeedAsRead = (feedId: string) => {
-        const updatedArticles = articles.map(article =>
+        // Use articlesRef.current to get the LATEST articles, avoiding stale closure issues
+        const currentArticles = articlesRef.current;
+        console.log('[MarkFeedAsRead] Feed:', feedId, 'Starting with',
+            currentArticles.filter(a => a.feedId === feedId && !a.isRead).length, 'unread in feed');
+
+        const updatedArticles = currentArticles.map(article =>
             article.feedId === feedId ? { ...article, isRead: true } : article
         );
+
+        console.log('[MarkFeedAsRead] After marking:',
+            updatedArticles.filter(a => a.feedId === feedId && !a.isRead).length, 'unread in feed');
+
         setArticles(updatedArticles);
         storage.saveArticles(updatedArticles);
     };
@@ -1112,7 +1271,7 @@ function App() {
                             article={selectedArticle}
                             feed={feeds.find(f => f.id === selectedArticle?.feedId)}
                             settings={settings}
-                            allArticles={filteredArticles}
+                            allArticles={articles}
                             onClose={() => {
                                 setSelectedArticle(null);
                                 setMobileView('articles');

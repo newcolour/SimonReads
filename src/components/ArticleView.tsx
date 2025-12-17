@@ -131,6 +131,12 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
             setWebviewUrl(article.link); // Set webview URL to article link
             setFetchedContent(null); // Reset fetched content
             setRedditVideo(null); // Reset Reddit video
+
+            // Scroll to top when article changes
+            const contentContainer = document.querySelector('.article-view-content');
+            if (contentContainer) {
+                contentContainer.scrollTop = 0;
+            }
         }
     }, [article?.id]);
 

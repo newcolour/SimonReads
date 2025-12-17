@@ -4,23 +4,32 @@ const FEEDS_KEY = 'rss-reader-feeds';
 const ARTICLES_KEY = 'rss-reader-articles';
 const SETTINGS_KEY = 'rss-reader-settings';
 
-// Safe ipcRenderer access
-const ipcRenderer = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
+// Safe ipcRenderer access - use lazy getter to ensure preload has run
+function getIpcRenderer() {
+    const ipc = (window as any).ipcRenderer || null;
+    return ipc;
+}
 
 function getItem(key: string): any {
-    if (ipcRenderer) {
-        const data = ipcRenderer.sendSync('read-data-sync');
+    const ipc = getIpcRenderer();
+    if (ipc) {
+        console.log(`[Storage] Using IPC to read: ${key}`);
+        const data = ipc.sendSync('read-data-sync');
         return data[key];
     } else {
+        console.log(`[Storage] Using localStorage to read: ${key}`);
         const data = localStorage.getItem(key);
         return data ? JSON.parse(data) : null;
     }
 }
 
 function setItem(key: string, value: any): void {
-    if (ipcRenderer) {
-        ipcRenderer.sendSync('write-data-sync', { key, value });
+    const ipc = getIpcRenderer();
+    if (ipc) {
+        console.log(`[Storage] Using IPC to write: ${key}`);
+        ipc.sendSync('write-data-sync', { key, value });
     } else {
+        console.log(`[Storage] Using localStorage to write: ${key}`);
         localStorage.setItem(key, JSON.stringify(value));
     }
 }
@@ -43,6 +52,10 @@ export const storage = {
     getArticles(): Article[] {
         const articles = getItem(ARTICLES_KEY);
         if (!articles) return [];
+        // Debug: log article counts
+        const readCount = articles.filter((a: any) => a.isRead).length;
+        const unreadCount = articles.filter((a: any) => !a.isRead).length;
+        console.log(`[Storage] getArticles: ${articles.length} total, ${readCount} read, ${unreadCount} unread`);
         // Convert date strings back to Date objects
         return articles.map((a: any) => ({
             ...a,
@@ -51,6 +64,10 @@ export const storage = {
     },
 
     saveArticles(articles: Article[]): void {
+        // Debug: log article counts before saving
+        const readCount = articles.filter((a: any) => a.isRead).length;
+        const unreadCount = articles.filter((a: any) => !a.isRead).length;
+        console.log(`[Storage] saveArticles: ${articles.length} total, ${readCount} read, ${unreadCount} unread`);
         setItem(ARTICLES_KEY, articles);
     },
 
@@ -108,9 +125,10 @@ export const storage = {
     },
 
     async loadAllDataAsync(): Promise<{ feeds: Feed[], articles: Article[], settings: AppSettings } | null> {
-        if (ipcRenderer) {
+        const ipc = getIpcRenderer();
+        if (ipc) {
             try {
-                const data = await ipcRenderer.invoke('read-data');
+                const data = await ipc.invoke('read-data');
 
                 // Parse feeds
                 const feeds = (data[FEEDS_KEY] || []).map((f: any) => ({
