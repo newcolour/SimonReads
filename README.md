@@ -1,6 +1,9 @@
 # SimonReads 📰
 
-A beautiful, cross-platform RSS reader with AI-powered features. Built with Electron, React, and Capacitor.
+A beautiful, cross-platform RSS reader with AI-powered features. Built with Electron, React, and Capacitor. 
+This started as an attempt at using Google's Antigravity and seeing how far I could push without actually writing a single line of code. It evolved into something I really like and that I think it is missing in its current form. Feel free to fork it, modify it, distribute it, etc.
+
+Enjoy it!
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Android-lightgrey.svg)
