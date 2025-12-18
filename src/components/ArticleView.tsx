@@ -138,7 +138,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                 contentContainer.scrollTop = 0;
             }
         }
-    }, [article?.id]);
+    }, [article?.id, article?.link]);
 
     // Fetch Reddit video/external link info if this is a Reddit article
     useEffect(() => {

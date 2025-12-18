@@ -535,6 +535,40 @@ function App() {
         }
     }, [feeds, articles.length]);
 
+    // Data Integrity Check: Duplicate Article IDs (Cleanup for Internazionale collision bug)
+    useEffect(() => {
+        if (articles.length === 0) return;
+
+        const seenIds = new Set<string>();
+        const uniqueArticles: Article[] = [];
+        let hasDuplicates = false;
+
+        for (const article of articles) {
+            if (seenIds.has(article.id)) {
+                hasDuplicates = true;
+                // If ID is a duplicate, check if we can make it unique using the link
+                if (article.link) {
+                    const newId = `${article.feedId}-${window.btoa(encodeURIComponent(article.link))}`;
+                    if (!seenIds.has(newId)) {
+                        uniqueArticles.push({ ...article, id: newId });
+                        seenIds.add(newId);
+                        continue;
+                    }
+                }
+                console.warn(`Removing duplicate article ID: ${article.id}`);
+            } else {
+                seenIds.add(article.id);
+                uniqueArticles.push(article);
+            }
+        }
+
+        if (hasDuplicates) {
+            console.log(`Cleaned up duplicate articles. New count: ${uniqueArticles.length}`);
+            setArticles(uniqueArticles);
+            storage.saveArticles(uniqueArticles);
+        }
+    }, [articles.length]);
+
     // Email Scheduler (Electron only)
     useEffect(() => {
         const ipcRenderer = (window as any).ipcRenderer;

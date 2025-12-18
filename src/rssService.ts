@@ -132,7 +132,7 @@ function parseJSONFeed(json: any, feedId: string, feedTitle: string): Article[] 
         const pubDate = item.date_published ? new Date(item.date_published) : undefined;
 
         // Use item.id if available, otherwise create a stable ID from link/title (no index to avoid position-based changes)
-        const rawId = item.id || btoa(encodeURIComponent(link || title)).slice(0, 40);
+        const rawId = item.id || btoa(encodeURIComponent(link || title));
         const uniqueId = `${feedId}-${rawId}`;
 
         return {
@@ -169,8 +169,8 @@ function parseRSSFeed(xml: Document, feedId: string, feedTitle: string): Article
 
         // Use guid if available, otherwise create a stable ID from feedId + link/title (no index to avoid position-based changes)
         const guidContent = item.querySelector('guid')?.textContent;
-        // Increase slice length for better uniqueness; removed index to keep IDs stable across refreshes
-        const fallbackId = `${feedId}-${btoa(encodeURIComponent(link || title)).slice(0, 40)}`;
+        // Removed slice to ensure uniqueness even with long shared URL prefixes
+        const fallbackId = `${feedId}-${btoa(encodeURIComponent(link || title))}`;
         // Ensure ID is unique per feed by prefixing with feedId if using raw GUID
         const guid = guidContent ? `${feedId}-${guidContent}` : fallbackId;
 
@@ -358,7 +358,7 @@ function parseAtomFeed(xml: Document, feedId: string, feedTitle: string): Articl
 
         const idContent = entry.querySelector('id')?.textContent;
         // Use stable ID without index to prevent read status from being lost when feed order changes
-        const fallbackId = `${feedId}-${btoa(encodeURIComponent(link || title)).slice(0, 40)}`;
+        const fallbackId = `${feedId}-${btoa(encodeURIComponent(link || title))}`;
         // Ensure ID is unique per feed by prefixing with feedId if using raw ID
         const id = idContent ? `${feedId}-${idContent}` : fallbackId;
 
