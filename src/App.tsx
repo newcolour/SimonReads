@@ -285,7 +285,7 @@ function App() {
         }
     }, []);
 
-    // Apply theme and font settings
+    // Apply theme and font settings + update native bars
     useEffect(() => {
         console.log('Theme useEffect triggered. Current theme setting:', settings.theme);
 
@@ -303,12 +303,14 @@ function App() {
                 ipcRenderer.invoke('get-system-theme').then((theme: string) => {
                     console.log('Initial system theme:', theme);
                     document.documentElement.setAttribute('data-theme', theme);
+                    updateNativeBarsForTheme(theme);
                 }).catch((err: any) => console.error('Failed to get system theme:', err));
 
                 // Listen for system theme changes
                 const handleSystemThemeChange = (_event: any, theme: string) => {
                     console.log('System theme changed:', theme);
                     document.documentElement.setAttribute('data-theme', theme);
+                    updateNativeBarsForTheme(theme);
                 };
 
                 ipcRenderer.on('system-theme-changed', handleSystemThemeChange);
@@ -329,6 +331,7 @@ function App() {
                     const newTheme = e.matches ? 'dark' : 'light';
                     console.log('CSS theme changed:', newTheme);
                     document.documentElement.setAttribute('data-theme', newTheme);
+                    updateNativeBarsForTheme(newTheme);
                 };
 
                 darkModeQuery.addEventListener('change', handleThemeChange);
@@ -370,108 +373,78 @@ function App() {
         };
         document.documentElement.style.setProperty('--app-font-size', fontSizes[settings.fontSize] || '14px');
 
+        // Update native bars directly when theme changes
+        updateNativeBarsForTheme(actualTheme);
+
     }, [settings.theme, settings.font, settings.fontSize]);
 
-    // Native bar sync - listen for data-theme attribute changes
-    const lastAppliedThemeRef = useRef<string | null>(null);
-    useEffect(() => {
+    // Helper function to update native status/navigation bars
+    async function updateNativeBarsForTheme(theme: string) {
         if (!Capacitor.isNativePlatform()) return;
 
-        const updateNativeBars = async (theme: string) => {
-            if (theme === lastAppliedThemeRef.current) return;
-            lastAppliedThemeRef.current = theme;
+        console.log(`[NativeBars] updateNativeBarsForTheme called with: ${theme}`);
 
+        try {
+            // Determine if theme is dark (light and sepia are light themes)
+            const isDark = !['light', 'sepia'].includes(theme);
+
+            // Map theme to solid background color matching the app's actual header/sidebar
+            const themeColors: Record<string, string> = {
+                'dark': '#2c2c2e',
+                'light': '#f2f2f7',
+                'sepia': '#e8dcc0',
+                'black': '#0c0c0c',
+                'nord': '#3b4252',
+                'solarized-dark': '#073642',
+                'dracula': '#44475a',
+                'gruvbox': '#3c3836',
+                'tokyo-night': '#24283b',
+                'sorcerer': '#2a1040'
+            };
+
+            const bgColor = themeColors[theme] || (isDark ? '#2c2c2e' : '#f2f2f7');
+            console.log(`[NativeBars] Theme: ${theme}, bgColor: ${bgColor}, isDark: ${isDark}`);
+
+            // Status Bar Style (text/icon color)
+            // Style.Dark = dark icons/text (for LIGHT backgrounds)
+            // Style.Light = light icons/text (for DARK backgrounds)
             try {
-                // Determine if theme is dark (light and sepia are light themes)
-                const isDark = !['light', 'sepia'].includes(theme);
+                const style = isDark ? Style.Light : Style.Dark;
+                console.log(`[NativeBars] Setting StatusBar style to: ${isDark ? 'Light' : 'Dark'}`);
+                await StatusBar.setStyle({ style });
+            } catch (e) {
+                console.error('[NativeBars] StatusBar.setStyle error:', e);
+            }
 
-                // Map theme to solid background color matching the app's actual header/sidebar
-                // These should match --bg-secondary from index.css for consistency
-                const themeColors: Record<string, string> = {
-                    'dark': '#2c2c2e',       // rgba(44, 44, 46) - bg-secondary for dark
-                    'light': '#f2f2f7',      // rgba(242, 242, 247) - bg-secondary for light
-                    'sepia': '#e8dcc0',      // rgba(232, 220, 192) - bg-secondary for sepia
-                    'black': '#0c0c0c',      // rgba(12, 12, 12) - bg-secondary for black
-                    'nord': '#3b4252',       // bg-secondary for nord
-                    'solarized-dark': '#073642',
-                    'dracula': '#44475a',
-                    'gruvbox': '#3c3836',
-                    'tokyo-night': '#24283b',
-                    'sorcerer': '#2a1040'
-                };
-
-                const bgColor = themeColors[theme] || (isDark ? '#2c2c2e' : '#f2f2f7');
-                console.log(`[NativeBars] Applying theme: ${theme}, bgColor: ${bgColor}, isDark: ${isDark}`);
-
-                // 1. Status Bar Style (text/icon color)
-                // Style.Dark = dark icons/text (for LIGHT backgrounds)
-                // Style.Light = light icons/text (for DARK backgrounds)
+            if (Capacitor.getPlatform() === 'android') {
+                // Status Bar Background
                 try {
-                    await StatusBar.setStyle({
-                        style: isDark ? Style.Light : Style.Dark
-                    });
-                    console.log(`[NativeBars] StatusBar style set to ${isDark ? 'Light (white icons)' : 'Dark (black icons)'}`);
+                    console.log(`[NativeBars] Setting StatusBar background to: ${bgColor}`);
+                    await StatusBar.setOverlaysWebView({ overlay: false });
+                    await StatusBar.setBackgroundColor({ color: bgColor });
+                    console.log('[NativeBars] StatusBar background set successfully');
                 } catch (e) {
-                    console.warn('[NativeBars] Error setting status bar style:', e);
+                    console.error('[NativeBars] StatusBar.setBackgroundColor error:', e);
                 }
 
-                if (Capacitor.getPlatform() === 'android') {
-                    // 2. Status Bar Background & Visibility
-                    try {
-                        await StatusBar.setOverlaysWebView({ overlay: false });
-                        await StatusBar.show();
-                        await StatusBar.setBackgroundColor({
-                            color: bgColor
-                        });
-                        console.log(`[NativeBars] StatusBar background set to ${bgColor}`);
-                    } catch (e) {
-                        console.warn('[NativeBars] Error setting status bar background:', e);
-                    }
-
-                    // 3. Navigation Bar (bottom bar)
-                    try {
-                        await NavigationBar.show();
-                        await NavigationBar.setColor({
-                            color: bgColor,
-                            darkButtons: !isDark // Light background needs dark buttons
-                        });
-                        console.log(`[NativeBars] NavigationBar set to ${bgColor}`);
-                    } catch (navError) {
-                        console.warn('[NativeBars] NavigationBar plugin error:', navError);
-                    }
-                }
-            } catch (error) {
-                console.warn('[NativeBars] Global failure in updateNativeBars:', error);
-            }
-        };
-
-
-        // MutationObserver to catch theme changes
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (mutation.attributeName === 'data-theme') {
-                    const newTheme = document.documentElement.getAttribute('data-theme');
-                    if (newTheme) {
-                        // Small delay to ensure styles have settled and avoid rapid flashes
-                        setTimeout(() => updateNativeBars(newTheme), 50);
-                    }
+                // Navigation Bar (bottom bar)
+                try {
+                    console.log(`[NativeBars] Setting NavigationBar to: ${bgColor}`);
+                    await NavigationBar.setColor({
+                        color: bgColor,
+                        darkButtons: !isDark
+                    });
+                    console.log('[NativeBars] NavigationBar set successfully');
+                } catch (e) {
+                    console.error('[NativeBars] NavigationBar error:', e);
                 }
             }
-        });
+        } catch (error) {
+            console.error('[NativeBars] Global error:', error);
+        }
+    }
 
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-        // Initial sync after a short delay to ensure plugins are ready
-        const timer = setTimeout(() => {
-            const initialTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-            updateNativeBars(initialTheme);
-        }, 500);
-
-        return () => {
-            observer.disconnect();
-            clearTimeout(timer);
-        };
-    }, []);
 
 
 
