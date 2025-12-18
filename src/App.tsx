@@ -382,31 +382,35 @@ function App() {
             lastAppliedThemeRef.current = theme;
 
             try {
-                // Determine if theme is dark
+                // Determine if theme is dark (light and sepia are light themes)
                 const isDark = !['light', 'sepia'].includes(theme);
 
-                // Map theme to solid background color (StatusBar doesn't like transparency)
+                // Map theme to solid background color matching the app's actual header/sidebar
+                // These should match --bg-secondary from index.css for consistency
                 const themeColors: Record<string, string> = {
-                    'dark': '#1c1c1e',
-                    'light': '#ffffff',
-                    'sepia': '#f4ecd8',
-                    'black': '#000000',
-                    'nord': '#2e3440',
-                    'solarized-dark': '#002b36',
-                    'dracula': '#282a36',
-                    'gruvbox': '#282828',
-                    'tokyo-night': '#1a1b26',
-                    'sorcerer': '#1e0c32'
+                    'dark': '#2c2c2e',       // rgba(44, 44, 46) - bg-secondary for dark
+                    'light': '#f2f2f7',      // rgba(242, 242, 247) - bg-secondary for light
+                    'sepia': '#e8dcc0',      // rgba(232, 220, 192) - bg-secondary for sepia
+                    'black': '#0c0c0c',      // rgba(12, 12, 12) - bg-secondary for black
+                    'nord': '#3b4252',       // bg-secondary for nord
+                    'solarized-dark': '#073642',
+                    'dracula': '#44475a',
+                    'gruvbox': '#3c3836',
+                    'tokyo-night': '#24283b',
+                    'sorcerer': '#2a1040'
                 };
 
-                const bgColor = themeColors[theme] || (isDark ? '#000000' : '#ffffff');
+                const bgColor = themeColors[theme] || (isDark ? '#2c2c2e' : '#f2f2f7');
                 console.log(`[NativeBars] Applying theme: ${theme}, bgColor: ${bgColor}, isDark: ${isDark}`);
 
-                // 1. Status Bar Style (text color)
+                // 1. Status Bar Style (text/icon color)
+                // Style.Dark = dark icons/text (for LIGHT backgrounds)
+                // Style.Light = light icons/text (for DARK backgrounds)
                 try {
                     await StatusBar.setStyle({
-                        style: isDark ? Style.Dark : Style.Light
+                        style: isDark ? Style.Light : Style.Dark
                     });
+                    console.log(`[NativeBars] StatusBar style set to ${isDark ? 'Light (white icons)' : 'Dark (black icons)'}`);
                 } catch (e) {
                     console.warn('[NativeBars] Error setting status bar style:', e);
                 }
@@ -414,27 +418,24 @@ function App() {
                 if (Capacitor.getPlatform() === 'android') {
                     // 2. Status Bar Background & Visibility
                     try {
-                        await StatusBar.show();
                         await StatusBar.setOverlaysWebView({ overlay: false });
+                        await StatusBar.show();
                         await StatusBar.setBackgroundColor({
                             color: bgColor
                         });
-                        console.log(`[NativeBars] StatusBar updated to ${bgColor}`);
+                        console.log(`[NativeBars] StatusBar background set to ${bgColor}`);
                     } catch (e) {
                         console.warn('[NativeBars] Error setting status bar background:', e);
                     }
 
                     // 3. Navigation Bar (bottom bar)
                     try {
-                        // Ensure navigation bar is visible
                         await NavigationBar.show();
-
-                        // Set color and contrast
                         await NavigationBar.setColor({
                             color: bgColor,
                             darkButtons: !isDark // Light background needs dark buttons
                         });
-                        console.log(`[NativeBars] NavigationBar updated to ${bgColor}`);
+                        console.log(`[NativeBars] NavigationBar set to ${bgColor}`);
                     } catch (navError) {
                         console.warn('[NativeBars] NavigationBar plugin error:', navError);
                     }
