@@ -373,10 +373,14 @@ function App() {
     }, [settings.theme, settings.font, settings.fontSize]);
 
     // Native bar sync - listen for data-theme attribute changes
+    const lastAppliedThemeRef = useRef<string | null>(null);
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) return;
 
         const updateNativeBars = async (theme: string) => {
+            if (theme === lastAppliedThemeRef.current) return;
+            lastAppliedThemeRef.current = theme;
+
             try {
                 // Determine if theme is dark
                 const isDark = !['light', 'sepia'].includes(theme);
@@ -396,53 +400,78 @@ function App() {
                 };
 
                 const bgColor = themeColors[theme] || (isDark ? '#000000' : '#ffffff');
-                console.log(`[NativeBars] Updating to theme: ${theme}, bgColor: ${bgColor}, isDark: ${isDark}`);
+                console.log(`[NativeBars] Applying theme: ${theme}, bgColor: ${bgColor}, isDark: ${isDark}`);
 
-                await StatusBar.setStyle({
-                    style: isDark ? Style.Dark : Style.Light
-                });
+                // 1. Status Bar Style (text color)
+                try {
+                    await StatusBar.setStyle({
+                        style: isDark ? Style.Dark : Style.Light
+                    });
+                } catch (e) {
+                    console.warn('[NativeBars] Error setting status bar style:', e);
+                }
 
                 if (Capacitor.getPlatform() === 'android') {
-                    await StatusBar.setBackgroundColor({
-                        color: bgColor
-                    });
-
-                    // Update Navigation Bar (bottom bar)
+                    // 2. Status Bar Background & Visibility
                     try {
+                        await StatusBar.show();
+                        await StatusBar.setOverlaysWebView({ overlay: false });
+                        await StatusBar.setBackgroundColor({
+                            color: bgColor
+                        });
+                        console.log(`[NativeBars] StatusBar updated to ${bgColor}`);
+                    } catch (e) {
+                        console.warn('[NativeBars] Error setting status bar background:', e);
+                    }
+
+                    // 3. Navigation Bar (bottom bar)
+                    try {
+                        // Ensure navigation bar is visible
+                        await NavigationBar.show();
+
+                        // Set color and contrast
                         await NavigationBar.setColor({
                             color: bgColor,
-                            darkButtons: !isDark // Light theme needs dark buttons, dark theme needs light buttons
+                            darkButtons: !isDark // Light background needs dark buttons
                         });
+                        console.log(`[NativeBars] NavigationBar updated to ${bgColor}`);
                     } catch (navError) {
-                        console.warn('NavigationBar plugin error:', navError);
+                        console.warn('[NativeBars] NavigationBar plugin error:', navError);
                     }
                 }
             } catch (error) {
-                console.warn('Failed to update native bars:', error);
+                console.warn('[NativeBars] Global failure in updateNativeBars:', error);
             }
         };
 
-        // Initial sync
-        const initialTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-        updateNativeBars(initialTheme);
 
-        // Observer for future changes
+        // MutationObserver to catch theme changes
         const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
+            for (const mutation of mutations) {
                 if (mutation.attributeName === 'data-theme') {
                     const newTheme = document.documentElement.getAttribute('data-theme');
                     if (newTheme) {
-                        console.log(`[NativeBars] Mutation detected: ${newTheme}`);
-                        updateNativeBars(newTheme);
+                        // Small delay to ensure styles have settled and avoid rapid flashes
+                        setTimeout(() => updateNativeBars(newTheme), 50);
                     }
                 }
-            });
+            }
         });
 
-        observer.observe(document.documentElement, { attributes: true });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-        return () => observer.disconnect();
+        // Initial sync after a short delay to ensure plugins are ready
+        const timer = setTimeout(() => {
+            const initialTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            updateNativeBars(initialTheme);
+        }, 500);
+
+        return () => {
+            observer.disconnect();
+            clearTimeout(timer);
+        };
     }, []);
+
 
 
     // Auto-refresh logic (interval-based)
