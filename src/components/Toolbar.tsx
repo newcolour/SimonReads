@@ -64,6 +64,17 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
         setShowSettings(true);
     };
 
+    const handleCloseSettings = () => {
+        // Restore theme to original settings (undo preview)
+        let originalTheme = settings.theme;
+        if (settings.theme === 'system') {
+            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            originalTheme = isDark ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', originalTheme);
+        setShowSettings(false);
+    };
+
     // Call setOpenSettingsRef once on mount to pass the function up
     if (setOpenSettingsRef) {
         setOpenSettingsRef(openSettings);
@@ -275,11 +286,11 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
     };
 
     const modal = showSettings && (
-        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+        <div className="modal-overlay" onClick={handleCloseSettings}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2>Settings</h2>
-                    <button className="close-btn" onClick={() => setShowSettings(false)}>
+                    <button className="close-btn" onClick={handleCloseSettings}>
                         <X size={20} />
                     </button>
                 </div>
@@ -402,7 +413,17 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 <label>Theme</label>
                                 <select
                                     value={tempSettings.theme}
-                                    onChange={e => setTempSettings({ ...tempSettings, theme: e.target.value as any })}
+                                    onChange={e => {
+                                        const val = e.target.value as any;
+                                        setTempSettings({ ...tempSettings, theme: val });
+                                        // Live preview
+                                        let previewTheme = val;
+                                        if (val === 'system') {
+                                            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                                            previewTheme = isDark ? 'dark' : 'light';
+                                        }
+                                        document.documentElement.setAttribute('data-theme', previewTheme);
+                                    }}
                                 >
                                     <option value="system">System</option>
                                     <option value="dark">Dark</option>

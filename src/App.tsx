@@ -370,10 +370,13 @@ function App() {
         };
         document.documentElement.style.setProperty('--app-font-size', fontSizes[settings.fontSize] || '14px');
 
-        // Update native status bar for Android/iOS
-        const updateNativeBars = async (theme: string) => {
-            if (!Capacitor.isNativePlatform()) return;
+    }, [settings.theme, settings.font, settings.fontSize]);
 
+    // Native bar sync - listen for data-theme attribute changes
+    useEffect(() => {
+        if (!Capacitor.isNativePlatform()) return;
+
+        const updateNativeBars = async (theme: string) => {
             try {
                 // Determine if theme is dark
                 const isDark = !['light', 'sepia'].includes(theme);
@@ -393,6 +396,7 @@ function App() {
                 };
 
                 const bgColor = themeColors[theme] || (isDark ? '#000000' : '#ffffff');
+                console.log(`[NativeBars] Updating to theme: ${theme}, bgColor: ${bgColor}, isDark: ${isDark}`);
 
                 await StatusBar.setStyle({
                     style: isDark ? Style.Dark : Style.Light
@@ -418,8 +422,28 @@ function App() {
             }
         };
 
-        updateNativeBars(actualTheme);
-    }, [settings.theme, settings.font, settings.fontSize]);
+        // Initial sync
+        const initialTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        updateNativeBars(initialTheme);
+
+        // Observer for future changes
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.attributeName === 'data-theme') {
+                    const newTheme = document.documentElement.getAttribute('data-theme');
+                    if (newTheme) {
+                        console.log(`[NativeBars] Mutation detected: ${newTheme}`);
+                        updateNativeBars(newTheme);
+                    }
+                }
+            });
+        });
+
+        observer.observe(document.documentElement, { attributes: true });
+
+        return () => observer.disconnect();
+    }, []);
+
 
     // Auto-refresh logic (interval-based)
     useEffect(() => {
