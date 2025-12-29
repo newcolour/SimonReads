@@ -15,6 +15,7 @@ import WelcomeTour from './components/WelcomeTour';
 import { parseOpml } from './importService';
 import { NotificationService } from './services/notificationService';
 import { usePersonalityAutoSwitch } from './hooks/usePersonality';
+import { generateNewsreelInBackground, getNewsreelState, subscribeToNewsreel } from './services/newsreelService';
 import './App.css';
 
 function App() {
@@ -76,6 +77,38 @@ function App() {
     useEffect(() => {
         articlesRef.current = articles;
     }, [articles]);
+
+    // Newsreel background generation state
+    const [newsreelStatus, setNewsreelStatus] = useState<{
+        isGenerating: boolean;
+        progress: string;
+        error: string | null;
+    }>({ isGenerating: false, progress: '', error: null });
+    const [newsreelToast, setNewsreelToast] = useState<string | null>(null);
+
+    // Subscribe to newsreel service updates
+    useEffect(() => {
+        const unsubscribe = subscribeToNewsreel((state) => {
+            setNewsreelStatus({
+                isGenerating: state.isGenerating,
+                progress: state.progress,
+                error: state.error
+            });
+
+            // Show toast notifications
+            if (state.isGenerating && state.progress) {
+                setNewsreelToast(`📰 ${state.progress}`);
+            } else if (!state.isGenerating && state.summary) {
+                setNewsreelToast('✅ Newsreel ready! Click the newspaper icon to view.');
+                // Auto-hide success toast after 5 seconds
+                setTimeout(() => setNewsreelToast(null), 5000);
+            } else if (state.error) {
+                setNewsreelToast(`❌ Newsreel failed: ${state.error}`);
+                setTimeout(() => setNewsreelToast(null), 5000);
+            }
+        });
+        return unsubscribe;
+    }, []);
 
     // Load data from storage on mount
     // Load data from storage on mount
@@ -1218,9 +1251,35 @@ function App() {
     };
 
     const handleOpenDailyNewsreel = () => {
+        // Check if newsreel is already generating or cached
+        const state = getNewsreelState();
+
+        // Filter articles for daily newsreel
+        const dailyArticles = articles.filter(a => {
+            const pubDate = a.pubDate ? new Date(a.pubDate) : new Date();
+            const hoursAgo = (Date.now() - pubDate.getTime()) / (1000 * 60 * 60);
+            return hoursAgo <= settings.dailyNewsreelTimeHorizon;
+        });
+
+        const articleHash = dailyArticles.map(a => a.id).sort().join('|');
+
+        // If we have a cached result for these articles, show it
+        if (state.articleHash === articleHash && state.summary) {
+            setShowDailyNewsreel(true);
+            setShowNewsreel(false);
+            setMobileView('article');
+            return;
+        }
+
+        // If not generating, start background generation
+        if (!state.isGenerating) {
+            generateNewsreelInBackground(dailyArticles, settings, true);
+        }
+
+        // Show the newsreel view (it will show loading or cached content)
         setShowDailyNewsreel(true);
         setShowNewsreel(false);
-        setMobileView('article'); // Show newsreel in article view on mobile
+        setMobileView('article');
     };
 
     const handleArticleClick = (article: Article) => {
@@ -1397,6 +1456,49 @@ function App() {
                 </div>
             </div>
             {showWelcomeTour && <WelcomeTour onComplete={handleWelcomeTourComplete} onSelectFirstArticle={handleSelectFirstArticleForTour} />}
+
+            {/* Newsreel background generation toast notification */}
+            {newsreelToast && (
+                <div
+                    className="newsreel-toast"
+                    onClick={() => {
+                        if (!newsreelStatus.isGenerating && getNewsreelState().summary) {
+                            setShowDailyNewsreel(true);
+                            setNewsreelToast(null);
+                        }
+                    }}
+                    style={{
+                        position: 'fixed',
+                        bottom: '20px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: 'var(--accent-color, #007aff)',
+                        color: 'white',
+                        padding: '12px 24px',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                        zIndex: 9999,
+                        cursor: newsreelStatus.isGenerating ? 'default' : 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}
+                >
+                    {newsreelStatus.isGenerating && (
+                        <span className="spinner" style={{
+                            width: '16px',
+                            height: '16px',
+                            border: '2px solid rgba(255,255,255,0.3)',
+                            borderTopColor: 'white',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite'
+                        }} />
+                    )}
+                    {newsreelToast}
+                </div>
+            )}
         </div >
     );
 }

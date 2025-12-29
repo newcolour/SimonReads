@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import { Article, AppSettings } from './types';
+import { Article, AppSettings, ArticleRanking } from './types';
 
 interface RankedArticle {
     article: Article;
@@ -13,7 +13,8 @@ interface RankedArticle {
 
 export async function generateNewspaperPDF(
     articles: Article[],
-    settings: AppSettings
+    settings: AppSettings,
+    cachedRankings?: ArticleRanking[]
 ): Promise<void> {
     try {
         // Validate inputs
@@ -23,8 +24,8 @@ export async function generateNewspaperPDF(
 
         console.log(`Starting PDF generation for ${articles.length} articles`);
 
-        // Step 1: Rank articles by importance
-        const rankedArticles = await rankArticlesByImportance(articles, settings);
+        // Step 1: Rank articles by importance (using cache if available)
+        const rankedArticles = await rankArticlesByImportance(articles, settings, cachedRankings);
         console.log(`Ranked ${rankedArticles.length} articles`);
 
         if (rankedArticles.length === 0) {
@@ -489,219 +490,56 @@ async function addRegularArticle(
 
 async function rankArticlesByImportance(
     articles: Article[],
-    settings: AppSettings
+    _settings: AppSettings,
+    cachedRankings?: ArticleRanking[]
 ): Promise<RankedArticle[]> {
-    const provider = settings.aiProvider || 'gemini';
-    const apiKey = provider === 'gemini' ? settings.geminiApiKey :
-        provider === 'openai' ? settings.openaiApiKey :
-            settings.claudeApiKey;
 
-    const targetLanguage = settings.summaryLanguage || 'English';
+    // 1. Fast path: Use cached rankings if available (Preferred)
+    if (cachedRankings && cachedRankings.length > 0) {
+        console.log('Using cached article rankings for PDF...');
 
-    if (!apiKey) {
-        // Fallback: rank by date
-        return articles.map(article => ({
-            article,
-            importance: article.pubDate ? new Date(article.pubDate).getTime() : 0,
-            summary: article.contentSnippet || article.content?.slice(0, 200) || 'No summary available.',
-            language: undefined
-        })).sort((a, b) => b.importance - a.importance);
-    }
+        // Map cached rankings to RankedArticle format
+        const mappedRankings: RankedArticle[] = cachedRankings
+            .map(r => {
+                const article = articles.find(a => a.id === r.id);
+                if (!article) return null;
 
-    try {
-        // Use AI to rank articles
-        const articlesInfo = articles.map((a, i) =>
-            `[Index ${i}] ${a.title} \n   ${a.contentSnippet || a.content?.slice(0, 150) || ''} `
-        ).join('\n\n');
+                // Use original title and truncated content since we don't have AI summaries
+                // Increased to 800 chars since we have larger context budgets now.
+                const cleanContent = (article.contentSnippet || article.content || '')
+                    .replace(/<[^>]+>/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .slice(0, 800); // Truncate body text (increased from 500)
 
-        const lengthMap = {
-            short: '1 paragraph (approx 60 words)',
-            medium: '2-3 paragraphs (approx 180 words)',
-            long: '3-4 paragraphs (approx 350 words)'
-        };
-        const depthMap = {
-            brief: 'focus strictly on the main event/news',
-            detailed: 'include context, background, and key details',
-            comprehensive: 'provide deep analysis, historical context, and future implications'
-        };
-
-        const len = settings.pdfSummaryLength || 'medium';
-        const dep = settings.pdfSummaryDepth || 'detailed';
-        const lengthDesc = lengthMap[len];
-        const depthDesc = depthMap[dep];
-
-        console.log(`PDF Summary Settings - Length: ${len} (${lengthDesc}), Depth: ${dep} (${depthDesc})`);
-
-        const prompt = `Analyze these ${articles.length} news articles and rank them by importance(1 - 10 scale, 10 being most important).Consider factors like: impact, timeliness, relevance, and newsworthiness.
-
-For each article:
-1. Assign an importance score(1 - 10)
-2. Translate the article title to ${targetLanguage} (keep it concise and accurate to the original meaning)
-3. Provide a summary in ${targetLanguage}.IMPORTANT: Strictly follow these requirements:
-- Length: ${lengthDesc}
-- Depth: ${depthDesc}
-   Make sure to match the specified length and depth exactly.Do not deviate from these requirements.
-4. Detect the original language of the article
-5. Create a concise search query(3 - 5 words) to find related articles about this topic from other sources
-
-Articles:
-${articlesInfo}
-
-
-Respond in JSON format:
-{
-    "rankings": [
-        {
-            "index": 0,
-            "importance": 8,
-            "translatedTitle": "Translated title in ${targetLanguage}",
-            "summary": "Summary following the specified length and depth requirements...",
-            "language": "English"(or "Italian", "Spanish", etc.),
-            "searchQuery": "concise search terms"
-        },
-        ...
-  ]
-} `;
-
-        let response;
-        if (provider === 'gemini') {
-            const model = settings.geminiModel || 'gemini-1.5-flash';
-            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }]
-                })
-            });
-            const data = await response.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            const result = JSON.parse(jsonMatch ? jsonMatch[0] : '{}');
-
-            if (!result.rankings || !Array.isArray(result.rankings)) {
-                console.error('Invalid AI response format, using fallback');
-                throw new Error('Invalid AI response');
-            }
-
-            // Filter and validate rankings
-            const seenIndices = new Set<number>();
-            const validRankings = result.rankings
-                .filter((r: any) => {
-                    // Validate that index is valid
-                    if (typeof r.index !== 'number' || r.index < 0 || r.index >= articles.length) {
-                        console.warn(`Invalid article index ${r.index}, skipping`);
-                        return false;
-                    }
-                    // Validate that article exists
-                    if (!articles[r.index]) {
-                        console.warn(`Article at index ${r.index} is undefined, skipping`);
-                        return false;
-                    }
-                    // Deduplicate
-                    if (seenIndices.has(r.index)) {
-                        console.warn(`Duplicate index ${r.index}, skipping`);
-                        return false;
-                    }
-                    seenIndices.add(r.index);
-
-                    // Validate required fields
-                    if (!r.summary || !r.importance) {
-                        console.warn(`Missing required fields for article ${r.index}, skipping`);
-                        return false;
-                    }
-                    return true;
-                })
-                .map((r: any) => ({
-                    article: articles[r.index],
-                    importance: r.importance,
-                    summary: r.summary,
-                    translatedTitle: r.translatedTitle || articles[r.index].title,
+                return {
+                    article,
+                    importance: r.score,
+                    // Use translated title if available, otherwise original
+                    translatedTitle: r.translatedTitle || article.title,
+                    // Use original content as summary since we aren't generating new ones
+                    summary: cleanContent + '...',
                     language: r.language,
-                    searchQuery: r.searchQuery
-                }))
-                .sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
+                    searchQuery: undefined,
+                    category: r.category
+                } as RankedArticle;
+            })
+            .filter((r): r is RankedArticle => r !== null)
+            .sort((a, b) => b.importance - a.importance);
 
-            if (validRankings.length === 0) {
-                console.error('No valid rankings from AI, using fallback');
-                throw new Error('No valid rankings');
-            }
-
-            console.log(`AI ranked ${validRankings.length} out of ${articles.length} articles`);
-            return validRankings;
-        } else if (provider === 'openai') {
-            const model = settings.openaiModel || 'gpt-4o-mini';
-            response = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [{ role: 'user', content: prompt }],
-                    response_format: { type: 'json_object' }
-                })
-            });
-            const data = await response.json();
-            const result = JSON.parse(data.choices?.[0]?.message?.content || '{}');
-
-            if (!result.rankings || !Array.isArray(result.rankings)) {
-                console.error('Invalid OpenAI response format, using fallback');
-                throw new Error('Invalid AI response');
-            }
-
-            // Filter and validate rankings
-            const seenIndices = new Set<number>();
-            const validRankings = result.rankings
-                .filter((r: any) => {
-                    if (typeof r.index !== 'number' || r.index < 0 || r.index >= articles.length) {
-                        console.warn(`Invalid article index ${r.index}, skipping`);
-                        return false;
-                    }
-                    if (!articles[r.index]) {
-                        console.warn(`Article at index ${r.index} is undefined, skipping`);
-                        return false;
-                    }
-                    // Deduplicate
-                    if (seenIndices.has(r.index)) {
-                        console.warn(`Duplicate index ${r.index}, skipping`);
-                        return false;
-                    }
-                    seenIndices.add(r.index);
-
-                    if (!r.summary || !r.importance) {
-                        console.warn(`Missing required fields for article ${r.index}, skipping`);
-                        return false;
-                    }
-                    return true;
-                })
-                .map((r: any) => ({
-                    article: articles[r.index],
-                    importance: r.importance,
-                    summary: r.summary,
-                    translatedTitle: r.translatedTitle || articles[r.index].title,
-                    language: r.language,
-                    searchQuery: r.searchQuery
-                }))
-                .sort((a: RankedArticle, b: RankedArticle) => b.importance - a.importance);
-
-            if (validRankings.length === 0) {
-                console.error('No valid rankings from OpenAI, using fallback');
-                throw new Error('No valid rankings');
-            }
-
-            console.log(`OpenAI ranked ${validRankings.length} out of ${articles.length} articles`);
-            return validRankings;
+        if (mappedRankings.length > 0) {
+            return mappedRankings;
         }
-    } catch (error) {
-        console.error('AI ranking failed, using fallback:', error);
     }
 
-    // Fallback ranking
+    // 2. Fallback: If no cache, just rank by date (No AI)
+    // We removed the internal AI call to keep the "Single Pass" architecture strict.
+    console.log('No cached rankings found, falling back to date sort.');
     return articles.map(article => ({
         article,
         importance: article.pubDate ? new Date(article.pubDate).getTime() : 0,
-        summary: article.contentSnippet || article.content?.slice(0, 200) || 'No summary available.',
+        summary: (article.contentSnippet || article.content || '').replace(/<[^>]+>/g, ' ').slice(0, 800) + '...',
+        translatedTitle: article.title,
         language: undefined
     })).sort((a, b) => b.importance - a.importance);
 }
@@ -841,4 +679,319 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
         console.error('Failed to fetch image:', imageUrl, error);
         return null;
     }
+}
+
+// ============================================================================
+// NEWSREEL PDF GENERATION
+// Generates a PDF from the exact newsreel markdown output with images per section
+// ============================================================================
+
+interface NewsreelSection {
+    title: string;
+    content: string;
+    sourceUrls: string[];
+    imageUrl?: string;
+}
+
+export async function generateNewsreelPDF(
+    markdownContent: string,
+    articles: Article[],
+    _settings: AppSettings
+): Promise<void> {
+    try {
+        console.log('Starting Newsreel PDF generation...');
+
+        // Parse the markdown into sections
+        const sections = parseNewsreelSections(markdownContent);
+        console.log(`Parsed ${sections.length} sections from newsreel`);
+
+        // Extract one image per section
+        await extractSectionImages(sections, articles);
+        console.log('Section images extracted');
+
+        // Generate PDF
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 15;
+        const contentWidth = pageWidth - (2 * margin);
+
+        // Add newspaper header
+        addNewspaperHeader(pdf, pageWidth);
+
+        // Add date
+        const today = new Date();
+        const dateStr = today.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        pdf.setFontSize(10);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(dateStr, pageWidth / 2, 35, { align: 'center' });
+        pdf.setDrawColor(0, 0, 0);
+        pdf.setLineWidth(0.5);
+        pdf.line(margin, 38, pageWidth - margin, 38);
+
+        let yPosition = 45;
+
+        // Render each section
+        for (const section of sections) {
+            // Check if we need a new page
+            if (yPosition > pageHeight - 60) {
+                pdf.addPage();
+                yPosition = 20;
+            }
+
+            // Section title
+            pdf.setFont('times', 'bold');
+            pdf.setFontSize(16);
+            pdf.setTextColor(0, 0, 0);
+            const titleLines = pdf.splitTextToSize(section.title, contentWidth);
+            pdf.text(titleLines, margin, yPosition);
+            yPosition += titleLines.length * 7 + 3;
+
+            // Section image (if available)
+            if (section.imageUrl) {
+                try {
+                    const imageData = await fetchImageAsBase64(section.imageUrl);
+                    if (imageData) {
+                        const imgWidth = contentWidth * 0.6;
+                        const imgHeight = imgWidth * 0.5625; // 16:9 aspect ratio
+
+                        // Check if image fits on current page
+                        if (yPosition + imgHeight > pageHeight - 40) {
+                            pdf.addPage();
+                            yPosition = 20;
+                        }
+
+                        const xOffset = margin + (contentWidth - imgWidth) / 2;
+                        pdf.addImage(imageData, 'JPEG', xOffset, yPosition, imgWidth, imgHeight);
+                        yPosition += imgHeight + 5;
+                    }
+                } catch (imgError) {
+                    console.warn('Failed to add section image:', imgError);
+                }
+            }
+
+            // Section content (clean markdown for PDF)
+            yPosition = renderMarkdownToPDF(pdf, section.content, margin, yPosition, contentWidth, pageHeight);
+
+            // Add spacing between sections
+            yPosition += 10;
+        }
+
+        // Save the PDF
+        const filename = `SimonNewsreel_${today.toISOString().split('T')[0]}.pdf`;
+        pdf.save(filename);
+        console.log('Newsreel PDF generation complete');
+
+    } catch (error) {
+        console.error('Newsreel PDF generation failed:', error);
+        throw new Error(`Newsreel PDF generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+}
+
+function parseNewsreelSections(markdown: string): NewsreelSection[] {
+    const sections: NewsreelSection[] = [];
+
+    // Split by ## headings
+    const parts = markdown.split(/^## /m);
+
+    for (const part of parts) {
+        if (!part.trim()) continue;
+
+        const lines = part.split('\n');
+        const title = lines[0].trim();
+        const content = lines.slice(1).join('\n').trim();
+
+        // Extract source URLs from markdown links
+        const urlMatches = content.matchAll(/\]\((https?:\/\/[^\)]+)\)/g);
+        const sourceUrls: string[] = [];
+        for (const match of urlMatches) {
+            sourceUrls.push(match[1]);
+        }
+
+        sections.push({
+            title,
+            content,
+            sourceUrls
+        });
+    }
+
+    return sections;
+}
+
+async function extractSectionImages(sections: NewsreelSection[], articles: Article[]): Promise<void> {
+    // Create a map of article URLs to articles for quick lookup
+    const articleMap = new Map<string, Article>();
+    for (const article of articles) {
+        articleMap.set(article.link, article);
+    }
+
+    for (const section of sections) {
+        // Try to find an image from the first source URL in this section
+        for (const url of section.sourceUrls) {
+            const article = articleMap.get(url);
+            if (article) {
+                // Try to extract image from article
+                const imageUrl = await extractImageForArticle(article);
+                if (imageUrl) {
+                    section.imageUrl = imageUrl;
+                    break;
+                }
+            }
+        }
+
+        // If no image found from articles, try to fetch from the first source URL directly
+        if (!section.imageUrl && section.sourceUrls.length > 0) {
+            try {
+                const html = await fetchArticleHTML(section.sourceUrls[0]);
+                if (html) {
+                    const imageUrl = extractMainImageFromHTML(html, section.sourceUrls[0]);
+                    if (imageUrl) {
+                        section.imageUrl = imageUrl;
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to extract image from URL:', section.sourceUrls[0]);
+            }
+        }
+    }
+}
+
+async function extractImageForArticle(article: Article): Promise<string | null> {
+    // First check if article has an image in its content
+    if (article.content) {
+        const imgMatch = article.content.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (imgMatch) {
+            return resolveImageUrl(imgMatch[1], article.link);
+        }
+    }
+
+    // Try to fetch the article page and extract image
+    try {
+        const html = await fetchArticleHTML(article.link);
+        if (html) {
+            return extractMainImageFromHTML(html, article.link);
+        }
+    } catch (e) {
+        console.warn('Failed to fetch article for image:', article.link);
+    }
+
+    return null;
+}
+
+async function fetchArticleHTML(url: string): Promise<string | null> {
+    try {
+        const ipcRenderer = (window as any).ipcRenderer;
+        if (ipcRenderer) {
+            const result = await ipcRenderer.invoke('fetch-url', url);
+            if (result.success) {
+                return result.content;
+            }
+        }
+
+        // Fallback to direct fetch
+        const response = await fetch(url);
+        return await response.text();
+    } catch (e) {
+        return null;
+    }
+}
+
+function renderMarkdownToPDF(
+    pdf: jsPDF,
+    markdown: string,
+    margin: number,
+    yPosition: number,
+    contentWidth: number,
+    pageHeight: number
+): number {
+    // Clean and process markdown for PDF rendering
+    const lines = markdown.split('\n');
+
+    pdf.setFont('times', 'normal');
+    pdf.setFontSize(11);
+    pdf.setTextColor(30, 30, 30);
+
+    const lineHeight = 5;
+
+    for (const line of lines) {
+        if (!line.trim()) {
+            yPosition += lineHeight / 2;
+            continue;
+        }
+
+        // Check for page break
+        if (yPosition > pageHeight - 25) {
+            pdf.addPage();
+            yPosition = 20;
+        }
+
+        // Handle bold text (** or __)
+        let processedLine = line;
+        let linkUrl: string | null = null;
+
+        // Handle "To know more" sections with bold
+        if (line.startsWith('**To know more')) {
+            pdf.setFont('times', 'bold');
+            pdf.setFontSize(11);
+            processedLine = line.replace(/\*\*/g, '');
+        } else if (line.startsWith('- [')) {
+            // Handle bullet point links - these should be clickable
+            pdf.setFont('times', 'normal');
+            pdf.setFontSize(10);
+            pdf.setTextColor(0, 0, 180); // Blue color for links
+
+            const linkMatch = line.match(/- \[([^\]]+)\]\(([^\)]+)\)/);
+            if (linkMatch) {
+                processedLine = `• ${linkMatch[1]}`;
+                linkUrl = linkMatch[2];
+            }
+        } else if (line.startsWith('Sources:') || line.includes('**Sources:**')) {
+            pdf.setFont('times', 'bold');
+            pdf.setFontSize(10);
+            pdf.setTextColor(30, 30, 30);
+            processedLine = 'Sources:';
+        } else {
+            pdf.setFont('times', 'normal');
+            pdf.setFontSize(11);
+            pdf.setTextColor(30, 30, 30);
+            // Remove markdown formatting but keep track of links
+            processedLine = line
+                .replace(/\*\*([^*]+)\*\*/g, '$1')
+                .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+        }
+
+        // Word wrap
+        const wrappedLines = pdf.splitTextToSize(processedLine, contentWidth);
+
+        for (const wrappedLine of wrappedLines) {
+            if (yPosition > pageHeight - 25) {
+                pdf.addPage();
+                yPosition = 20;
+            }
+
+            if (linkUrl) {
+                // Add clickable link
+                pdf.textWithLink(wrappedLine, margin, yPosition, { url: linkUrl });
+            } else {
+                pdf.text(wrappedLine, margin, yPosition);
+            }
+            yPosition += lineHeight;
+        }
+
+        // Reset text color after link
+        pdf.setTextColor(30, 30, 30);
+    }
+
+    return yPosition;
 }

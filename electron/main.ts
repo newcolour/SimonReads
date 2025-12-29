@@ -291,25 +291,85 @@ ipcMain.handle('share-to-mastodon', async (event, { text }: { text: string }) =>
   return { success: true, action: 'cancelled' };
 });
 
-// Search proxy handler
+// Search proxy handler - Uses BrowserWindow to render and extract search results
 ipcMain.handle('perform-search', async (event, query: string) => {
   console.log('Search Proxy: Received query:', query);
+
+  let searchWin: BrowserWindow | null = new BrowserWindow({
+    show: false,
+    width: 1024,
+    height: 768,
+    webPreferences: {
+      offscreen: true,
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
   try {
-    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-    const response = await fetch(searchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    // Use DuckDuckGo - it works better with automated browsing
+    const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&t=h_&ia=web`;
+
+    const timeout = setTimeout(() => {
+      if (searchWin && !searchWin.isDestroyed()) {
+        searchWin.destroy();
+        searchWin = null;
       }
+    }, 15000);
+
+    await searchWin.loadURL(searchUrl, {
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     });
 
-    if (!response.ok) {
-      throw new Error(`Search failed with status: ${response.status}`);
+    // Wait for page to render
+    await new Promise(r => setTimeout(r, 3000));
+
+    if (!searchWin || searchWin.isDestroyed()) {
+      throw new Error('Search window destroyed/timeout');
     }
 
-    const html = await response.text();
-    return html;
+    // Extract search results from rendered page
+    const results = await searchWin.webContents.executeJavaScript(`
+      (function() {
+        const results = [];
+        // DuckDuckGo organic results
+        const articles = document.querySelectorAll('article[data-testid="result"]');
+        articles.forEach((article, i) => {
+          if (i >= 5) return;
+          const link = article.querySelector('a[data-testid="result-title-a"]');
+          const title = article.querySelector('h2')?.textContent || link?.textContent || '';
+          const url = link?.href || '';
+          if (title && url && !url.includes('duckduckgo.com')) {
+            results.push({ title: title.trim(), url: url });
+          }
+        });
+        // Fallback: try older DDG structure
+        if (results.length === 0) {
+          document.querySelectorAll('.result__a').forEach((link, i) => {
+            if (i >= 5) return;
+            const title = link.textContent || '';
+            const url = link.href || '';
+            if (title && url) {
+              results.push({ title: title.trim(), url: url });
+            }
+          });
+        }
+        return JSON.stringify(results);
+      })()
+    `);
+
+    clearTimeout(timeout);
+    if (searchWin && !searchWin.isDestroyed()) {
+      searchWin.destroy();
+    }
+
+    console.log('Search Proxy: Extracted results:', results);
+    return results; // Return JSON string of results directly
   } catch (error) {
     console.error('Search Proxy Error:', error);
+    if (searchWin && !searchWin.isDestroyed()) {
+      searchWin.destroy();
+    }
     throw error;
   }
 });

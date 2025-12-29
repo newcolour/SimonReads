@@ -57,6 +57,12 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
     const [claudeModels, setClaudeModels] = useState<string[]>([]);
     const [ollamaModels, setOllamaModels] = useState<string[]>([]);
     const [isLoadingModels, setIsLoadingModels] = useState(false);
+    // Newsreel-specific model lists
+    const [newsreelGeminiModels, setNewsreelGeminiModels] = useState<string[]>([]);
+    const [newsreelOpenaiModels, setNewsreelOpenaiModels] = useState<string[]>([]);
+    const [newsreelClaudeModels, setNewsreelClaudeModels] = useState<string[]>([]);
+    const [newsreelOllamaModels, setNewsreelOllamaModels] = useState<string[]>([]);
+    const [isLoadingNewsreelModels, setIsLoadingNewsreelModels] = useState(false);
 
     // Expose the openSettings function to parent
     const openSettings = () => {
@@ -167,7 +173,83 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
         }
     };
 
+    // Fetch models for newsreel-specific AI settings
+    const fetchNewsreelModels = async (provider: 'gemini' | 'openai' | 'claude' | 'ollama') => {
+        setIsLoadingNewsreelModels(true);
+        const ipcRenderer = (window as any).ipcRenderer;
 
+        try {
+            let models: string[] = [];
+            const apiKey = provider === 'gemini' ? (tempSettings.newsreelGeminiApiKey || tempSettings.geminiApiKey)
+                : provider === 'openai' ? (tempSettings.newsreelOpenaiApiKey || tempSettings.openaiApiKey)
+                    : provider === 'claude' ? (tempSettings.newsreelClaudeApiKey || tempSettings.claudeApiKey)
+                        : '';
+
+            if (provider === 'gemini' && apiKey) {
+                if (ipcRenderer) {
+                    models = await ipcRenderer.invoke('fetch-gemini-models', apiKey);
+                } else {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                    if (!response.ok) throw new Error('Failed to fetch Gemini models');
+                    const data = await response.json();
+                    models = data.models
+                        .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+                        .map((m: any) => m.name.replace('models/', ''));
+                }
+                setNewsreelGeminiModels(models);
+                if (models.length > 0 && !tempSettings.newsreelGeminiModel) {
+                    setTempSettings(prev => ({ ...prev, newsreelGeminiModel: models[0] }));
+                }
+            } else if (provider === 'openai' && apiKey) {
+                if (ipcRenderer) {
+                    models = await ipcRenderer.invoke('fetch-openai-models', apiKey);
+                } else {
+                    const response = await fetch('https://api.openai.com/v1/models', {
+                        headers: { 'Authorization': `Bearer ${apiKey}` }
+                    });
+                    if (!response.ok) throw new Error('Failed to fetch OpenAI models');
+                    const data = await response.json();
+                    models = data.data
+                        .filter((m: any) => m.id.includes('gpt'))
+                        .map((m: any) => m.id)
+                        .sort();
+                }
+                setNewsreelOpenaiModels(models);
+                if (models.length > 0 && !tempSettings.newsreelOpenaiModel) {
+                    setTempSettings(prev => ({ ...prev, newsreelOpenaiModel: models[0] }));
+                }
+            } else if (provider === 'claude') {
+                // Static list for Claude (CORS issues)
+                models = [
+                    'claude-3-5-sonnet-20241022',
+                    'claude-3-5-haiku-20241022',
+                    'claude-3-opus-20240229',
+                    'claude-3-sonnet-20240229',
+                    'claude-3-haiku-20240307'
+                ];
+                setNewsreelClaudeModels(models);
+                if (models.length > 0 && !tempSettings.newsreelClaudeModel) {
+                    setTempSettings(prev => ({ ...prev, newsreelClaudeModel: models[0] }));
+                }
+            } else if (provider === 'ollama') {
+                const baseUrl = tempSettings.newsreelOllamaUrl || tempSettings.ollamaUrl || 'http://localhost:11434';
+                const cleanUrl = baseUrl.replace(/\/$/, '');
+                const response = await fetch(`${cleanUrl}/api/tags`);
+                if (!response.ok) throw new Error('Failed to fetch Ollama models');
+                const data = await response.json();
+                models = data.models.map((m: any) => m.name);
+                setNewsreelOllamaModels(models);
+                if (models.length > 0 && !tempSettings.newsreelOllamaModel) {
+                    setTempSettings(prev => ({ ...prev, newsreelOllamaModel: models[0] }));
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch newsreel models:', error);
+            alert('Failed to fetch models. Please check your API key or Ollama connection.');
+        } finally {
+            setIsLoadingNewsreelModels(false);
+        }
+    };
 
     const handleTestEmail = async () => {
         const emailSettings = {
@@ -875,6 +957,249 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 </select>
                                 <p className="setting-hint">Articles from this time period will be included in the Daily Newsreel</p>
                             </div>
+
+                            <div className="setting-divider"></div>
+                            <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--text-primary)' }}>Newsreel AI Model</h3>
+
+                            <div className="setting-group">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                    <input
+                                        type="radio"
+                                        name="newsreelAiMode"
+                                        checked={tempSettings.newsreelUseGlobalAI !== false}
+                                        onChange={() => setTempSettings({ ...tempSettings, newsreelUseGlobalAI: true })}
+                                    />
+                                    Use Global AI Settings
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '8px' }}>
+                                    <input
+                                        type="radio"
+                                        name="newsreelAiMode"
+                                        checked={tempSettings.newsreelUseGlobalAI === false}
+                                        onChange={() => setTempSettings({ ...tempSettings, newsreelUseGlobalAI: false })}
+                                    />
+                                    Use Separate Model for Newsreel
+                                </label>
+                                <p className="setting-hint">Choose a different AI model optimized for newsreel generation</p>
+                            </div>
+
+                            {tempSettings.newsreelUseGlobalAI === false && (
+                                <>
+                                    <div className="setting-group">
+                                        <label>Newsreel AI Provider</label>
+                                        <select
+                                            value={tempSettings.newsreelAiProvider || 'gemini'}
+                                            onChange={e => setTempSettings({ ...tempSettings, newsreelAiProvider: e.target.value as any })}
+                                        >
+                                            <option value="gemini">Google Gemini</option>
+                                            <option value="openai">OpenAI</option>
+                                            <option value="claude">Anthropic Claude</option>
+                                            <option value="ollama">Ollama (Local)</option>
+                                        </select>
+                                    </div>
+
+                                    {(!tempSettings.newsreelAiProvider || tempSettings.newsreelAiProvider === 'gemini') && (
+                                        <>
+                                            <div className="setting-group">
+                                                <label>Gemini API Key</label>
+                                                <input
+                                                    type="password"
+                                                    value={tempSettings.newsreelGeminiApiKey || tempSettings.geminiApiKey || ''}
+                                                    onChange={e => setTempSettings({ ...tempSettings, newsreelGeminiApiKey: e.target.value })}
+                                                    placeholder="Use global key or enter new"
+                                                    className="api-key-input"
+                                                />
+                                            </div>
+                                            <div className="setting-group">
+                                                <label>Gemini Model</label>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    {newsreelGeminiModels.length > 0 ? (
+                                                        <select
+                                                            value={tempSettings.newsreelGeminiModel || 'gemini-1.5-flash'}
+                                                            onChange={e => setTempSettings({ ...tempSettings, newsreelGeminiModel: e.target.value })}
+                                                            className="api-key-input"
+                                                            style={{ flex: 1 }}
+                                                        >
+                                                            {newsreelGeminiModels.map(model => (
+                                                                <option key={model} value={model}>{model}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            value={tempSettings.newsreelGeminiModel || 'gemini-1.5-flash'}
+                                                            onChange={e => setTempSettings({ ...tempSettings, newsreelGeminiModel: e.target.value })}
+                                                            placeholder="e.g. gemini-1.5-flash"
+                                                            className="api-key-input"
+                                                            style={{ flex: 1 }}
+                                                        />
+                                                    )}
+                                                    <button
+                                                        className="icon-btn"
+                                                        onClick={() => fetchNewsreelModels('gemini')}
+                                                        disabled={isLoadingNewsreelModels || !(tempSettings.newsreelGeminiApiKey || tempSettings.geminiApiKey)}
+                                                        title="Fetch available models"
+                                                        style={{ height: '38px', width: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    >
+                                                        <RefreshCw size={16} className={isLoadingNewsreelModels ? 'spin' : ''} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {tempSettings.newsreelAiProvider === 'openai' && (
+                                        <>
+                                            <div className="setting-group">
+                                                <label>OpenAI API Key</label>
+                                                <input
+                                                    type="password"
+                                                    value={tempSettings.newsreelOpenaiApiKey || tempSettings.openaiApiKey || ''}
+                                                    onChange={e => setTempSettings({ ...tempSettings, newsreelOpenaiApiKey: e.target.value })}
+                                                    placeholder="Use global key or enter new"
+                                                    className="api-key-input"
+                                                />
+                                            </div>
+                                            <div className="setting-group">
+                                                <label>OpenAI Model</label>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    {newsreelOpenaiModels.length > 0 ? (
+                                                        <select
+                                                            value={tempSettings.newsreelOpenaiModel || 'gpt-4o-mini'}
+                                                            onChange={e => setTempSettings({ ...tempSettings, newsreelOpenaiModel: e.target.value })}
+                                                            className="api-key-input"
+                                                            style={{ flex: 1 }}
+                                                        >
+                                                            {newsreelOpenaiModels.map(model => (
+                                                                <option key={model} value={model}>{model}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            value={tempSettings.newsreelOpenaiModel || 'gpt-4o-mini'}
+                                                            onChange={e => setTempSettings({ ...tempSettings, newsreelOpenaiModel: e.target.value })}
+                                                            placeholder="e.g. gpt-4o-mini"
+                                                            className="api-key-input"
+                                                            style={{ flex: 1 }}
+                                                        />
+                                                    )}
+                                                    <button
+                                                        className="icon-btn"
+                                                        onClick={() => fetchNewsreelModels('openai')}
+                                                        disabled={isLoadingNewsreelModels || !(tempSettings.newsreelOpenaiApiKey || tempSettings.openaiApiKey)}
+                                                        title="Fetch available models"
+                                                        style={{ height: '38px', width: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    >
+                                                        <RefreshCw size={16} className={isLoadingNewsreelModels ? 'spin' : ''} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {tempSettings.newsreelAiProvider === 'claude' && (
+                                        <>
+                                            <div className="setting-group">
+                                                <label>Claude API Key</label>
+                                                <input
+                                                    type="password"
+                                                    value={tempSettings.newsreelClaudeApiKey || tempSettings.claudeApiKey || ''}
+                                                    onChange={e => setTempSettings({ ...tempSettings, newsreelClaudeApiKey: e.target.value })}
+                                                    placeholder="Use global key or enter new"
+                                                    className="api-key-input"
+                                                />
+                                            </div>
+                                            <div className="setting-group">
+                                                <label>Claude Model</label>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    {newsreelClaudeModels.length > 0 ? (
+                                                        <select
+                                                            value={tempSettings.newsreelClaudeModel || 'claude-3-haiku-20240307'}
+                                                            onChange={e => setTempSettings({ ...tempSettings, newsreelClaudeModel: e.target.value })}
+                                                            className="api-key-input"
+                                                            style={{ flex: 1 }}
+                                                        >
+                                                            {newsreelClaudeModels.map(model => (
+                                                                <option key={model} value={model}>{model}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            value={tempSettings.newsreelClaudeModel || 'claude-3-haiku-20240307'}
+                                                            onChange={e => setTempSettings({ ...tempSettings, newsreelClaudeModel: e.target.value })}
+                                                            placeholder="e.g. claude-3-haiku-20240307"
+                                                            className="api-key-input"
+                                                            style={{ flex: 1 }}
+                                                        />
+                                                    )}
+                                                    <button
+                                                        className="icon-btn"
+                                                        onClick={() => fetchNewsreelModels('claude')}
+                                                        disabled={isLoadingNewsreelModels}
+                                                        title="Fetch available models"
+                                                        style={{ height: '38px', width: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    >
+                                                        <RefreshCw size={16} className={isLoadingNewsreelModels ? 'spin' : ''} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {tempSettings.newsreelAiProvider === 'ollama' && (
+                                        <>
+                                            <div className="setting-group">
+                                                <label>Ollama Server URL</label>
+                                                <input
+                                                    type="text"
+                                                    value={tempSettings.newsreelOllamaUrl || tempSettings.ollamaUrl || 'http://localhost:11434'}
+                                                    onChange={e => setTempSettings({ ...tempSettings, newsreelOllamaUrl: e.target.value })}
+                                                    placeholder="http://localhost:11434"
+                                                    className="api-key-input"
+                                                />
+                                            </div>
+                                            <div className="setting-group">
+                                                <label>Ollama Model</label>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    {newsreelOllamaModels.length > 0 ? (
+                                                        <select
+                                                            value={tempSettings.newsreelOllamaModel || 'llama3'}
+                                                            onChange={e => setTempSettings({ ...tempSettings, newsreelOllamaModel: e.target.value })}
+                                                            className="api-key-input"
+                                                            style={{ flex: 1 }}
+                                                        >
+                                                            {newsreelOllamaModels.map(model => (
+                                                                <option key={model} value={model}>{model}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            value={tempSettings.newsreelOllamaModel || 'llama3'}
+                                                            onChange={e => setTempSettings({ ...tempSettings, newsreelOllamaModel: e.target.value })}
+                                                            placeholder="e.g. llama3.1:8b"
+                                                            className="api-key-input"
+                                                            style={{ flex: 1 }}
+                                                        />
+                                                    )}
+                                                    <button
+                                                        className="icon-btn"
+                                                        onClick={() => fetchNewsreelModels('ollama')}
+                                                        disabled={isLoadingNewsreelModels}
+                                                        title="Fetch available models"
+                                                        style={{ height: '38px', width: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    >
+                                                        <RefreshCw size={16} className={isLoadingNewsreelModels ? 'spin' : ''} />
+                                                    </button>
+                                                </div>
+                                                <p className="setting-hint">Recommended: llama3.1:8b, mistral:7b for best results</p>
+                                            </div>
+                                        </>
+                                    )}
+                                </>
+                            )}
                         </>
                     )}
 

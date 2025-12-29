@@ -12,60 +12,34 @@ export async function fetchRelatedArticles(searchQuery: string): Promise<Related
     }
 
     try {
-        const html = await ipcRenderer.invoke('perform-search', searchQuery);
+        // The IPC now returns a JSON string of results directly from the rendered page
+        const resultJson = await ipcRenderer.invoke('perform-search', searchQuery);
+        console.log('Received search results:', resultJson);
 
-        // Parse DuckDuckGo HTML results
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const results: RelatedArticle[] = [];
-
-        // DuckDuckGo uses .result class for each result
-        const resultElements = doc.querySelectorAll('.result');
-
-        for (let i = 0; i < Math.min(resultElements.length, 5); i++) {
-            const result = resultElements[i];
-            const linkElement = result.querySelector('.result__a');
-
-            if (linkElement) {
-                const title = linkElement.textContent?.trim() || '';
-                let url = linkElement.getAttribute('href') || '';
-
-                // Handle DuckDuckGo redirect URLs
-                if (url.startsWith('//duckduckgo.com/l/?')) {
-                    try {
-                        const urlParams = new URLSearchParams(url.split('?')[1]);
-                        const uddg = urlParams.get('uddg');
-                        if (uddg) {
-                            url = decodeURIComponent(uddg);
-                        }
-                    } catch (e) {
-                        console.warn('Failed to parse DDG redirect:', e);
-                    }
-                }
-
-                // Extract source from URL
-                let source = 'Unknown';
-                try {
-                    // Ensure URL has protocol
-                    if (!url.startsWith('http')) {
-                        url = 'https:' + url;
-                    }
-                    const urlObj = new URL(url);
-                    source = urlObj.hostname.replace('www.', '');
-                } catch (e) {
-                    // Try to find source in display element
-                    const displayUrl = result.querySelector('.result__url');
-                    if (displayUrl) {
-                        source = displayUrl.textContent?.trim().split('/')[0] || 'Unknown';
-                    }
-                }
-
-                if (title && url && source !== 'Unknown') {
-                    results.push({ title, url, source });
-                }
-            }
+        // Parse the JSON string
+        let rawResults: Array<{ title: string, url: string }> = [];
+        try {
+            rawResults = typeof resultJson === 'string' ? JSON.parse(resultJson) : resultJson;
+        } catch (e) {
+            console.error('Failed to parse search results JSON:', e);
+            return [];
         }
 
+        // Map to RelatedArticle format with source extraction
+        const results: RelatedArticle[] = rawResults.map(r => {
+            let source = 'Unknown';
+            try {
+                const urlObj = new URL(r.url);
+                source = urlObj.hostname.replace('www.', '');
+            } catch { }
+            return {
+                title: r.title,
+                url: r.url,
+                source
+            };
+        }).filter(r => r.source !== 'Unknown');
+
+        console.log(`Related articles found: ${results.length} for "${searchQuery}"`);
         return results.slice(0, 5);
     } catch (error) {
         console.error('Failed to fetch related articles:', error);

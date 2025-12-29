@@ -4,9 +4,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Article, AppSettings } from '../types';
 import { summarizeArticle } from '../summaryService';
-import { generateNewspaperPDF } from '../pdfService';
+import { generateNewsreelPDF } from '../pdfService';
 import { fetchRelatedArticles } from '../relatedArticlesService';
 import { TTSService, TTSController } from '../services/ttsService';
+import { getNewsreelState, subscribeToNewsreel, generateNewsreelInBackground, clearNewsreelCache } from '../services/newsreelService';
 import './Newsreel.css';
 
 interface NewsreelProps {
@@ -50,10 +51,67 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
         };
     }, []);
 
+    // Subscribe to background newsreel service for daily newsreel
+    useEffect(() => {
+        if (isDailyNewsreel) {
+            // Check if we have a cached result from background generation
+            const state = getNewsreelState();
+            if (state.summary) {
+                setSummary(state.summary);
+                setIsSummarizing(false);
+            } else if (state.isGenerating) {
+                setIsSummarizing(true);
+            }
+
+            // Subscribe to updates
+            const unsubscribe = subscribeToNewsreel((newState) => {
+                if (newState.summary) {
+                    setSummary(newState.summary);
+                    setIsSummarizing(false);
+                }
+                if (newState.error) {
+                    setError(newState.error);
+                    setIsSummarizing(false);
+                }
+                if (newState.isGenerating) {
+                    setIsSummarizing(true);
+                }
+            });
+
+            return unsubscribe;
+        }
+    }, [isDailyNewsreel]);
+
     useEffect(() => {
         // Don't regenerate if we're exporting a PDF - prevent race conditions
         if (!isExportingPdf) {
-            // Create a hash of article IDs to detect changes
+            // For daily newsreel, check global service first
+            if (isDailyNewsreel) {
+                const state = getNewsreelState();
+                const articleHash = articles.map(a => a.id).sort().join('|');
+
+                // If we have a cached result from background service, use it
+                if (state.articleHash === articleHash && state.summary) {
+                    console.log('✅ Using cached newsreel from background service');
+                    setSummary(state.summary);
+                    return;
+                }
+
+                // If background is generating, wait for it
+                if (state.isGenerating) {
+                    console.log('⏳ Background generation in progress...');
+                    setIsSummarizing(true);
+                    return;
+                }
+
+                // Otherwise start background generation
+                console.log('📰 Starting background newsreel generation...');
+                generateNewsreelInBackground(articles, settings, true);
+                setIsSummarizing(true);
+                return;
+            }
+
+            // For custom newsreel (selected articles), use local generation
             const articleHash = articles.map(a => a.id).sort().join('|');
 
             // Try to load from session storage
@@ -76,7 +134,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
                 generateNewsreel(articleHash);
             }
         }
-    }, [articles, isExportingPdf, CACHE_KEY]);
+    }, [articles, isExportingPdf, CACHE_KEY, isDailyNewsreel]);
 
     const handleTogglePause = () => {
         if (isPaused) {
@@ -119,9 +177,38 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
         setError(null);
 
         try {
+            // Build effective settings for newsreel
+            // Newsreel works best with cloud models (Gemini), so use newsreel-specific settings
+            // or default to Gemini if no newsreel-specific AI is configured
+            const useNewsreelAI = settings.newsreelUseGlobalAI === false;
+            const effectiveSettings: AppSettings = useNewsreelAI ? {
+                ...settings,
+                aiProvider: settings.newsreelAiProvider || 'gemini',
+                geminiApiKey: settings.newsreelGeminiApiKey || settings.geminiApiKey,
+                geminiModel: settings.newsreelGeminiModel || settings.geminiModel || 'gemini-1.5-flash',
+                openaiApiKey: settings.newsreelOpenaiApiKey || settings.openaiApiKey,
+                openaiModel: settings.newsreelOpenaiModel || settings.openaiModel || 'gpt-4o-mini',
+                claudeApiKey: settings.newsreelClaudeApiKey || settings.claudeApiKey,
+                claudeModel: settings.newsreelClaudeModel || settings.claudeModel || 'claude-3-haiku-20240307',
+                ollamaUrl: settings.newsreelOllamaUrl || settings.ollamaUrl || 'http://localhost:11434',
+                ollamaModel: settings.newsreelOllamaModel || settings.ollamaModel || 'llama3',
+            } : {
+                // If using global AI, but global is Ollama, force Gemini for newsreel
+                // Ollama (local models) don't work well for newsreel due to context limits and quality
+                ...settings,
+                aiProvider: settings.aiProvider === 'ollama' ? 'gemini' : settings.aiProvider,
+            };
+
+            // Determine model name for logging
+            let modelName = effectiveSettings.geminiModel || 'gemini-1.5-flash';
+            if (effectiveSettings.aiProvider === 'openai') modelName = effectiveSettings.openaiModel || 'gpt-4o-mini';
+            else if (effectiveSettings.aiProvider === 'claude') modelName = effectiveSettings.claudeModel || 'claude-3-haiku';
+            else if (effectiveSettings.aiProvider === 'ollama') modelName = effectiveSettings.ollamaModel || 'llama3';
+
+            console.log(`🤖 Newsreel AI: ${effectiveSettings.aiProvider} - ${modelName}`);
+
             // Use a more generous limit per article for better quality
-            // We'll rely on AI to group by topic and summarize efficiently
-            const targetTotalChars = 500000; // Increased to 500k chars (Gemini Flash has large context)
+            const targetTotalChars = 500000;
             const charsPerArticle = Math.max(2000, Math.floor(targetTotalChars / articles.length));
 
             console.log(`Processing ${articles.length} articles with ${charsPerArticle} chars each`);
@@ -192,7 +279,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
 
             console.log(`Total combined content: ${combinedContent.length} characters`);
 
-            const targetLanguage = settings.summaryLanguage || 'English';
+            const targetLanguage = effectiveSettings.summaryLanguage || 'English';
 
             const instruction = isDailyNewsreel
                 ? `Please create a comprehensive daily news digest from the following ${articles.length} articles in ${targetLanguage}.
@@ -226,7 +313,7 @@ IMPORTANT INSTRUCTIONS:
 
 This topic-based approach allows for richer summaries than individual article summaries.`;
 
-            let result = await summarizeArticle(combinedContent, settings.geminiApiKey || '', settings, instruction);
+            let result = await summarizeArticle(combinedContent, effectiveSettings.geminiApiKey || '', effectiveSettings, instruction);
 
             // Post-process to add "To know more" sections
             const queryRegex = /SEARCH_QUERY: (.*)/g;
@@ -279,9 +366,19 @@ This topic-based approach allows for richer summaries than individual article su
 
     const handleRegenerate = () => {
         console.log('🔄 Force regenerating newsreel...');
-        sessionStorage.removeItem(CACHE_KEY); // Clear cache
-        const articleHash = articles.map(a => a.id).sort().join('|');
-        generateNewsreel(articleHash);
+        sessionStorage.removeItem(CACHE_KEY); // Clear local cache
+
+        if (isDailyNewsreel) {
+            // Clear global service cache and start fresh background generation
+            clearNewsreelCache();
+            generateNewsreelInBackground(articles, settings, true);
+            setIsSummarizing(true);
+            setSummary(null);
+        } else {
+            // For custom newsreel, use local generation
+            const articleHash = articles.map(a => a.id).sort().join('|');
+            generateNewsreel(articleHash);
+        }
     };
 
     const handleReadAloud = async () => {
@@ -404,7 +501,7 @@ This topic-based approach allows for richer summaries than individual article su
         const articlesCopy = [...articles];
 
         try {
-            await generateNewspaperPDF(articlesCopy, settings);
+            await generateNewsreelPDF(summary, articlesCopy, settings);
         } catch (error) {
             console.error('PDF export failed:', error);
             alert(`Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);

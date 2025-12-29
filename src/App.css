@@ -133,3 +133,8 @@
         padding-left: 16px !important;
     }
 }
+/* Spinner animation for newsreel toast */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+

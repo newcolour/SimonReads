@@ -191,11 +191,9 @@ async function summarizeWithOllama(content: string, settings: AppSettings, instr
     const { summaryTone, summaryLanguage, summaryLength, summaryDepth, summaryPrompt, ollamaModel, ollamaUrl } = settings;
     const model = ollamaModel || 'llama3';
     const baseUrl = ollamaUrl || 'http://localhost:11434';
-    // Ensure base URL doesn't have trailing slash
     const cleanUrl = baseUrl.replace(/\/$/, '');
 
-    // Increased limit to handle newsreels with many articles and topic grouping
-    // Shorter limit for local models by default to avoid OOM or slow processing
+    // Shorter limit for local models to avoid OOM or slow processing
     const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 32000);
 
     let systemPrompt = `You are a helpful AI assistant that summarizes news articles.
@@ -215,7 +213,6 @@ IMPORTANT: Start the response with the translated title of the article as a Mark
 Article Content:
 ${plainText}`;
 
-    // Use /api/chat for better instruction following with system prompt if supported by model
     try {
         const response = await fetch(`${cleanUrl}/api/chat`, {
             method: 'POST',
@@ -241,7 +238,7 @@ ${plainText}`;
         return data.message?.content || 'No summary generated.';
     } catch (e: any) {
         console.error('Ollama summary failed:', e);
-        throw new Error(`Ollama summary failed: ${e.message}. ensure Ollama is running at ${cleanUrl}.`);
+        throw new Error(`Ollama summary failed: ${e.message}. Ensure Ollama is running at ${cleanUrl}.`);
     }
 }
 
@@ -249,10 +246,7 @@ ${plainText}`;
 export async function generateHashtags(content: string, settings: AppSettings): Promise<string[]> {
     const provider = settings.aiProvider || 'gemini';
     const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 5000); // Shorter context mainly for tags
-    const prompt = `Generate 5 relevant, popular hashtags for this article. 
-IMPORTANT: The hashtags MUST be in the SAME LANGUAGE as the article content.
-Output ONLY the hashtags separated by spaces (e.g. #tech #ai #news or #tecnología #inteligenciaartificial for Spanish articles). 
-Do not include any other text.`;
+    const prompt = "Generate 5 relevant, popular hashtags for this article. Output ONLY the hashtags separated by spaces (e.g. #tech #ai #news). Do not include any other text.";
 
     try {
         let text = '';
@@ -262,14 +256,12 @@ Do not include any other text.`;
             text = await summarizeWithOpenAI(plainText, settings.openaiApiKey || '', settings, prompt);
         } else if (provider === 'claude') {
             text = await summarizeWithClaude(plainText, settings.claudeApiKey || '', settings, prompt);
-        } else if (provider === 'ollama') {
-            text = await summarizeWithOllama(plainText, settings, prompt);
         } else {
             return [];
         }
 
-        // Extract hashtags - support unicode characters for non-English languages
-        const matches = text.match(/#[\p{L}\p{N}_]+/gu);
+        // Extract hashtags
+        const matches = text.match(/#[a-zA-Z0-9_]+/g);
         return matches ? matches.slice(0, 5) : [];
     } catch (e) {
         console.error("Failed to generate hashtags:", e);
