@@ -12,6 +12,7 @@ import ArticleView from './components/ArticleView';
 import Toolbar from './components/Toolbar';
 import Newsreel from './components/Newsreel';
 import WelcomeTour from './components/WelcomeTour';
+import ModernLayout from './components/ModernLayout';
 import { parseOpml } from './importService';
 import { NotificationService } from './services/notificationService';
 import { usePersonalityAutoSwitch } from './hooks/usePersonality';
@@ -66,6 +67,9 @@ function App() {
         }
     });
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isNewsreelGenerating, setIsNewsreelGenerating] = useState(false);
+    const [isNewsreelReady, setIsNewsreelReady] = useState(false);
+    const [newsreelProgress, setNewsreelProgress] = useState('');
     const [showWelcomeTour, setShowWelcomeTour] = useState(false);
     // Mobile view state: 'feeds' | 'articles' | 'article'
     const [mobileView, setMobileView] = useState<'feeds' | 'articles' | 'article'>('feeds');
@@ -602,6 +606,31 @@ function App() {
         }
     }, [articles.length]);
 
+    // Newsreel Status Monitoring
+    useEffect(() => {
+        const updateStatus = (state: any) => {
+            console.log('📰 Newsreel state update:', { isGenerating: state.isGenerating, hasSummary: !!state.summary, progress: state.progress, generatedAt: state.generatedAt });
+
+            setIsNewsreelGenerating(state.isGenerating);
+            setNewsreelProgress(state.progress || '');
+
+            // Check if summary exists and is fresh (generated within 24 hours)
+            const isFresh = state.generatedAt && (Date.now() - state.generatedAt < 24 * 60 * 60 * 1000);
+
+            if (!state.isGenerating && state.summary && isFresh) {
+                console.log('✅ Newsreel is READY');
+                setIsNewsreelReady(true);
+            } else {
+                setIsNewsreelReady(false);
+            }
+        };
+
+        const unsubscribe = subscribeToNewsreel(updateStatus);
+        updateStatus(getNewsreelState());
+
+        return unsubscribe;
+    }, []);
+
     // Email Scheduler (Electron only)
     useEffect(() => {
         const ipcRenderer = (window as any).ipcRenderer;
@@ -659,22 +688,52 @@ function App() {
         };
     }, [settings.emailEnabled, settings.emailSendTime, settings.emailTimeHorizon, articles, settings]);
 
+    const refreshAbortController = useRef<AbortController | null>(null);
+
     const handleRefresh = useCallback(async () => {
-        if (feeds.length === 0 || isRefreshing) return;
+        if (feeds.length === 0) return;
+
+        // If already refreshing, abort the current operation
+        if (isRefreshing) {
+            console.log('Cancelling refresh...');
+            refreshAbortController.current?.abort();
+            return;
+        }
 
         console.log('=== REFRESH STARTED ===');
         setIsRefreshing(true);
+
+        // Create new AbortController for this run
+        refreshAbortController.current = new AbortController();
+        const signal = refreshAbortController.current.signal;
+
         const fetchedArticles: Article[] = [];
         const updatedFeeds = [...feeds];
 
         for (let i = 0; i < feeds.length; i++) {
+            // Check for abort signal before fetching
+            if (signal.aborted) {
+                console.log('Refresh aborted.');
+                break;
+            }
+
             try {
                 const feedArticles = await fetchFeed(feeds[i]);
+
+                // Check for abort signal after fetching (before processing)
+                if (signal.aborted) break;
+
                 fetchedArticles.push(...feedArticles);
                 updatedFeeds[i] = { ...feeds[i], lastFetched: new Date() };
             } catch (error) {
                 console.error(`Failed to refresh feed: ${feeds[i].title}`);
             }
+        }
+
+        // If aborted, stop here and clean up
+        if (signal.aborted) {
+            setIsRefreshing(false);
+            return;
         }
 
         // IMPORTANT: Read the LATEST articles from STORAGE, not from React state.
@@ -935,6 +994,12 @@ function App() {
     }, [feeds, articles, isRefreshing]);
 
     const handleAddFeed = async (url: string) => {
+        // Check for duplicates
+        if (feeds.some(f => f.url.trim().toLowerCase() === url.trim().toLowerCase())) {
+            alert('This feed is already in your list.');
+            throw new Error('Duplicate feed');
+        }
+
         try {
             // Use rssService to fetch and validate feed details
             const { title, articles: feedArticles } = await fetchFeedDetails(url, crypto.randomUUID());
@@ -1251,35 +1316,31 @@ function App() {
     };
 
     const handleOpenDailyNewsreel = () => {
-        // Check if newsreel is already generating or cached
-        const state = getNewsreelState();
-
-        // Filter articles for daily newsreel
-        const dailyArticles = articles.filter(a => {
-            const pubDate = a.pubDate ? new Date(a.pubDate) : new Date();
-            const hoursAgo = (Date.now() - pubDate.getTime()) / (1000 * 60 * 60);
-            return hoursAgo <= settings.dailyNewsreelTimeHorizon;
-        });
-
-        const articleHash = dailyArticles.map(a => a.id).sort().join('|');
-
-        // If we have a cached result for these articles, show it
-        if (state.articleHash === articleHash && state.summary) {
-            setShowDailyNewsreel(true);
+        if (isNewsreelReady) {
             setShowNewsreel(false);
             setMobileView('article');
+            setShowDailyNewsreel(true);
             return;
         }
 
-        // If not generating, start background generation
-        if (!state.isGenerating) {
-            generateNewsreelInBackground(dailyArticles, settings, true);
+        if (isNewsreelGenerating) {
+            alert('Newsreel is currently generating. Please wait.');
+            return;
         }
 
-        // Show the newsreel view (it will show loading or cached content)
-        setShowDailyNewsreel(true);
-        setShowNewsreel(false);
-        setMobileView('article');
+        const dailyArticles = articles.filter(a => {
+            const pubDate = a.pubDate ? new Date(a.pubDate) : new Date();
+            const hoursAgo = (Date.now() - pubDate.getTime()) / (1000 * 60 * 60);
+            return hoursAgo <= settings.dailyNewsreelTimeHorizon && a.mediaType !== 'audio' && a.mediaType !== 'video';
+        });
+
+        generateNewsreelInBackground(dailyArticles, settings, true);
+        alert("Newsreel is being generated in the background. A notification will appear when it's ready.");
+    };
+
+    const handleCloseDailyNewsreel = () => {
+        setShowDailyNewsreel(false);
+        setMobileView('articles');
     };
 
     const handleArticleClick = (article: Article) => {
@@ -1346,160 +1407,224 @@ function App() {
     };
 
     return (
-        <div className="app">
-            <Toolbar
-                onRefresh={handleRefresh}
-                isRefreshing={isRefreshing}
-                settings={settings}
-                onSettingsChange={handleSettingsChange}
-                feeds={feeds}
-                onOpenNewsreel={handleOpenNewsreel}
-                onOpenDailyNewsreel={handleOpenDailyNewsreel}
-                selectedCount={selectedArticleIds.size}
-                onClearAllData={handleClearAllData}
-                onImportOPML={handleImportOPML}
-                articles={articles}
-                onShowTutorial={handleShowTutorial}
-                hideButtons={true}
-                setOpenSettingsRef={(fn) => { openSettingsRef.current = fn; }}
-            />
-            <div className="app-content" data-mobile-view={mobileView}>
-                <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex' }}>
-                    <Sidebar
+        <>
+            {/* Modern Layout */}
+            {settings.layout === 'modern' ? (
+                <>
+                    {/* Toolbar rendered off-screen for settings dialog access - portal still works */}
+                    <div className="toolbar-container-hidden">
+                        <Toolbar
+                            onRefresh={handleRefresh}
+                            isRefreshing={isRefreshing}
+                            settings={settings}
+                            onSettingsChange={handleSettingsChange}
+                            feeds={feeds}
+                            onOpenNewsreel={handleOpenNewsreel}
+                            onOpenDailyNewsreel={handleOpenDailyNewsreel}
+                            selectedCount={0}
+                            onClearAllData={handleClearAllData}
+                            onImportOPML={handleImportOPML}
+                            articles={articles}
+                            onShowTutorial={handleShowTutorial}
+                            hideButtons={true}
+                            setOpenSettingsRef={(fn) => { openSettingsRef.current = fn; }}
+                        />
+                    </div>
+                    <ModernLayout
                         feeds={feeds}
-                        selectedFeedId={selectedFeedId}
-                        onSelectFeed={handleSelectFeed}
-                        onAddFeed={handleAddFeed}
-                        onRemoveFeed={handleRemoveFeed}
-                        onRenameFeed={handleRenameFeed}
-                        onUpdateFeed={handleUpdateFeed}
-                        articles={articles}
-                        searchQuery={searchQuery}
-                        onSearchChange={setSearchQuery}
-                        onMarkAllAsRead={handleMarkAllAsRead}
-                        onMarkFeedAsRead={handleMarkFeedAsRead}
-                        onRefreshFeed={handleRefreshSingleFeed}
+                        articles={filteredArticles}
                         settings={settings}
+                        selectedArticle={selectedArticle}
+                        onSelectArticle={(article) => handleSelectArticle(article, false)}
                         onRefresh={handleRefresh}
-                        isRefreshing={isRefreshing}
                         onOpenSettings={() => openSettingsRef.current?.()}
                         onOpenDailyNewsreel={handleOpenDailyNewsreel}
+                        onMarkAllAsRead={handleMarkAllAsRead}
+                        onMarkFeedAsRead={handleMarkFeedAsRead}
+                        onToggleSaved={(article) => handleToggleSaved(article.id)}
+                        onDeleteArticle={(article) => handleDeleteArticle(article.id)}
+                        onAddFeed={handleAddFeed}
+                        onRemoveFeed={handleRemoveFeed}
+                        onRefreshFeed={handleRefreshSingleFeed}
+                        isRefreshing={isRefreshing}
+                        isNewsreelGenerating={isNewsreelGenerating}
+                        isNewsreelReady={isNewsreelReady}
+                        newsreelProgress={newsreelProgress}
+                        newsreelError={newsreelStatus.error}
                     />
-                </div>
-                <div
-                    className="resize-handle"
-                    onMouseDown={() => setIsResizingSidebar(true)}
-                />
-                <div className="article-list-container" style={{ width: articleListWidth }}>
-                    <ArticleList
-                        key={selectedFeedId || 'all'}
-                        articles={filteredArticles}
-                        selectedArticle={selectedArticle}
-                        selectedArticleIds={selectedArticleIds}
-                        onSelectArticle={handleSelectArticle}
-                        onToggleRead={handleToggleRead}
-                        onToggleSaved={handleToggleSaved}
-                        onDeleteArticle={handleDeleteArticle}
-                        title={!selectedFeedId ? 'All Articles' : selectedFeedId === 'read' ? 'Read Articles' : selectedFeedId === 'saved' ? 'Saved Articles' : feeds.find(f => f.id === selectedFeedId)?.title || 'Articles'}
-                        icon={!selectedFeedId ? undefined : selectedFeedId === 'read' || selectedFeedId === 'saved' ? undefined : feeds.find(f => f.id === selectedFeedId)?.icon}
-                        onBack={() => setMobileView('feeds')}
+                    {showDailyNewsreel && (
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'var(--bg-primary)' }}>
+                            <Newsreel
+                                articles={articles.filter(a => {
+                                    if (a.mediaType === 'audio' || a.mediaType === 'video') return false;
+                                    if (!a.pubDate) return false;
+                                    const hoursAgo = (Date.now() - new Date(a.pubDate).getTime()) / (1000 * 60 * 60);
+                                    return hoursAgo <= settings.dailyNewsreelTimeHorizon;
+                                })}
+                                settings={settings}
+                                onClose={handleCloseDailyNewsreel}
+                            />
+                        </div>
+                    )}
+                </>
+            ) : (
+                /* Classic Layout */
+                <div className="app">
+                    <Toolbar
+                        onRefresh={handleRefresh}
+                        isRefreshing={isRefreshing}
                         settings={settings}
-                        isFeedSelected={!!selectedFeedId && selectedFeedId !== 'read' && selectedFeedId !== 'saved'}
+                        onSettingsChange={handleSettingsChange}
+                        feeds={feeds}
+                        onOpenNewsreel={handleOpenNewsreel}
+                        onOpenDailyNewsreel={handleOpenDailyNewsreel}
+                        selectedCount={selectedArticleIds.size}
+                        onClearAllData={handleClearAllData}
+                        onImportOPML={handleImportOPML}
+                        articles={articles}
+                        onShowTutorial={handleShowTutorial}
+                        hideButtons={true}
+                        setOpenSettingsRef={(fn) => { openSettingsRef.current = fn; }}
                     />
-                </div>
+                    <div className="app-content" data-mobile-view={mobileView}>
+                        <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex' }}>
+                            <Sidebar
+                                feeds={feeds}
+                                selectedFeedId={selectedFeedId}
+                                onSelectFeed={handleSelectFeed}
+                                onAddFeed={handleAddFeed}
+                                onRemoveFeed={handleRemoveFeed}
+                                onRenameFeed={handleRenameFeed}
+                                onUpdateFeed={handleUpdateFeed}
+                                articles={articles}
+                                searchQuery={searchQuery}
+                                onSearchChange={setSearchQuery}
+                                onMarkAllAsRead={handleMarkAllAsRead}
+                                onMarkFeedAsRead={handleMarkFeedAsRead}
+                                onRefreshFeed={handleRefreshSingleFeed}
+                                settings={settings}
+                                onRefresh={handleRefresh}
+                                isRefreshing={isRefreshing}
+                                onOpenSettings={() => openSettingsRef.current?.()}
+                                onOpenDailyNewsreel={handleOpenDailyNewsreel}
+                            />
+                        </div>
+                        <div
+                            className="resize-handle"
+                            onMouseDown={() => setIsResizingSidebar(true)}
+                        />
+                        <div className="article-list-container" style={{ width: articleListWidth }}>
+                            <ArticleList
+                                key={selectedFeedId || 'all'}
+                                articles={filteredArticles}
+                                selectedArticle={selectedArticle}
+                                selectedArticleIds={selectedArticleIds}
+                                onSelectArticle={handleSelectArticle}
+                                onToggleRead={handleToggleRead}
+                                onToggleSaved={handleToggleSaved}
+                                onDeleteArticle={handleDeleteArticle}
+                                title={!selectedFeedId ? 'All Articles' : selectedFeedId === 'read' ? 'Read Articles' : selectedFeedId === 'saved' ? 'Saved Articles' : feeds.find(f => f.id === selectedFeedId)?.title || 'Articles'}
+                                icon={!selectedFeedId ? undefined : selectedFeedId === 'read' || selectedFeedId === 'saved' ? undefined : feeds.find(f => f.id === selectedFeedId)?.icon}
+                                onBack={() => setMobileView('feeds')}
+                                settings={settings}
+                                isFeedSelected={!!selectedFeedId && selectedFeedId !== 'read' && selectedFeedId !== 'saved'}
+                            />
+                        </div>
 
-                <div
-                    className="resize-handle"
-                    onMouseDown={() => setIsResizingArticleList(true)}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    {showDailyNewsreel ? (
-                        <Newsreel
-                            articles={articles.filter(a => {
-                                // Exclude podcasts (audio/video) from newsreel
-                                if (a.mediaType === 'audio' || a.mediaType === 'video') return false;
+                        <div
+                            className="resize-handle"
+                            onMouseDown={() => setIsResizingArticleList(true)}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            {showDailyNewsreel ? (
+                                <Newsreel
+                                    articles={articles.filter(a => {
+                                        // Exclude podcasts (audio/video) from newsreel
+                                        if (a.mediaType === 'audio' || a.mediaType === 'video') return false;
 
-                                if (!a.pubDate) return false;
-                                const hoursAgo = (Date.now() - new Date(a.pubDate).getTime()) / (1000 * 60 * 60);
-                                return hoursAgo <= settings.dailyNewsreelTimeHorizon;
-                            })}
-                            settings={settings}
-                            onClose={() => {
-                                setShowDailyNewsreel(false);
-                                setMobileView('articles');
+                                        if (!a.pubDate) return false;
+                                        const hoursAgo = (Date.now() - new Date(a.pubDate).getTime()) / (1000 * 60 * 60);
+                                        return hoursAgo <= settings.dailyNewsreelTimeHorizon;
+                                    })}
+                                    settings={settings}
+                                    onClose={() => {
+                                        setShowDailyNewsreel(false);
+                                        setMobileView('articles');
+                                    }}
+                                    onArticleClick={handleArticleClick}
+                                    isDailyNewsreel={true}
+                                />
+                            ) : showNewsreel ? (
+                                <Newsreel
+                                    articles={articles.filter(a => selectedArticleIds.has(a.id))}
+                                    settings={settings}
+                                    onClose={() => setShowNewsreel(false)}
+                                    onArticleClick={handleArticleClick}
+                                />
+                            ) : (
+                                <ArticleView
+                                    article={selectedArticle}
+                                    feed={feeds.find(f => f.id === selectedArticle?.feedId)}
+                                    settings={settings}
+                                    allArticles={articles}
+                                    onClose={() => {
+                                        setSelectedArticle(null);
+                                        setMobileView('articles');
+                                    }}
+                                    onDelete={handleDeleteArticle}
+                                    onToggleSaved={handleToggleSaved}
+                                    onSelectArticle={(article) => handleArticleClick(article)}
+                                />
+                            )}
+                        </div>
+                    </div>
+                    {showWelcomeTour && <WelcomeTour onComplete={handleWelcomeTourComplete} onSelectFirstArticle={handleSelectFirstArticleForTour} />}
+
+                    {/* Newsreel background generation toast notification */}
+                    {newsreelToast && (
+                        <div
+                            className="newsreel-toast"
+                            onClick={() => {
+                                if (!newsreelStatus.isGenerating && getNewsreelState().summary) {
+                                    setShowDailyNewsreel(true);
+                                    setNewsreelToast(null);
+                                }
                             }}
-                            onArticleClick={handleArticleClick}
-                            isDailyNewsreel={true}
-                        />
-                    ) : showNewsreel ? (
-                        <Newsreel
-                            articles={articles.filter(a => selectedArticleIds.has(a.id))}
-                            settings={settings}
-                            onClose={() => setShowNewsreel(false)}
-                            onArticleClick={handleArticleClick}
-                        />
-                    ) : (
-                        <ArticleView
-                            article={selectedArticle}
-                            feed={feeds.find(f => f.id === selectedArticle?.feedId)}
-                            settings={settings}
-                            allArticles={articles}
-                            onClose={() => {
-                                setSelectedArticle(null);
-                                setMobileView('articles');
+                            style={{
+                                position: 'fixed',
+                                bottom: '20px',
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                background: 'var(--accent-color, #007aff)',
+                                color: 'white',
+                                padding: '12px 24px',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                                zIndex: 9999,
+                                cursor: newsreelStatus.isGenerating ? 'default' : 'pointer',
+                                fontSize: '14px',
+                                fontWeight: 500,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
                             }}
-                            onDelete={handleDeleteArticle}
-                            onToggleSaved={handleToggleSaved}
-                            onSelectArticle={(article) => handleArticleClick(article)}
-                        />
+                        >
+                            {newsreelStatus.isGenerating && (
+                                <span className="spinner" style={{
+                                    width: '16px',
+                                    height: '16px',
+                                    border: '2px solid rgba(255,255,255,0.3)',
+                                    borderTopColor: 'white',
+                                    borderRadius: '50%',
+                                    animation: 'spin 1s linear infinite'
+                                }} />
+                            )}
+                            {newsreelToast}
+                        </div>
                     )}
-                </div>
-            </div>
-            {showWelcomeTour && <WelcomeTour onComplete={handleWelcomeTourComplete} onSelectFirstArticle={handleSelectFirstArticleForTour} />}
-
-            {/* Newsreel background generation toast notification */}
-            {newsreelToast && (
-                <div
-                    className="newsreel-toast"
-                    onClick={() => {
-                        if (!newsreelStatus.isGenerating && getNewsreelState().summary) {
-                            setShowDailyNewsreel(true);
-                            setNewsreelToast(null);
-                        }
-                    }}
-                    style={{
-                        position: 'fixed',
-                        bottom: '20px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        background: 'var(--accent-color, #007aff)',
-                        color: 'white',
-                        padding: '12px 24px',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                        zIndex: 9999,
-                        cursor: newsreelStatus.isGenerating ? 'default' : 'pointer',
-                        fontSize: '14px',
-                        fontWeight: 500,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                    }}
-                >
-                    {newsreelStatus.isGenerating && (
-                        <span className="spinner" style={{
-                            width: '16px',
-                            height: '16px',
-                            border: '2px solid rgba(255,255,255,0.3)',
-                            borderTopColor: 'white',
-                            borderRadius: '50%',
-                            animation: 'spin 1s linear infinite'
-                        }} />
-                    )}
-                    {newsreelToast}
                 </div>
             )}
-        </div >
+        </>
     );
 }
 

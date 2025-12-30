@@ -518,7 +518,21 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     <option value="gruvbox">Gruvbox</option>
                                     <option value="tokyo-night">Tokyo Night</option>
                                     <option value="sorcerer">✨ Sorcerer</option>
+                                    <option value="warm">☀️ Warm</option>
                                 </select>
+                            </div>
+                            <div className="setting-group">
+                                <label>Layout</label>
+                                <select
+                                    value={tempSettings.layout || 'classic'}
+                                    onChange={e => setTempSettings({ ...tempSettings, layout: e.target.value as any })}
+                                >
+                                    <option value="classic">Classic (3-Column)</option>
+                                    <option value="modern">Modern (Card-Based)</option>
+                                </select>
+                                <small style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                    Modern layout features a carousel view with featured articles
+                                </small>
                             </div>
                             <div className="setting-group">
                                 <label>Font</label>

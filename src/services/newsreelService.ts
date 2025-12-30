@@ -9,6 +9,7 @@ interface NewsreelState {
     articleHash: string | null;
     error: string | null;
     progress: string;
+    generatedAt: number | null;
 }
 
 let currentState: NewsreelState = {
@@ -16,7 +17,8 @@ let currentState: NewsreelState = {
     summary: null,
     articleHash: null,
     error: null,
-    progress: ''
+    progress: '',
+    generatedAt: null
 };
 
 // Listeners for state changes
@@ -46,7 +48,8 @@ export function clearNewsreelCache() {
     updateState({
         summary: null,
         articleHash: null,
-        error: null
+        error: null,
+        generatedAt: null
     });
 }
 
@@ -82,6 +85,15 @@ export async function generateNewsreelInBackground(
     try {
         // Build effective settings for newsreel
         const useNewsreelAI = settings.newsreelUseGlobalAI === false;
+
+        console.log('🔍 Newsreel Settings Debug:', {
+            useNewsreelAI,
+            globalProvider: settings.aiProvider,
+            newsreelProvider: settings.newsreelAiProvider,
+            newsreelUseGlobalAI: settings.newsreelUseGlobalAI,
+            fullSettings: settings
+        });
+
         const effectiveSettings: AppSettings = useNewsreelAI ? {
             ...settings,
             aiProvider: settings.newsreelAiProvider || 'gemini',
@@ -95,7 +107,7 @@ export async function generateNewsreelInBackground(
             ollamaModel: settings.newsreelOllamaModel || settings.ollamaModel || 'llama3',
         } : {
             ...settings,
-            aiProvider: settings.aiProvider === 'ollama' ? 'gemini' : settings.aiProvider,
+            // Use global AI settings as-is (including Ollama)
         };
 
         updateState({ progress: `Fetching ${articles.length} articles...` });
@@ -210,7 +222,8 @@ IMPORTANT INSTRUCTIONS:
             isGenerating: false,
             summary: result,
             error: null,
-            progress: 'Newsreel ready!'
+            progress: 'Newsreel ready!',
+            generatedAt: Date.now()
         });
 
         console.log('✅ Background newsreel generation complete');

@@ -138,3 +138,18 @@
     to { transform: rotate(360deg); }
 }
 
+
+/* Hidden toolbar container for Modern Layout settings access */
+.toolbar-container-hidden {
+    position: fixed;
+    top: -9999px;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.toolbar-container-hidden .toolbar {
+    pointer-events: auto;
+}

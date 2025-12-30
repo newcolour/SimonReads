@@ -109,6 +109,13 @@ const tourSteps = [
         requiresArticle: false
     },
     {
+        title: 'Optimized for Mobile',
+        description: 'On Android, enjoy a redesigned interface with a horizontal icon bar at the top for easy one-handed navigation. Icons and touch targets are optimized for mobile.',
+        image: '📱',
+        highlight: null,
+        requiresArticle: false
+    },
+    {
         title: 'You\'re All Set!',
         description: 'Start adding feeds and enjoy your personalized news reading experience with AI assistance.',
         image: '🚀',

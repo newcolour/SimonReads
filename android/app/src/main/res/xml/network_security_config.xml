@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Allow cleartext traffic to the specific local LLM IP -->
+        <domain includeSubdomains="true">100.112.44.16</domain>
+        <!-- Also commonly used local IPs -->
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+    <!-- Fallback to system default for other domains -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

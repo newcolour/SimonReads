@@ -228,9 +228,16 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
     // Find related articles for Deep Diver personality
     useEffect(() => {
         if (personalityConfig.showRelatedArticles && article && allArticles.length > 0) {
-            findRelatedArticles(article, allArticles, 3).then(related => {
-                setRelatedArticles(related);
-            });
+            // Debounce and limit scope to avoid freezing the UI on mount
+            const timer = setTimeout(() => {
+                // Only search recent articles to improve performance
+                const recentArticles = allArticles.slice(0, 500);
+                findRelatedArticles(article, recentArticles, 3).then(related => {
+                    setRelatedArticles(related);
+                });
+            }, 1000); // Wait 1s to let initial rendering and fetching complete
+
+            return () => clearTimeout(timer);
         } else {
             setRelatedArticles([]);
         }

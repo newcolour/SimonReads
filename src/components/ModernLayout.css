@@ -1,0 +1,1007 @@
+/* Modern Layout - Uses existing theme variables for compatibility */
+
+.modern-layout {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow: hidden;
+    --accent-color: var(--accent-primary);
+}
+
+/* ============================================
+   SLIM SIDEBAR
+   ============================================ */
+
+.modern-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 60px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 38px 8px 16px 8px;
+    z-index: 1000;
+    transition: width 0.25s ease, box-shadow 0.25s ease;
+    overflow: hidden;
+    -webkit-app-region: drag;
+}
+
+.sidebar-icon,
+.sidebar-logo,
+.modern-feed-list button,
+.modern-feed-actions button {
+    -webkit-app-region: no-drag;
+}
+
+.modern-sidebar.expanded {
+    width: 200px;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-top,
+.sidebar-bottom {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--accent-color);
+    font-weight: 700;
+    font-size: 16px;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+
+.sidebar-logo:hover {
+    background: var(--hover-bg);
+}
+
+.sidebar-logo span {
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.modern-sidebar.expanded .sidebar-logo span {
+    opacity: 1;
+}
+
+.sidebar-icon {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.sidebar-icon:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.sidebar-icon.active {
+    background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+    color: var(--accent-color);
+    border: 1px solid var(--accent-color);
+    box-shadow: inset 0 0 12px color-mix(in srgb, var(--accent-color) 25%, transparent);
+}
+
+.sidebar-icon span {
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.modern-sidebar.expanded .sidebar-icon span {
+    opacity: 1;
+}
+
+.sidebar-icon svg.spinning {
+    animation: spin 1s linear infinite;
+}
+
+/* ============================================
+   MAIN CONTENT AREA
+   ============================================ */
+
+.modern-content {
+    flex: 1;
+    margin-left: 60px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 38px 24px 24px 24px;
+    /* Reduced side padding for more immersive feel */
+    transition: margin-left 0.25s ease;
+}
+
+.modern-sidebar.expanded~.modern-content {
+    margin-left: 200px;
+}
+
+/* Header with Search */
+.modern-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.modern-search-container {
+    flex: 1;
+    max-width: 400px;
+}
+
+.modern-search-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.modern-search-toggle:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.modern-search-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 10px 16px;
+    transition: border-color 0.2s;
+}
+
+.modern-search-input-wrapper:focus-within {
+    border-color: var(--accent-color);
+}
+
+.modern-search-input-wrapper input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+}
+
+.modern-search-input-wrapper input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.modern-search-input-wrapper button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.modern-search-input-wrapper button:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.modern-header-stats {
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* ============================================
+   ARTICLE CAROUSEL
+   ============================================ */
+
+.carousel-section {
+    margin-bottom: 32px;
+    will-change: opacity, transform, margin-bottom;
+}
+
+.carousel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.carousel-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.carousel-nav {
+    display: flex;
+    gap: 8px;
+}
+
+.carousel-nav button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.carousel-nav button:hover:not(:disabled) {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+}
+
+.carousel-nav button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.carousel-container {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    padding-bottom: 8px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.carousel-container::-webkit-scrollbar {
+    display: none;
+}
+
+.carousel-card {
+    flex: 0 0 200px;
+    position: relative;
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    border: 2px solid transparent;
+}
+
+.carousel-card.unread {
+    border: 2px solid #2ecc71;
+    /* Green frame for unread */
+    box-shadow: 0 0 12px rgba(46, 204, 113, 0.2);
+}
+
+.carousel-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.carousel-card.unread:hover {
+    border-color: #27ae60;
+    box-shadow: 0 8px 24px rgba(46, 204, 113, 0.3);
+}
+
+.carousel-card.selected {
+    border-color: var(--accent-color);
+}
+
+.card-image {
+    width: 100%;
+    height: 140px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+}
+
+.card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.card-image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+}
+
+.card-image-placeholder img {
+    width: 48px;
+    height: 48px;
+    opacity: 0.6;
+}
+
+.card-content {
+    padding: 12px;
+}
+
+.card-content h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 6px 0;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.card-content p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ============================================
+   FEATURED ARTICLE
+   ============================================ */
+
+.featured-article {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border-radius: 20px;
+    overflow: hidden;
+    min-height: 400px;
+}
+
+.featured-image {
+    width: 100%;
+    height: 300px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+}
+
+.featured-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.featured-image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+    color: var(--text-tertiary);
+}
+
+.featured-content {
+    padding: 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.featured-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.featured-meta .feed-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+}
+
+.featured-meta .dot {
+    opacity: 0.5;
+}
+
+.featured-content h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+    line-height: 1.3;
+}
+
+.featured-snippet {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0 0 24px 0;
+    flex: 1;
+}
+
+.featured-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-primary);
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--accent-color);
+}
+
+.action-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+}
+
+.action-btn.delete:hover {
+    background: #ff3b30;
+    border-color: #ff3b30;
+    color: white;
+}
+
+/* ============================================
+   WARM THEME (matches mockup)
+   ============================================ */
+
+[data-theme="warm"] .modern-layout,
+.modern-layout[data-theme="warm"] {
+    --bg-primary: #f5e6c8;
+    --bg-secondary: #ebe0c5;
+    --bg-tertiary: #e0d4b5;
+    --text-primary: #3d3527;
+    --text-secondary: #6b5f4a;
+    --text-tertiary: #9a8d75;
+    --border-color: #d4c9a8;
+    --accent-color: #c9a227;
+    --hover-bg: rgba(201, 162, 39, 0.15);
+}
+
+[data-theme="warm"] .modern-sidebar {
+    background: #e8dcc0;
+}
+
+[data-theme="warm"] .sidebar-logo {
+    color: #c9a227;
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+    .modern-sidebar {
+        transform: translateX(-100%);
+    }
+
+    .modern-sidebar.expanded {
+        transform: translateX(0);
+        width: 200px;
+    }
+
+    .modern-content {
+        margin-left: 0;
+        padding: 16px;
+    }
+
+    .carousel-card {
+        flex: 0 0 160px;
+    }
+
+    .card-image {
+        height: 100px;
+    }
+
+    .featured-image {
+        height: 200px;
+    }
+
+    .featured-content h1 {
+        font-size: 22px;
+    }
+
+    .featured-actions {
+        flex-wrap: wrap;
+    }
+}
+
+/* Mobile toggle button */
+.mobile-sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 999;
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: var(--accent-color);
+    color: white;
+    border-radius: 12px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 768px) {
+    .mobile-sidebar-toggle {
+        display: flex;
+    }
+}
+
+/* ============================================
+   FEEDS GRID
+   ============================================ */
+.feeds-section {
+    width: 100%;
+    margin-bottom: 32px;
+    animation: fadeIn 0.3s ease;
+}
+
+.feeds-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.feeds-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.feeds-header h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.feeds-sort-actions {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-secondary);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.sort-action {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.sort-action:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.sort-action.active {
+    background: var(--accent-color);
+    color: white;
+}
+
+.modern-feed-count {
+    background: var(--bg-secondary);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.feeds-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.modern-feed-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: all 0.2s ease;
+    cursor: default;
+    position: relative;
+}
+
+
+
+.modern-feed-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    border-color: var(--accent-color);
+}
+
+.modern-feed-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.modern-feed-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.modern-feed-icon svg {
+    color: var(--text-secondary);
+}
+
+.modern-feed-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.modern-feed-details h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 4px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.modern-feed-details p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.modern-feed-actions {
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.modern-feed-card:hover .modern-feed-actions {
+    opacity: 1;
+}
+
+.modern-feed-action-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.modern-feed-action-btn:hover {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* ============================================
+   EMBEDDED READER VIEW
+   ============================================ */
+
+.embedded-article-view {
+    /* Container needs to expand to full height for main scrolling */
+    border-radius: 0;
+    overflow: visible;
+    margin: 0 -24px 40px -24px;
+    width: auto;
+    border: none;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-primary);
+}
+
+/* Hide close button since it's embedded */
+.embedded-article-view .article-view-header .close-btn {
+    display: none !important;
+}
+
+/* Ensure reader view text is readable width */
+.embedded-article-view .reader-view {
+    max-width: 100%;
+    margin: 0;
+    padding: 40px 48px;
+}
+
+/* Notification Dot for Newsreel */
+.notification-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background-color: #e74c3c;
+    /* Red for alert */
+    border-radius: 50%;
+    border: 1px solid var(--bg-tertiary);
+}
+
+/* Force ArticleView to expand so main window handles scrolling */
+.embedded-article-view .article-view,
+.embedded-article-view .article-view-container,
+.embedded-article-view .article-view-content {
+    height: auto !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    flex: none !important;
+    max-width: 100% !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+/* ============================================
+   ANDROID-SPECIFIC STYLES
+   Horizontal top bar with bigger icons
+   ============================================ */
+
+.modern-layout.android {
+    flex-direction: column;
+}
+
+.android-topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 0 4px;
+    padding-top: env(safe-area-inset-top, 0);
+}
+
+.android-topbar-icons {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0;
+}
+
+.android-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.android-icon:hover,
+.android-icon:active {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.android-icon.active {
+    background: color-mix(in srgb, var(--accent-color) 20%, transparent);
+    color: var(--accent-color);
+}
+
+.android-icon svg {
+    width: 22px;
+    height: 22px;
+}
+
+.android-icon svg.spinning {
+    animation: spin 1s linear infinite;
+}
+
+/* Android: Adjust main content for top bar */
+.modern-layout.android .modern-content {
+    margin-left: 0;
+    margin-top: 52px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0));
+}
+
+/* Android: Hide the sidebar */
+.modern-layout.android .modern-sidebar {
+    display: none;
+}
+
+/* Android: Adjust embedded article view margins */
+.modern-layout.android .embedded-article-view {
+    margin: 0 -16px 40px -16px;
+}
+
+/* Android: Ensure carousel and content have proper spacing */
+.modern-layout.android .carousel-section {
+    margin-bottom: 24px;
+}
+
+.modern-layout.android .modern-header {
+    margin-bottom: 16px;
+}
+
+/* Android: Notification dot positioning for top bar */
+.android-topbar .notification-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background-color: #e74c3c;
+    border-radius: 50%;
+    border: 1px solid var(--bg-secondary);
+}
+
+/* Android: Smaller feeds section header */
+.modern-layout.android .feeds-header {
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.modern-layout.android .feeds-header h2 {
+    font-size: 18px;
+}
+
+.modern-layout.android .feeds-header-left {
+    gap: 8px;
+}
+
+.modern-layout.android .modern-feed-count {
+    font-size: 11px;
+    padding: 3px 8px;
+}
+
+.modern-layout.android .feeds-sort-actions {
+    gap: 2px;
+    padding: 3px;
+    border-radius: 6px;
+}
+
+.modern-layout.android .sort-action {
+    font-size: 10px;
+    padding: 5px 8px;
+    gap: 4px;
+    border-radius: 5px;
+}
+
+.modern-layout.android .sort-action svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Android: Smaller search/header section */
+.modern-layout.android .modern-header-stats {
+    font-size: 12px;
+}
+
+.modern-layout.android .modern-search-toggle {
+    width: 36px;
+    height: 36px;
+}
+
+.modern-layout.android .modern-search-toggle svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Android: Smaller feed cards */
+.modern-layout.android .feeds-grid {
+    gap: 12px;
+}
+
+.modern-layout.android .modern-feed-card {
+    padding: 12px;
+    gap: 12px;
+    border-radius: 12px;
+}
+
+.modern-layout.android .modern-feed-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+}
+
+.modern-layout.android .modern-feed-details h3 {
+    font-size: 14px;
+}
+
+.modern-layout.android .modern-feed-details p {
+    font-size: 12px;
+}
+
+.modern-layout.android .modern-feed-action-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+}
+
+.modern-layout.android .modern-feed-action-btn svg {
+    width: 14px;
+    height: 14px;
+}

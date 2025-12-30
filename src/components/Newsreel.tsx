@@ -193,10 +193,8 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
                 ollamaUrl: settings.newsreelOllamaUrl || settings.ollamaUrl || 'http://localhost:11434',
                 ollamaModel: settings.newsreelOllamaModel || settings.ollamaModel || 'llama3',
             } : {
-                // If using global AI, but global is Ollama, force Gemini for newsreel
-                // Ollama (local models) don't work well for newsreel due to context limits and quality
+                // Use global AI settings as-is (including Ollama)
                 ...settings,
-                aiProvider: settings.aiProvider === 'ollama' ? 'gemini' : settings.aiProvider,
             };
 
             // Determine model name for logging

@@ -708,3 +708,113 @@
     transition: transform 0.2s ease;
     flex-shrink: 0;
 }
+
+/* ============================================
+   ANDROID-SPECIFIC STYLES
+   Bigger icons for touchscreens
+   ============================================ */
+
+.sidebar.android .sidebar-toolbar {
+    padding: 12px 16px;
+    gap: 8px;
+    justify-content: space-around;
+}
+
+.sidebar.android .toolbar-icon-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 10px;
+}
+
+.sidebar.android .toolbar-icon-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
+.sidebar.android .search-container {
+    padding: 12px 16px 16px 16px;
+}
+
+.sidebar.android .search-input {
+    font-size: 16px;
+    padding: 12px 16px 12px 40px;
+}
+
+.sidebar.android .search-icon {
+    left: 14px;
+    width: 18px;
+    height: 18px;
+}
+
+.sidebar.android .feed-list {
+    padding: 12px;
+}
+
+.sidebar.android .feed-item {
+    padding: 14px 16px;
+    padding-right: 50px;
+    gap: 14px;
+    margin-bottom: 6px;
+}
+
+.sidebar.android .feed-title {
+    font-size: 16px;
+}
+
+.sidebar.android .feed-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.sidebar.android .feed-icon img {
+    width: 24px;
+    height: 24px;
+}
+
+.sidebar.android .feed-item svg {
+    width: 20px;
+    height: 20px;
+}
+
+.sidebar.android .unread-count {
+    font-size: 13px;
+    padding: 4px 10px;
+    min-width: 24px;
+}
+
+.sidebar.android .category-header {
+    font-size: 0.85rem;
+    padding: 14px 16px 8px 16px;
+}
+
+.sidebar.android .category-header svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Android: Always show feed actions */
+.sidebar.android .feed-actions {
+    opacity: 1 !important;
+}
+
+.sidebar.android .feed-actions button {
+    padding: 8px;
+}
+
+.sidebar.android .feed-actions svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Android: Context menu with bigger touch targets */
+.sidebar.android .context-menu-item {
+    padding: 14px 18px;
+    font-size: 15px;
+    gap: 14px;
+}
+
+.sidebar.android .context-menu-item svg {
+    width: 18px;
+    height: 18px;
+}

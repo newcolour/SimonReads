@@ -22,50 +22,80 @@ async function summarizeWithGemini(content: string, apiKey: string, settings: Ap
     }
 
     const { summaryTone, summaryLanguage, summaryLength, summaryDepth, summaryPrompt, geminiModel } = settings;
-    const model = geminiModel || 'gemini-1.5-flash';
+    const initialModel = geminiModel || 'gemini-1.5-flash';
 
-    // Strip HTML tags to save tokens
-    // Increased limit to handle newsreels with many articles and topic grouping
-    const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 60000);
+    // Fallback chain: Chosen Model -> 1.5 Flash
+    // If choice IS Flash, no fallback (or maybe 1.0 Pro if available, but Flash is best bet)
 
-    // Construct Prompt
-    let prompt = instructionOverride || `Please summarize the following article.`;
-    prompt += `\nTarget Language: ${summaryLanguage || 'English'}`;
-    prompt += `\nTone: ${summaryTone || 'neutral'}`;
-    prompt += `\nLength: ${summaryLength || 'medium'}`;
-    prompt += `\nDepth: ${summaryDepth || 'detailed'}`;
+    const executeRequest = async (model: string): Promise<string> => {
+        // Strip HTML tags to save tokens
+        const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 60000);
 
-    if (summaryPrompt) {
-        prompt += `\nAdditional Instructions: ${summaryPrompt}`;
-    }
+        // Construct Prompt
+        let prompt = instructionOverride || `Please summarize the following article.`;
+        prompt += `\nTarget Language: ${summaryLanguage || 'English'}`;
+        prompt += `\nTone: ${summaryTone || 'neutral'}`;
+        prompt += `\nLength: ${summaryLength || 'medium'}`;
+        prompt += `\nDepth: ${summaryDepth || 'detailed'}`;
 
-    prompt += `\n\nFormat the output as a clean, readable summary (using bullet points if appropriate).`;
-    prompt += `\nIMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.`;
-    prompt += `\n\nArticle Content:\n${plainText}`;
+        if (summaryPrompt) {
+            prompt += `\nAdditional Instructions: ${summaryPrompt}`;
+        }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        prompt += `\n\nFormat the output as a clean, readable summary (using bullet points if appropriate).`;
+        prompt += `\nIMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.`;
+        prompt += `\n\nArticle Content:\n${plainText}`;
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            contents: [{
-                parts: [{
-                    text: prompt
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: prompt
+                    }]
                 }]
-            }]
-        })
-    });
+            })
+        });
 
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to generate summary with Gemini');
+        if (!response.ok) {
+            const errorData = await response.json();
+
+            // Check for Quota Exceeded (429)
+            if (response.status === 429) {
+                throw new Error('QUOTA_EXCEEDED');
+            }
+
+            throw new Error(errorData.error?.message || `Failed to generate summary with Gemini (${model})`);
+        }
+
+        const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No summary generated.';
+    };
+
+    try {
+        console.log(`🤖 Gemini: Attempting with ${initialModel}...`);
+        return await executeRequest(initialModel);
+    } catch (error: any) {
+        if (error.message === 'QUOTA_EXCEEDED') {
+            const fallbackModel = 'gemini-1.5-flash';
+
+            // Only fallback if we haven't already tried the fallback
+            if (initialModel !== fallbackModel) {
+                console.warn(`⚠️ Gemini Quota Exceeded for ${initialModel}. Falling back to ${fallbackModel}...`);
+                try {
+                    return await executeRequest(fallbackModel);
+                } catch (fallbackError: any) {
+                    throw new Error(`Gemini Quota Exceeded (even with fallback to ${fallbackModel}). Please try again later.`);
+                }
+            }
+        }
+        throw error;
     }
-
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No summary generated.';
 }
 
 async function summarizeWithOpenAI(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
@@ -74,50 +104,71 @@ async function summarizeWithOpenAI(content: string, apiKey: string, settings: Ap
     }
 
     const { summaryTone, summaryLanguage, summaryLength, summaryDepth, summaryPrompt, openaiModel } = settings;
-    const model = openaiModel || 'gpt-4o-mini';
+    const initialModel = openaiModel || 'gpt-4o-mini';
+    const fallbackModel = 'gpt-4o-mini';
 
-    // Increased limit to handle newsreels with many articles and topic grouping
-    const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 60000);
+    const executeRequest = async (model: string): Promise<string> => {
+        // Increased limit to handle newsreels with many articles and topic grouping
+        const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 60000);
 
-    let systemPrompt = `You are a helpful AI assistant that summarizes news articles.
+        let systemPrompt = `You are a helpful AI assistant that summarizes news articles.
 Target Language: ${summaryLanguage || 'English'}
 Tone: ${summaryTone || 'neutral'}
 Length: ${summaryLength || 'medium'}
 Depth: ${summaryDepth || 'detailed'}`;
 
-    if (summaryPrompt) {
-        systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
-    }
+        if (summaryPrompt) {
+            systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
+        }
 
-    const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
+        const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
 Format the output as a clean, readable summary (using bullet points if appropriate).
 IMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.
 
 Article Content:
 ${plainText}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-            model: model,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-            ]
-        })
-    });
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ]
+            })
+        });
 
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to generate summary with OpenAI');
+        if (!response.ok) {
+            const errorData = await response.json();
+            if (response.status === 429) {
+                throw new Error('QUOTA_EXCEEDED');
+            }
+            throw new Error(errorData.error?.message || `Failed to generate summary with OpenAI (${model})`);
+        }
+
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || 'No summary generated.';
+    };
+
+    try {
+        console.log(`🤖 OpenAI: Attempting with ${initialModel}...`);
+        return await executeRequest(initialModel);
+    } catch (error: any) {
+        if (error.message === 'QUOTA_EXCEEDED' && initialModel !== fallbackModel) {
+            console.warn(`⚠️ OpenAI Quota Exceeded for ${initialModel}. Falling back to ${fallbackModel}...`);
+            try {
+                return await executeRequest(fallbackModel);
+            } catch (fallbackError: any) {
+                throw new Error(`OpenAI Quota Exceeded (even with fallback to ${fallbackModel}). Please try again later.`);
+            }
+        }
+        throw error;
     }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'No summary generated.';
 }
 
 async function summarizeWithClaude(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
@@ -126,65 +177,84 @@ async function summarizeWithClaude(content: string, apiKey: string, settings: Ap
     }
 
     const { summaryTone, summaryLanguage, summaryLength, summaryDepth, summaryPrompt, claudeModel } = settings;
-    const model = claudeModel || 'claude-3-haiku-20240307';
+    const initialModel = claudeModel || 'claude-3-haiku-20240307';
+    const fallbackModel = 'claude-3-haiku-20240307';
 
-    // Increased limit to handle newsreels with many articles and topic grouping
-    const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 60000);
+    // Helper to run the request
+    const executeRequest = async (model: string): Promise<string> => {
+        // ... (existing logic preparation)
+        const plainText = content.replace(/<[^>]+>/g, ' ').slice(0, 60000);
 
-    let systemPrompt = `You are a helpful AI assistant that summarizes news articles.
+        let systemPrompt = `You are a helpful AI assistant that summarizes news articles.
 Target Language: ${summaryLanguage || 'English'}
 Tone: ${summaryTone || 'neutral'}
 Length: ${summaryLength || 'medium'}
 Depth: ${summaryDepth || 'detailed'}`;
 
-    if (summaryPrompt) {
-        systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
-    }
+        if (summaryPrompt) {
+            systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
+        }
 
-    const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
+        const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
 Format the output as a clean, readable summary (using bullet points if appropriate).
 IMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.
 
 Article Content:
 ${plainText}`;
 
-    // Anthropic API requires a proxy or specific headers usually, but let's try direct first.
-    // Note: Anthropic API often requires a proxy due to CORS if called from browser.
-    // We might need to use the Electron main process proxy if this fails.
-    // For now, let's try to use the IPC proxy we set up for search, or create a new one.
-    // Actually, we should use the IPC proxy for ALL of these to avoid CORS and expose keys less.
-    // But for now, let's assume the user might be okay with direct calls or we'll fix CORS later.
-    // WAIT, Anthropic definitely blocks browser calls. We need a proxy.
-    // I'll use the 'perform-search' style proxy but for generic requests if possible, or just try direct and see.
-    // Actually, let's use the IPC proxy for Claude specifically if we can, or just standard fetch and hope for the best (it will likely fail in dev, but might work in Electron if security policies allow).
-    // Electron renderer can sometimes bypass CORS if webSecurity is false, but it's true by default.
-    // Let's try direct fetch first.
+        // Attempt direct fetch (simulating what was there, or using proxy if implemented)
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json',
+                'anthropic-dangerous-direct-browser-access': 'true' // Required for browser usage
+            },
+            body: JSON.stringify({
+                model: model,
+                max_tokens: 1500,
+                system: systemPrompt,
+                messages: [
+                    { role: 'user', content: userPrompt }
+                ]
+            })
+        });
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json',
-            'dangerously-allow-browser': 'true' // Required for browser-like environments
-        },
-        body: JSON.stringify({
-            model: model,
-            max_tokens: 1024,
-            system: systemPrompt,
-            messages: [
-                { role: 'user', content: userPrompt }
-            ]
-        })
-    });
+        if (!response.ok) {
+            const errorData = await response.json();
+            if (response.status === 429) {
+                throw new Error('QUOTA_EXCEEDED');
+            }
+            // Handle Overloaded error too
+            if (response.status === 529) {
+                throw new Error('OVERLOADED');
+            }
+            throw new Error(errorData.error?.message || `Failed to generate summary with Claude (${model})`);
+        }
 
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to generate summary with Claude');
+        const data = await response.json();
+        return data.content?.[0]?.text || 'No summary generated.';
+    };
+
+    try {
+        console.log(`🤖 Claude: Attempting with ${initialModel}...`);
+        return await executeRequest(initialModel);
+    } catch (error: any) {
+        const isQuotaIssue = error.message === 'QUOTA_EXCEEDED' || error.message === 'OVERLOADED';
+
+        if (isQuotaIssue && initialModel !== fallbackModel) {
+            console.warn(`⚠️ Claude Quota/Load Issue for ${initialModel}. Falling back to ${fallbackModel}...`);
+            try {
+                return await executeRequest(fallbackModel);
+            } catch (fallbackError: any) {
+                throw new Error(`Claude Quota/Load Issue (even with fallback to ${fallbackModel}). Please try again later.`);
+            }
+        }
+        throw error;
     }
 
-    const data = await response.json();
-    return data.content?.[0]?.text || 'No summary generated.';
+
 }
 
 async function summarizeWithOllama(content: string, settings: AppSettings, instructionOverride?: string): Promise<string> {

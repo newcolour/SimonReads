@@ -36,7 +36,8 @@ export interface Article {
     image?: string; // Episode artwork URL
 }
 
-export type Theme = 'system' | 'dark' | 'light' | 'sepia' | 'black' | 'nord' | 'solarized-dark' | 'dracula' | 'gruvbox' | 'tokyo-night' | 'sorcerer';
+export type Theme = 'system' | 'dark' | 'light' | 'sepia' | 'black' | 'nord' | 'solarized-dark' | 'dracula' | 'gruvbox' | 'tokyo-night' | 'sorcerer' | 'warm';
+export type Layout = 'classic' | 'modern';
 export type RefreshInterval = 0 | 1 | 5 | 10 | 15 | 30 | 60;
 export type RetentionPeriod = 7 | 14 | 30 | 90 | 365 | -1; // days, -1 = forever
 export type SummaryTone = 'neutral' | 'formal' | 'witty' | 'critical' | 'eli5';
@@ -65,6 +66,7 @@ export interface AppSettings {
     autoRefreshInterval: RefreshInterval; // in minutes, 0 = disabled
     retentionPeriod: RetentionPeriod;
     theme: Theme;
+    layout?: Layout; // classic or modern
     font: string;
     fontSize: 'small' | 'medium' | 'large' | 'xlarge';
     geminiApiKey?: string;

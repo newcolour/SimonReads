@@ -213,6 +213,37 @@
   /* Extra mystical blur */
 }
 
+/* Warm Theme - Cozy beige/golden theme */
+[data-theme="warm"] {
+  --bg-primary: rgba(245, 230, 200, 0.95);
+  /* Warm cream */
+  --bg-secondary: rgba(235, 224, 197, 0.92);
+  /* Soft beige */
+  --bg-tertiary: rgba(224, 212, 181, 0.88);
+  /* Muted tan */
+  --bg-hover: rgba(212, 201, 168, 0.9);
+  /* Hover beige */
+  --border-color: rgba(180, 165, 135, 0.4);
+  /* Warm border */
+  --text-primary: #3d3527;
+  /* Dark brown */
+  --text-secondary: #6b5f4a;
+  /* Medium brown */
+  --text-muted: #9a8d75;
+  /* Muted brown */
+  --accent-primary: #c9a227;
+  /* Golden accent */
+  --accent-hover: #b8921f;
+  /* Darker gold hover */
+  --accent-light: rgba(201, 162, 39, 0.2);
+  /* Golden glow */
+  --icon-color: #c9a227;
+  /* Golden icons */
+  --badge-bg: #c9a227;
+  /* Golden badges */
+  --glass-blur: 20px;
+}
+
 * {
   margin: 0;
   padding: 0;

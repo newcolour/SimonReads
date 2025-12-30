@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, ChevronDown, ChevronRight, FoldVertical, UnfoldVertical } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
 import { usePersonalityConfig } from '../hooks/usePersonality';
+import { isAndroid } from '../utils/platform';
 import FeedDiscovery from './FeedDiscovery';
 import './Sidebar.css';
 
@@ -422,8 +423,10 @@ export default function Sidebar({
         setTooltip(null);
     };
 
+    const androidMode = isAndroid();
+
     return (
-        <div className="sidebar">
+        <div className={`sidebar ${androidMode ? 'android' : ''}`}>
             <div className="sidebar-toolbar">
                 {onOpenSettings && (
                     <button
@@ -439,8 +442,7 @@ export default function Sidebar({
                     <button
                         className={`toolbar-icon-btn ${isRefreshing ? 'spinning' : ''}`}
                         onClick={onRefresh}
-                        disabled={isRefreshing}
-                        onMouseEnter={(e) => handleMouseEnter(e, "Refresh Feeds")}
+                        onMouseEnter={(e) => handleMouseEnter(e, isRefreshing ? "Stop Refresh" : "Refresh Feeds")}
                         onMouseLeave={handleMouseLeave}
                     >
                         <RefreshCw size={15} />
