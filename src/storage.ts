@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { Feed, Article, AppSettings } from './types';
 
 const FEEDS_KEY = 'rss-reader-feeds';
@@ -6,6 +7,8 @@ const SETTINGS_KEY = 'rss-reader-settings';
 
 // Safe ipcRenderer access - use lazy getter to ensure preload has run
 function getIpcRenderer() {
+    // Force null on mobile to avoid any accidental IPC calls
+    if (Capacitor.isNativePlatform()) return null;
     const ipc = (window as any).ipcRenderer || null;
     return ipc;
 }
@@ -14,12 +17,22 @@ function getItem(key: string): any {
     const ipc = getIpcRenderer();
     if (ipc) {
         console.log(`[Storage] Using IPC to read: ${key}`);
-        const data = ipc.sendSync('read-data-sync');
-        return data[key];
-    } else {
-        console.log(`[Storage] Using localStorage to read: ${key}`);
-        const data = localStorage.getItem(key);
+        try {
+            const data = ipc.sendSync('read-data-sync');
+            return data[key];
+        } catch (e) {
+            console.error('[Storage] IPC read failed, falling back to localStorage', e);
+        }
+    }
+
+    // Web / Mobile fallback
+    console.log(`[Storage] Using localStorage to read: ${key}`);
+    const data = localStorage.getItem(key);
+    try {
         return data ? JSON.parse(data) : null;
+    } catch (e) {
+        console.error(`[Storage] Failed to parse localStorage key ${key}:`, e);
+        return null;
     }
 }
 
@@ -27,10 +40,20 @@ function setItem(key: string, value: any): void {
     const ipc = getIpcRenderer();
     if (ipc) {
         console.log(`[Storage] Using IPC to write: ${key}`);
-        ipc.sendSync('write-data-sync', { key, value });
-    } else {
-        console.log(`[Storage] Using localStorage to write: ${key}`);
+        try {
+            ipc.sendSync('write-data-sync', { key, value });
+            return;
+        } catch (e) {
+            console.error('[Storage] IPC write failed, falling back to localStorage', e);
+        }
+    }
+
+    // Web / Mobile fallback
+    console.log(`[Storage] Using localStorage to write: ${key}`);
+    try {
         localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+        console.error(`[Storage] Failed to write to localStorage for key ${key}:`, e);
     }
 }
 

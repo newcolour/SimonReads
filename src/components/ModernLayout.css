@@ -832,7 +832,9 @@
     justify-content: center;
     z-index: 1000;
     padding: 0 4px;
-    padding-top: env(safe-area-inset-top, 0);
+    /* Add explicit status bar space plus safe area */
+    padding-top: calc(30px + env(safe-area-inset-top, 0));
+    height: calc(52px + 30px + env(safe-area-inset-top, 0));
 }
 
 .android-topbar-icons {
@@ -882,8 +884,8 @@
 /* Android: Adjust main content for top bar */
 .modern-layout.android .modern-content {
     margin-left: 0;
-    margin-top: 52px;
-    padding-top: calc(12px + env(safe-area-inset-top, 0));
+    margin-top: calc(52px + 30px + env(safe-area-inset-top, 0));
+    padding-top: 12px;
 }
 
 /* Android: Hide the sidebar */
