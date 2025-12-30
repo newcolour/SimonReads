@@ -104,6 +104,16 @@ export default function ModernLayout({
         });
     }, [feeds, articles, feedSort]);
 
+    // Memoized sorted articles (prevents mutation and ensures consistent order)
+    const sortedArticles = useMemo(() => {
+        return [...articles].sort((a, b) => {
+            const dateA = new Date(a.pubDate || 0).getTime();
+            const dateB = new Date(b.pubDate || 0).getTime();
+            // Default to newest first
+            return dateB - dateA;
+        });
+    }, [articles]);
+
     // Apply the collapse effect to carousel and header
     const applyCollapseEffect = (percent: number) => {
         if (!carouselSectionRef.current) return;
@@ -123,8 +133,6 @@ export default function ModernLayout({
         // Gentle parallax/scale effect (keeps element in place but moves content slightly)
         // We do NOT change height or margin to avoid flutter/layout thrashing
         const scale = 1 - (eased * 0.05);
-        // translateY removed
-        // Actually, just let it scroll naturally. Maybe a slight scale down.
         carouselSectionRef.current.style.transform = `scale(${scale})`;
         carouselSectionRef.current.style.transformOrigin = 'center center';
 
@@ -161,11 +169,7 @@ export default function ModernLayout({
         });
     };
 
-
-
-
     const handleAddFeedSubmit = async (e: React.FormEvent) => {
-        // ... (abridged for brevity, keeping same logic but saving space in replacement if possible? No, need to match context)
         e.preventDefault();
         if (newFeedUrl.trim()) {
             try {
@@ -186,7 +190,7 @@ export default function ModernLayout({
     };
 
     // Filter articles based on section and search
-    const filteredArticles = articles.filter(article => {
+    const filteredArticles = sortedArticles.filter(article => {
         // Apply search filter
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
