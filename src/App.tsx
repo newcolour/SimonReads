@@ -1432,7 +1432,7 @@ function App() {
                     </div>
                     <ModernLayout
                         feeds={feeds}
-                        articles={filteredArticles}
+                        articles={articles}
                         settings={settings}
                         selectedArticle={selectedArticle}
                         onSelectArticle={(article) => handleSelectArticle(article, false)}
