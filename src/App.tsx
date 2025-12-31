@@ -740,7 +740,7 @@ function App() {
         // This ensures we get the most up-to-date read/saved states, even if the user
         // marked articles as read while the refresh fetch was in progress.
         // This follows RavenReader's pattern of using storage as the single source of truth.
-        const storedArticles = storage.getArticles();
+        const storedArticles = await storage.getArticlesAsync();
         const existingArticlesMap = new Map(storedArticles.map(a => [a.id, a]));
 
         // Secondary Map for matching by Link (fallback if ID changes)
@@ -806,7 +806,7 @@ function App() {
         // that happened while we were fetching feeds.
         // Without this, the retention policy would use stale isRead states and might
         // incorrectly delete articles that the user just marked as read.
-        const latestStoredArticles = storage.getArticles();
+        const latestStoredArticles = await storage.getArticlesAsync();
         const latestStatesMap = new Map(latestStoredArticles.map(a => [a.id, { isRead: a.isRead, isSaved: a.isSaved }]));
 
         // Also build a link map for specific latest state lookup
@@ -894,7 +894,7 @@ function App() {
 
         setArticles(finalArticles);
         setFeeds(updatedFeeds);
-        storage.saveArticles(finalArticles);
+        await storage.saveArticlesAsync(finalArticles);
         storage.saveFeeds(updatedFeeds);
         setIsRefreshing(false);
         console.log('=== REFRESH COMPLETED ===');
@@ -914,7 +914,7 @@ function App() {
             // IMPORTANT: Read the LATEST articles from STORAGE, not from React state.
             // This ensures we get the most up-to-date read/saved states, even if the user
             // marked articles as read while the refresh fetch was in progress.
-            const storedArticles = storage.getArticles();
+            const storedArticles = await storage.getArticlesAsync();
             const existingArticlesMap = new Map(storedArticles.map(a => [a.id, a]));
 
             // Link fallback map
@@ -955,7 +955,7 @@ function App() {
 
             // CRITICAL: Re-read the latest isRead/isSaved states from storage RIGHT BEFORE saving.
             // This catches any mark-as-read operations that happened while we were fetching.
-            const latestStoredArticles = storage.getArticles();
+            const latestStoredArticles = await storage.getArticlesAsync();
             const latestStatesMap = new Map(latestStoredArticles.map(a => [a.id, { isRead: a.isRead || false, isSaved: a.isSaved || false }]));
 
             // Link fallback map for latest states
@@ -983,7 +983,7 @@ function App() {
 
             setArticles(articlesToSave);
             setFeeds(updatedFeeds);
-            storage.saveArticles(articlesToSave);
+            await storage.saveArticlesAsync(articlesToSave);
             storage.saveFeeds(updatedFeeds);
         } catch (error) {
             console.error(`Failed to refresh feed: ${feed.title}`, error);

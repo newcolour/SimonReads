@@ -810,6 +810,27 @@
     overflow-wrap: break-word !important;
 }
 
+/* Browser Mode Overrides - Expand to full height so Webview can scroll internally */
+.embedded-article-view .article-view.browser-mode,
+.embedded-article-view .article-view.browser-mode .article-view-container,
+.embedded-article-view .article-view.browser-mode .article-view-content {
+    height: 100% !important;
+    /* Must fill container */
+    min-height: 80vh;
+    /* Fallback minimum */
+    overflow: hidden !important;
+    /* Webview handles scroll */
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.embedded-article-view .article-view.browser-mode .webview {
+    flex: 1 !important;
+    height: 100% !important;
+    width: 100% !important;
+}
+
 /* ============================================
    ANDROID-SPECIFIC STYLES
    Horizontal top bar with bigger icons

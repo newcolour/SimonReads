@@ -996,7 +996,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
         : '';
 
     return (
-        <div className="article-view">
+        <div className={`article-view ${viewMode}-mode`}>
             <div className="article-view-container">
                 <div className="article-view-header" key={feedTitle || 'no-title'}>
                     {feedTitle && (

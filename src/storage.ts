@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Feed, Article, AppSettings } from './types';
 
 const FEEDS_KEY = 'rss-reader-feeds';
@@ -73,6 +74,9 @@ export const storage = {
     },
 
     getArticles(): Article[] {
+        if (Capacitor.isNativePlatform()) {
+            console.warn('[Storage] Sync getArticles called on Native. This depends on localStorage which may be incomplete. Use getArticlesAsync instead.');
+        }
         const articles = getItem(ARTICLES_KEY);
         if (!articles) return [];
         // Debug: log article counts
@@ -87,11 +91,60 @@ export const storage = {
     },
 
     saveArticles(articles: Article[]): void {
+        if (Capacitor.isNativePlatform()) {
+            this.saveArticlesAsync(articles); // Fire and forget async save for Native
+            return;
+        }
         // Debug: log article counts before saving
         const readCount = articles.filter((a: any) => a.isRead).length;
         const unreadCount = articles.filter((a: any) => !a.isRead).length;
         console.log(`[Storage] saveArticles: ${articles.length} total, ${readCount} read, ${unreadCount} unread`);
         setItem(ARTICLES_KEY, articles);
+    },
+
+    // Async versions for large data on Native
+    async getArticlesAsync(): Promise<Article[]> {
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const result = await Filesystem.readFile({
+                    path: 'articles.json',
+                    directory: Directory.Data,
+                    encoding: Encoding.UTF8
+                });
+                const articles = JSON.parse(result.data as string);
+                console.log(`[Storage] Loaded ${articles.length} articles from Filesystem`);
+                return articles.map((a: any) => ({
+                    ...a,
+                    pubDate: a.pubDate ? new Date(a.pubDate) : undefined,
+                }));
+            } catch (e) {
+                console.log('[Storage] Failed to read articles.json from Filesystem (returning empty):', e);
+                return [];
+            }
+        } else {
+            return this.getArticles();
+        }
+    },
+
+    async saveArticlesAsync(articles: Article[]): Promise<void> {
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const readCount = articles.filter((a: any) => a.isRead).length;
+                const unreadCount = articles.filter((a: any) => !a.isRead).length;
+                console.log(`[Storage] Saving to Filesystem: ${articles.length} total, ${readCount} read, ${unreadCount} unread`);
+
+                await Filesystem.writeFile({
+                    path: 'articles.json',
+                    data: JSON.stringify(articles),
+                    directory: Directory.Data,
+                    encoding: Encoding.UTF8
+                });
+            } catch (e) {
+                console.error('[Storage] Failed to save articles to Filesystem:', e);
+            }
+        } else {
+            this.saveArticles(articles);
+        }
     },
 
     getSettings(): AppSettings {
@@ -173,7 +226,20 @@ export const storage = {
                 console.error("Failed to load data async:", error);
                 return null;
             }
+        } else if (Capacitor.isNativePlatform()) {
+            // Load from Filesystem for Native
+            try {
+                const articles = await this.getArticlesAsync();
+                const feeds = this.getFeeds();
+                const settings = this.getSettings();
+                return { feeds, articles, settings };
+            } catch (error) {
+                console.error("Failed to load native data async:", error);
+                // Return partial if possible? No, loadAllDataAsync implies all.
+                // If articles failed, we return empty articles?
+                return { feeds: this.getFeeds(), articles: [], settings: this.getSettings() };
+            }
         }
-        return null; // Fallback to normal sync loading if not in electron or error
+        return null; // Fallback to normal sync loading if not in electron/native or error
     }
 };
