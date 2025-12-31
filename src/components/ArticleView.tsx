@@ -1367,9 +1367,16 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             }}>
                                 <button
                                     onClick={() => {
-                                        const container = document.querySelector('.article-view-content');
-                                        if (container) {
-                                            container.scrollTo({ top: 0, behavior: 'smooth' });
+                                        // Try scrolling content container (Sidebar Layout)
+                                        const contentContainer = document.querySelector('.article-view-content');
+                                        if (contentContainer) {
+                                            contentContainer.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }
+
+                                        // Try scrolling modern layout container (Modern Layout)
+                                        const modernContainer = document.querySelector('.modern-content');
+                                        if (modernContainer) {
+                                            modernContainer.scrollTo({ top: 0, behavior: 'smooth' });
                                         }
                                     }}
                                     style={{
