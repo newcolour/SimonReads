@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play } from 'lucide-react';
+import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play, ArrowUp } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
@@ -1355,6 +1355,45 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             {viewMode === 'reader' && article && (article.link.includes('reddit.com') || (feed && feed.url.includes('reddit.com'))) && (
                                 <RedditComments articleUrl={article.link} />
                             )}
+
+                            {/* Back to Top Button */}
+                            <div className="back-to-top-container" style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                padding: '40px 0 20px 0',
+                                marginTop: '20px',
+                                borderTop: '1px solid var(--border-color)',
+                                width: '100%'
+                            }}>
+                                <button
+                                    onClick={() => {
+                                        const container = document.querySelector('.article-view-content');
+                                        if (container) {
+                                            container.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }
+                                    }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        padding: '12px 24px',
+                                        borderRadius: '24px',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        border: '1px solid var(--border-color)',
+                                        cursor: 'pointer',
+                                        fontSize: '14px',
+                                        fontWeight: 600,
+                                        transition: 'all 0.2s ease',
+                                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                                    }}
+                                    onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                    onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                >
+                                    <ArrowUp size={18} />
+                                    Back to Top
+                                </button>
+                            </div>
                         </div>
                     ) : isElectron() ? (
                         <webview
