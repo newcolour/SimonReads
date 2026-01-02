@@ -1447,13 +1447,15 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             </div>
                         </div>
                     ) : isElectron() ? (
+                        // @ts-ignore - Webview tag is not standard React
                         <webview
                             key={webviewUrl}
                             ref={webviewRef}
                             src={webviewUrl}
                             className="webview"
-                            allowpopups
-                            useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 SimonReads/1.0"
+                            allowpopups="true"
+                            webpreferences="nativeWindowOpen=yes, contextIsolation=no, nodeIntegration=no, sandbox=no"
+                            useragent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 SimonReads/3.0"
                         />
                     ) : Capacitor.isNativePlatform() ? (
                         <div className="webview-placeholder" style={{
