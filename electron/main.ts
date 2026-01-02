@@ -1,7 +1,14 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, net, session, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { setupEmailScheduler, updateSchedule, stopScheduler } from './emailScheduler';
+// Defer email scheduler import to after window is ready
+let emailSchedulerModule: typeof import('./emailScheduler') | null = null;
+const getEmailScheduler = async () => {
+  if (!emailSchedulerModule) {
+    emailSchedulerModule = await import('./emailScheduler');
+  }
+  return emailSchedulerModule;
+};
 
 // Storage file path
 const DATA_FILE = path.join(app.getPath('userData'), 'data.json');
@@ -109,12 +116,20 @@ ipcMain.handle('proxy-image', async (event, imageUrl: string) => {
   }
 });
 
-import * as googleTTS from 'google-tts-api';
+// Lazy-load google-tts-api for better startup performance
+let googleTTSModule: typeof import('google-tts-api') | null = null;
+const getGoogleTTS = async () => {
+  if (!googleTTSModule) {
+    googleTTSModule = await import('google-tts-api');
+  }
+  return googleTTSModule;
+};
 
 // TTS Proxy Handler
 ipcMain.handle('fetch-tts', async (event, { text, lang }) => {
   console.log('TTS Proxy: Received request for text length:', text.length, 'lang:', lang);
   try {
+    const googleTTS = await getGoogleTTS();
     const results = await googleTTS.getAllAudioBase64(text, {
       lang: lang || 'en',
       slow: false,
@@ -122,7 +137,7 @@ ipcMain.handle('fetch-tts', async (event, { text, lang }) => {
       timeout: 10000,
       splitPunct: '.!?',
     });
-    const base64List = results.map(result => result.base64);
+    const base64List = results.map((result: { base64: string }) => result.base64);
     console.log('TTS Proxy: Successfully retrieved audio segments:', base64List.length);
     return base64List;
   } catch (error) {
@@ -449,9 +464,10 @@ ipcMain.handle('fetch-claude-models', async (event, apiKey: string) => {
 });
 
 // Email scheduler IPC handlers
-ipcMain.on('update-email-schedule', (event, enabled: boolean, sendTime: string) => {
+ipcMain.on('update-email-schedule', async (event, enabled: boolean, sendTime: string) => {
   if (win) {
-    updateSchedule(enabled, sendTime, win);
+    const scheduler = await getEmailScheduler();
+    scheduler.updateSchedule(enabled, sendTime, win);
   }
 });
 
@@ -895,6 +911,7 @@ function createWindow() {
     width: 1200,
     height: 800,
     title: 'SimonReads',
+    show: false, // Start hidden - show when ready
     // macOS-specific visual effects
     ...(process.platform === 'darwin' ? {
       vibrancy: 'under-window',
@@ -912,6 +929,21 @@ function createWindow() {
       webviewTag: true, // Enable <webview> tag
     },
   });
+
+  // Show window when ready to prevent white flash
+  win.once('ready-to-show', () => {
+    console.log('Window ready to show');
+    win?.show();
+    win?.focus();
+  });
+
+  // Fallback: show after max 3 seconds even if not fully ready
+  setTimeout(() => {
+    if (win && !win.isVisible()) {
+      console.log('Window show timeout - forcing visibility');
+      win.show();
+    }
+  }, 3000);
 
   // Set a modern user agent for the session to avoid being blocked by sites (like Google Login)
   const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 SimonReads/1.0';
@@ -1039,15 +1071,19 @@ function createWindow() {
     // win.webContents.openDevTools();
   }
 
-  // Setup email scheduler
+  // Setup email scheduler (deferred for faster startup)
   if (win) {
-    setupEmailScheduler(win);
+    win.once('ready-to-show', async () => {
+      const scheduler = await getEmailScheduler();
+      scheduler.setupEmailScheduler(win!);
+    });
   }
 
 }
 
-app.on('window-all-closed', () => {
-  stopScheduler(); // Stop email scheduler
+app.on('window-all-closed', async () => {
+  const scheduler = await getEmailScheduler();
+  scheduler.stopScheduler(); // Stop email scheduler
   if (process.platform !== 'darwin') {
     app.quit();
     win = null;
@@ -1060,8 +1096,9 @@ app.on('activate', () => {
   }
 });
 
-app.on('before-quit', () => {
-  stopScheduler(); // Ensure scheduler is stopped
+app.on('before-quit', async () => {
+  const scheduler = await getEmailScheduler();
+  scheduler.stopScheduler(); // Ensure scheduler is stopped
 });
 
 app.whenReady().then(createWindow);

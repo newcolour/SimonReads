@@ -15,12 +15,13 @@
 }
 
 .article-view-header {
-    padding: 16px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: var(--bg-secondary);
+    gap: 8px;
 }
 
 .publication-title {
@@ -30,7 +31,14 @@
     letter-spacing: 1px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 8px;
+    /* Prevent overlap with buttons */
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 150px;
 }
 
 .publication-icon {
@@ -38,6 +46,7 @@
     height: 16px;
     border-radius: 2px;
     object-fit: contain;
+    flex-shrink: 0;
 }
 
 .view-mode-toggle {
@@ -503,6 +512,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .divider-vertical {

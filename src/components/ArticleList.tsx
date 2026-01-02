@@ -64,26 +64,45 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
 
     // Generate inline summary for Conversational Curator
     useEffect(() => {
+        console.log('📊 [ArticleList] Effect triggered for article:', article.id, {
+            showInlineSummary: personalityConfig.showInlineSummary,
+            allowInlineSummary,
+            isVisible,
+            hasExistingSummary: !!inlineSummary
+        });
+
         if (personalityConfig.showInlineSummary && allowInlineSummary && isVisible && !inlineSummary) {
             // Check if API key is configured
             const hasApiKey = settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey;
+            console.log('📊 [ArticleList] Checking API key availability:', {
+                hasGemini: !!settings.geminiApiKey,
+                hasOpenAI: !!settings.openaiApiKey,
+                hasClaude: !!settings.claudeApiKey,
+                provider: settings.aiProvider || 'gemini'
+            });
+
             if (!hasApiKey) {
-                console.warn('Inline summaries require an AI API key to be configured in Settings → AI');
+                console.warn('❌ [ArticleList] Inline summaries require an AI API key to be configured in Settings → AI');
                 return;
             }
 
+            console.log('🚀 [ArticleList] Starting inline summary generation for article:', article.id);
             setLoadingSummary(true);
             generateInlineSummary(article, settings, personalityConfig.maxSummaryLines || 3)
                 .then(summary => {
+                    console.log('✅ [ArticleList] Summary received for article:', article.id, 'length:', summary.length);
                     setInlineSummary(summary);
                     setLoadingSummary(false);
                 })
                 .catch((error) => {
-                    console.error('Failed to generate inline summary:', error);
+                    console.error('❌ [ArticleList] Failed to generate inline summary:', error);
+                    console.error('❌ [ArticleList] Error stack:', error?.stack);
                     setLoadingSummary(false);
                     // Fallback to snippet
                     if (article.contentSnippet) {
-                        setInlineSummary(article.contentSnippet.slice(0, 240) + '...');
+                        const fallback = article.contentSnippet.slice(0, 240) + '...';
+                        console.log('📝 [ArticleList] Using fallback snippet, length:', fallback.length);
+                        setInlineSummary(fallback);
                     }
                 });
         }

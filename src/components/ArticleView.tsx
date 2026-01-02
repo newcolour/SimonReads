@@ -345,18 +345,63 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
             setIsFetchingContent(true);
 
             try {
+                let htmlContent: string | null = null;
+
                 const ipcRenderer = (window as any).ipcRenderer;
-                if (!ipcRenderer) {
-                    console.warn('IPC not available, cannot fetch content');
-                    setIsFetchingContent(false);
-                    return;
+                if (ipcRenderer) {
+                    // Electron path
+                    const result = await ipcRenderer.invoke('fetch-url', article.link);
+                    if (result.success) {
+                        htmlContent = result.content;
+                    } else {
+                        console.error('Electron fetch failed:', result.error);
+                    }
+                } else if (Capacitor.isNativePlatform()) {
+                    // Android/iOS path - use Capacitor HTTP
+                    console.log('[Mobile] Fetching article via Capacitor HTTP...');
+                    try {
+                        const { CapacitorHttp } = await import('@capacitor/core');
+                        const response = await CapacitorHttp.get({
+                            url: article.link,
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                                'Accept-Language': 'en-US,en;q=0.9',
+                            },
+                            readTimeout: 15000,
+                            connectTimeout: 10000,
+                        });
+
+                        if (response.status >= 200 && response.status < 300) {
+                            htmlContent = response.data;
+                            console.log('[Mobile] Successfully fetched content, length:', htmlContent?.length);
+                        } else {
+                            console.error('[Mobile] HTTP error:', response.status);
+                        }
+                    } catch (httpError) {
+                        console.error('[Mobile] Capacitor HTTP error:', httpError);
+                    }
+                } else {
+                    // Web fallback - try direct fetch (may fail due to CORS)
+                    console.log('[Web] Attempting direct fetch...');
+                    try {
+                        const response = await fetch(article.link, {
+                            headers: {
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                            }
+                        });
+                        if (response.ok) {
+                            htmlContent = await response.text();
+                        }
+                    } catch (fetchError) {
+                        console.warn('[Web] Direct fetch failed (likely CORS):', fetchError);
+                    }
                 }
 
-                const result = await ipcRenderer.invoke('fetch-url', article.link);
-                if (result.success) {
+                if (htmlContent) {
                     // Parse HTML and extract readable content
                     const parser = new DOMParser();
-                    const doc = parser.parseFromString(result.content, 'text/html');
+                    const doc = parser.parseFromString(htmlContent, 'text/html');
 
                     // Remove unwanted elements
                     doc.querySelectorAll('script, style, nav, header, footer, aside, iframe, .ad, .advertisement, .social-share, .newsletter-signup, .related-stories, .ad-wrap, .ad-config-wrap').forEach(el => el.remove());
@@ -519,11 +564,9 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                         console.warn('Could not find main content element');
                     }
                 } else {
-                    console.error('Failed to fetch article content:', result.error);
-                    // If it's a 403, it means the site is blocking automated access
-                    if (result.error && result.error.includes('403')) {
-                        setFetchedContent('<div style="padding: 20px; text-align: center; color: var(--text-muted);"><p style="font-size: 1.1em; margin-bottom: 12px;">⚠️ Unable to load article content</p><p>This publisher blocks automated content fetching. Please switch to <strong>Browser View</strong> to read this article.</p></div>');
-                    }
+                    console.error('Failed to fetch article content - no content received');
+                    // Show a helpful message for the user
+                    setFetchedContent('<div style="padding: 20px; text-align: center; color: var(--text-muted);"><p style="font-size: 1.1em; margin-bottom: 12px;">⚠️ Unable to load article content</p><p>This publisher may be blocking content fetching. Please switch to <strong>Browser View</strong> to read this article.</p></div>');
                 }
             } catch (error) {
                 console.error('Error fetching article content:', error);
@@ -1183,6 +1226,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                                         title={article.title}
                                         duration={article.duration}
                                         artwork={article.image}
+                                        articleId={article.id}
                                     />
                                 )
                             )}

@@ -356,12 +356,78 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
     const handleImportClick = () => {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.opml,.xml';
+        // Use broader accept types for better Android compatibility
+        // Android WebViews sometimes don't recognize .opml extension
+        input.accept = '.opml,.xml,text/xml,application/xml,text/x-opml,application/x-opml,*/*';
         input.onchange = (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
-                onImportOPML(file);
-                setShowSettings(false);
+                // Validate file extension or content
+                const fileName = file.name.toLowerCase();
+                if (fileName.endsWith('.opml') || fileName.endsWith('.xml')) {
+                    onImportOPML(file);
+                    setShowSettings(false);
+                } else {
+                    // Check if it might still be an OPML file by reading content
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const content = event.target?.result as string;
+                        if (content && (content.includes('<opml') || content.includes('<outline'))) {
+                            onImportOPML(file);
+                            setShowSettings(false);
+                        } else {
+                            alert('Please select a valid OPML or XML file containing RSS feeds.');
+                        }
+                    };
+                    reader.onerror = () => {
+                        alert('Failed to read the file. Please try again.');
+                    };
+                    reader.readAsText(file.slice(0, 1024)); // Read first 1KB to check
+                }
+            }
+        };
+        input.click();
+    };
+
+    const handleExportSettings = () => {
+        const settingsExport = {
+            version: packageJson.version,
+            exportDate: new Date().toISOString(),
+            settings: tempSettings
+        };
+        const json = JSON.stringify(settingsExport, null, 2);
+        downloadFile(json, `simonreads_settings_${new Date().toISOString().split('T')[0]}.json`, 'application/json');
+    };
+
+    const handleImportSettings = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        // Use broader accept types for better Android compatibility
+        input.accept = '.json,application/json,text/plain,*/*';
+        input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const imported = JSON.parse(text);
+
+                // Validate the import
+                if (!imported.settings) {
+                    alert('❌ Invalid settings file. Please select a valid SimonReads settings export.');
+                    return;
+                }
+
+                // Confirm before importing
+                const message = `Import settings from ${imported.exportDate ? new Date(imported.exportDate).toLocaleDateString() : 'unknown date'}?\n\nThis will replace your current settings including API keys and preferences.`;
+                if (!confirm(message)) return;
+
+                // Update temp settings
+                setTempSettings(imported.settings);
+                alert('✅ Settings imported successfully! Click "Save" to apply them.');
+            } catch (error) {
+                console.error('Failed to import settings:', error);
+                alert('❌ Failed to import settings. Please check that the file is a valid JSON export.');
             }
         };
         input.click();
@@ -452,7 +518,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                             <div className="setting-divider"></div>
 
                             <div className="setting-group">
-                                <label>Import / Export</label>
+                                <label>Feeds Import / Export</label>
                                 <div className="export-buttons">
                                     <button className="btn-secondary" onClick={handleImportClick}>
                                         <Download size={14} style={{ transform: 'rotate(180deg)' }} /> Import OPML
@@ -464,6 +530,19 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                         <Download size={14} /> Export JSON
                                     </button>
                                 </div>
+                            </div>
+
+                            <div className="setting-group">
+                                <label>App Settings Import / Export</label>
+                                <div className="export-buttons">
+                                    <button className="btn-secondary" onClick={handleImportSettings}>
+                                        <Download size={14} style={{ transform: 'rotate(180deg)' }} /> Import Settings
+                                    </button>
+                                    <button className="btn-secondary" onClick={handleExportSettings}>
+                                        <Download size={14} /> Export Settings
+                                    </button>
+                                </div>
+                                <p className="setting-hint">Export/import all settings including API keys, themes, and preferences. Use this to transfer your configuration between devices.</p>
                             </div>
 
                             <div className="setting-divider"></div>

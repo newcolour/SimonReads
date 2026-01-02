@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import SummaryWindow from './components/SummaryWindow.tsx'
+import { AudioPlayerProvider } from './contexts/AudioPlayerContext.tsx'
+import MiniPlayer from './components/MiniPlayer.tsx'
 import './index.css'
 
 // Simple hash-based routing
@@ -27,7 +29,12 @@ function RootComponent() {
     }
 
     console.log('Rendering App');
-    return <App />;
+    return (
+        <AudioPlayerProvider>
+            <App />
+            <MiniPlayer />
+        </AudioPlayerProvider>
+    );
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -35,3 +42,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <RootComponent />
     </React.StrictMode>,
 )
+

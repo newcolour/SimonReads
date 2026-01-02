@@ -10,32 +10,46 @@ export async function generateInlineSummary(
     settings: AppSettings,
     maxLines: number = 3
 ): Promise<string> {
+    console.log('🤖 [InlineSummary] Starting generation for article:', article.id);
     try {
         const content = article.contentSnippet || article.content || article.title;
         const apiKey = settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey || '';
 
+        console.log('🤖 [InlineSummary] Content length:', content.length);
+        console.log('🤖 [InlineSummary] API Provider:', settings.aiProvider || 'gemini');
+        console.log('🤖 [InlineSummary] Has API Key:', !!apiKey);
+
         // Use the summary service with personality-specific settings
+        console.log('🤖 [InlineSummary] Calling summarizeArticle...');
         const summary = await summarizeArticle(content, apiKey, {
             ...settings,
             summaryLength: 'short',
             summaryDepth: 'brief'
         });
 
+        console.log('🤖 [InlineSummary] Summary generated, length:', summary.length);
+
         // Truncate to max lines (approximately 80 chars per line)
         const maxChars = maxLines * 80;
         if (summary.length > maxChars) {
-            return summary.substring(0, maxChars) + '...';
+            const truncated = summary.substring(0, maxChars) + '...';
+            console.log('🤖 [InlineSummary] Summary truncated to', truncated.length, 'chars');
+            return truncated;
         }
 
+        console.log('🤖 [InlineSummary] ✅ Summary complete');
         return summary;
     } catch (error) {
-        console.error('Failed to generate inline summary:', error);
+        console.error('❌ [InlineSummary] Failed to generate inline summary:', error);
+        console.error('❌ [InlineSummary] Error details:', JSON.stringify(error, null, 2));
         // Fallback to snippet
         const snippet = article.contentSnippet || '';
         const maxChars = maxLines * 80;
-        return snippet.length > maxChars
+        const fallback = snippet.length > maxChars
             ? snippet.substring(0, maxChars) + '...'
             : snippet;
+        console.log('🤖 [InlineSummary] Using fallback snippet, length:', fallback.length);
+        return fallback;
     }
 }
 

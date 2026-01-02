@@ -76,7 +76,18 @@ export default function Sidebar({
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
     const sortedFeeds = useMemo(() => {
-        const sorted = [...feeds].sort((a, b) => {
+        // First, filter feeds by search query if provided
+        let filteredFeeds = feeds;
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase().trim();
+            filteredFeeds = feeds.filter(feed =>
+                feed.title.toLowerCase().includes(query) ||
+                (feed.category && feed.category.toLowerCase().includes(query)) ||
+                feed.url.toLowerCase().includes(query)
+            );
+        }
+
+        const sorted = [...filteredFeeds].sort((a, b) => {
             switch (sortOption) {
                 case 'alpha-asc':
                     return a.title.localeCompare(b.title);
@@ -109,7 +120,7 @@ export default function Sidebar({
         });
 
         return grouped;
-    }, [feeds, sortOption, articles]);
+    }, [feeds, sortOption, articles, searchQuery]);
 
     // Initialize collapsed categories based on personality
     useEffect(() => {
@@ -431,7 +442,7 @@ export default function Sidebar({
                 {onOpenSettings && (
                     <button
                         className="toolbar-icon-btn"
-                        onClick={onOpenSettings}
+                        onClick={() => { setTooltip(null); onOpenSettings(); }}
                         onMouseEnter={(e) => handleMouseEnter(e, "Settings")}
                         onMouseLeave={handleMouseLeave}
                     >
@@ -441,7 +452,7 @@ export default function Sidebar({
                 {onRefresh && (
                     <button
                         className={`toolbar-icon-btn ${isRefreshing ? 'spinning' : ''}`}
-                        onClick={onRefresh}
+                        onClick={() => { setTooltip(null); onRefresh(); }}
                         onMouseEnter={(e) => handleMouseEnter(e, isRefreshing ? "Stop Refresh" : "Refresh Feeds")}
                         onMouseLeave={handleMouseLeave}
                     >
@@ -451,6 +462,7 @@ export default function Sidebar({
                 <button
                     className={`toolbar-icon-btn ${sortOption !== 'updated' ? 'active' : ''}`}
                     onClick={() => {
+                        setTooltip(null);
                         // Cycle through sort options
                         if (sortOption === 'updated') setSortOption('alpha-asc');
                         else if (sortOption === 'alpha-asc') setSortOption('alpha-desc');
@@ -466,7 +478,7 @@ export default function Sidebar({
                 {onOpenDailyNewsreel && (
                     <button
                         className="toolbar-icon-btn"
-                        onClick={onOpenDailyNewsreel}
+                        onClick={() => { setTooltip(null); onOpenDailyNewsreel(); }}
                         onMouseEnter={(e) => handleMouseEnter(e, "Daily Newsreel")}
                         onMouseLeave={handleMouseLeave}
                     >
@@ -477,6 +489,7 @@ export default function Sidebar({
                     <button
                         className="toolbar-icon-btn"
                         onClick={() => {
+                            setTooltip(null);
                             if (confirm('Mark all articles as read?')) {
                                 onMarkAllAsRead();
                             }
@@ -489,7 +502,7 @@ export default function Sidebar({
                 )}
                 <button
                     className="toolbar-icon-btn"
-                    onClick={toggleAllCategories}
+                    onClick={() => { setTooltip(null); toggleAllCategories(); }}
                     onMouseEnter={(e) => handleMouseEnter(e, areAllCollapsed ? "Expand All Categories" : "Collapse All Categories")}
                     onMouseLeave={handleMouseLeave}
                 >
@@ -497,7 +510,7 @@ export default function Sidebar({
                 </button>
                 <button
                     className="toolbar-icon-btn"
-                    onClick={() => setShowDiscovery(true)}
+                    onClick={() => { setTooltip(null); setShowDiscovery(true); }}
                     onMouseEnter={(e) => handleMouseEnter(e, "Discover Feeds")}
                     onMouseLeave={handleMouseLeave}
                 >
@@ -505,7 +518,7 @@ export default function Sidebar({
                 </button>
                 <button
                     className="toolbar-icon-btn"
-                    onClick={() => setIsAdding(!isAdding)}
+                    onClick={() => { setTooltip(null); setIsAdding(!isAdding); }}
                     onMouseEnter={(e) => handleMouseEnter(e, "Add Feed")}
                     onMouseLeave={handleMouseLeave}
                 >
@@ -534,7 +547,7 @@ export default function Sidebar({
                     <Search size={14} className="search-icon" />
                     <input
                         type="text"
-                        placeholder="Search articles..."
+                        placeholder="Search feeds and articles..."
                         value={searchQuery}
                         onChange={(e) => onSearchChange(e.target.value)}
                         className="search-input"
