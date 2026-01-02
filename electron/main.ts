@@ -1072,29 +1072,73 @@ function createWindow() {
     ];
 
     webviewContents.setWindowOpenHandler(({ url }) => {
+      const lowerUrl = url.toLowerCase();
       console.log('[Webview] Window open request:', url);
 
-      const isAuthProvider = authProviders.some(domain => url.includes(domain));
+      // Broader authentication providers list
+      const authDomains = [
+        'google.com',
+        'facebook.com',
+        'apple.com',
+        'gedi.it',
+        'repubblica.it',
+        'microsoft.com',
+        'live.com',
+        'github.com',
+        'twitter.com',
+        'x.com',
+        'linkedin.com'
+      ];
 
-      if (isAuthProvider) {
-        console.log('[Webview] Allowing auth popup:', url);
-        // Open in a new popup window
+      // Generic auth keywords
+      const authKeywords = [
+        'login',
+        'signin',
+        'sign-in',
+        'signup',
+        'sign-up',
+        'auth',
+        'oauth',
+        'sso',
+        'account',
+        'session',
+        'verification',
+        'challenge',
+        'consent'
+      ];
+
+      const isAuthDomain = authDomains.some(domain => lowerUrl.includes(domain));
+      const isAuthKeyword = authKeywords.some(keyword => lowerUrl.includes(keyword));
+      const isAboutBlank = lowerUrl === 'about:blank';
+
+      // We should be permissive here because blocking a popup in a login flow breaks the whole flow
+      if (isAuthDomain || isAuthKeyword || isAboutBlank) {
+        console.log('[Webview] Allowing popup (auth/login detected):', url);
         return {
           action: 'allow',
           overrideBrowserWindowOptions: {
-            width: 500,
+            width: 600,
             height: 700,
             autoHideMenuBar: true,
+            skipTaskbar: false,
+            alwaysOnTop: false,
+            center: true,
             webPreferences: {
               nodeIntegration: false,
               contextIsolation: true,
+              sandbox: true,
+              nativeWindowOpen: true,
+              webSecurity: false // sometimes needed for redirects in popups
             }
           }
         };
       }
 
-      // For other URLs, open in external browser
-      if (url.startsWith('http:') || url.startsWith('https:')) {
+      // For genuinely external links (like "help" or "terms"), try to open in external browser
+      // But only if we are absolutely sure it's not part of a login flow. 
+      // Safe default for "social login" buttons is often to just let them open in a popup if consistent.
+      if (lowerUrl.startsWith('http')) {
+        console.log('[Webview] Denying popup, opening external:', url);
         require('electron').shell.openExternal(url);
       }
       return { action: 'deny' };
