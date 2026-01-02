@@ -1050,6 +1050,57 @@ function createWindow() {
     return { action: 'allow' };
   });
 
+  // Handle webview popups (needed for Linux especially)
+  // This handles new-window events from <webview> tags
+  win.webContents.on('did-attach-webview', (_event, webviewContents) => {
+    // List of domains that should be allowed to open in a popup for authentication
+    const authProviders = [
+      'accounts.google.com',
+      'facebook.com/v',
+      'facebook.com/dialog',
+      'facebook.com/login',
+      'www.facebook.com',
+      'appleid.apple.com',
+      'p.repubblica.it',
+      'login.live.com',
+      'github.com/login/oauth',
+      'auth.',
+      'oauth.',
+      'signin.',
+      'login.',
+      'sso.'
+    ];
+
+    webviewContents.setWindowOpenHandler(({ url }) => {
+      console.log('[Webview] Window open request:', url);
+
+      const isAuthProvider = authProviders.some(domain => url.includes(domain));
+
+      if (isAuthProvider) {
+        console.log('[Webview] Allowing auth popup:', url);
+        // Open in a new popup window
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            width: 500,
+            height: 700,
+            autoHideMenuBar: true,
+            webPreferences: {
+              nodeIntegration: false,
+              contextIsolation: true,
+            }
+          }
+        };
+      }
+
+      // For other URLs, open in external browser
+      if (url.startsWith('http:') || url.startsWith('https:')) {
+        require('electron').shell.openExternal(url);
+      }
+      return { action: 'deny' };
+    });
+  });
+
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString());
