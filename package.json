@@ -131,7 +131,8 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "flatpak": {
-      "license": "LICENSE"
+      "license": "LICENSE",
+      "runtimeVersion": "23.08"
     },
     "nsis": {
       "oneClick": false,
