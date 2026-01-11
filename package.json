@@ -15,7 +15,7 @@
     "build": "tsc && ./build-electron.sh && vite build && electron-builder --mac --arm64",
     "build:mac": "tsc && ./build-electron.sh && vite build && electron-builder --mac",
     "build:win": "tsc && ./build-electron.sh && vite build && electron-builder --win",
-    "build:linux": "tsc && ./build-electron.sh && vite build && electron-builder --linux",
+    "build:linux": "tsc && ./build-electron.sh && vite build && electron-builder --linux -p never",
     "build:android": "tsc && vite build && npx cap sync android && npx cap open android",
     "build:android:apk": "tsc && vite build && npx cap sync android && cd android && ./gradlew assembleDebug",
     "build:android:release": "tsc && vite build && npx cap sync android && cd android && ./gradlew assembleRelease",
@@ -131,7 +131,7 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "flatpak": {
-      "license": "MIT"
+      "license": "LICENSE"
     },
     "nsis": {
       "oneClick": false,
