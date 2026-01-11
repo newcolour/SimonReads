@@ -92,16 +92,19 @@ export async function suggestFeeds(
     currentFeeds: Feed[],
     apiKey: string,
     settings: AppSettings,
-    keyword?: string
+    keyword?: string,
+    language?: string
 ): Promise<FeedSuggestion[]> {
     const provider = settings.aiProvider || 'gemini';
     const feedList = currentFeeds.map(f => `- ${f.title}`).join('\n');
+    const languageInstruction = language && language.trim() ? `RESTRICTION: All suggestions MUST be in the "${language}" language.` : '';
 
     let prompt = '';
 
     if (keyword && keyword.trim()) {
         // Keyword-based search
         prompt = `I am interested in: "${keyword}"
+${languageInstruction}
 
 ${currentFeeds.length > 0 ? `I am currently subscribed to these RSS feeds:\n${feedList}\n\n` : ''}Please suggest 15-20 high-quality RSS feeds related to "${keyword}".
 For each suggestion, provide:
@@ -120,6 +123,8 @@ IMPORTANT: Return ONLY the raw JSON array. Do not include markdown formatting (l
 
         prompt = `I am subscribed to the following RSS feeds:
 ${feedList}
+
+${languageInstruction}
 
 Please suggest 15-20 new, high-quality RSS feeds that I might like based on these interests.
 For each suggestion, provide:

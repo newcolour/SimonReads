@@ -21,7 +21,22 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
     const [addedUrls, setAddedUrls] = useState<Set<string>>(new Set());
     const [addingUrl, setAddingUrl] = useState<string | null>(null);
     const [keyword, setKeyword] = useState('');
+    const [language, setLanguage] = useState('');
     const [hasSearched, setHasSearched] = useState(false);
+
+    const LANGUAGES = [
+        { value: '', label: 'Any Language' },
+        { value: 'English', label: 'English' },
+        { value: 'Italian', label: 'Italian' },
+        { value: 'Spanish', label: 'Spanish' },
+        { value: 'French', label: 'French' },
+        { value: 'German', label: 'German' },
+        { value: 'Portuguese', label: 'Portuguese' },
+        { value: 'Dutch', label: 'Dutch' },
+        { value: 'Russian', label: 'Russian' },
+        { value: 'Chinese', label: 'Chinese' },
+        { value: 'Japanese', label: 'Japanese' }
+    ];
 
     const fetchSuggestions = async (searchKeyword?: string) => {
         setIsLoading(true);
@@ -47,7 +62,7 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
             }
 
             // Get AI suggestions
-            const rawResults = await suggestFeeds(currentFeeds, apiKey, settings, searchKeyword);
+            const rawResults = await suggestFeeds(currentFeeds, apiKey, settings, searchKeyword, language);
 
             // Now validate the feeds
             setIsLoading(false);
@@ -130,12 +145,23 @@ export default function FeedDiscovery({ currentFeeds, settings, onClose, onAddFe
                     <div className="discovery-search">
                         <input
                             type="text"
-                            placeholder="Enter a keyword or theme (e.g., 'AI', 'cooking', 'sports')..."
+                            placeholder="Enter a keyword or theme (e.g., 'AI', 'cooking')..."
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}
                             onKeyPress={handleKeyPress}
                             className="discovery-search-input"
                         />
+
+                        <select
+                            value={language}
+                            onChange={(e) => setLanguage(e.target.value)}
+                            className="discovery-language-select"
+                        >
+                            {LANGUAGES.map(lang => (
+                                <option key={lang.value || 'any'} value={lang.value}>{lang.label}</option>
+                            ))}
+                        </select>
+
                         <button
                             onClick={handleSearch}
                             className="discovery-search-btn"

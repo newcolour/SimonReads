@@ -552,6 +552,15 @@ export default function Sidebar({
                         onChange={(e) => onSearchChange(e.target.value)}
                         className="search-input"
                     />
+                    {searchQuery && (
+                        <button
+                            className="search-clear-btn"
+                            onClick={() => onSearchChange('')}
+                            aria-label="Clear search"
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
                 </div>
             </div>
 

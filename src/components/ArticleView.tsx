@@ -120,6 +120,9 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
         videoUrl?: string;
     } | null>(null);
 
+    // Image viewer state
+    const [viewerImage, setViewerImage] = useState<string | null>(null);
+
 
 
     // Reset summary when article changes
@@ -1329,7 +1332,9 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                                                 <img
                                                     src={article.image}
                                                     alt={article.title}
+                                                    onClick={() => article.image && setViewerImage(article.image)}
                                                     onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                                                    style={{ cursor: 'zoom-in' }}
                                                 />
                                             </div>
                                         )}
@@ -1337,8 +1342,17 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                                         className="article-content"
                                         dangerouslySetInnerHTML={{ __html: sanitizedContent }}
                                         onClick={(e) => {
-                                            // Intercept link clicks in article content
                                             const target = e.target as HTMLElement;
+                                            // Intercept image clicks in article content
+                                            if (target.tagName === 'IMG') {
+                                                e.preventDefault();
+                                                const src = (target as HTMLImageElement).src;
+                                                if (src) {
+                                                    setViewerImage(src);
+                                                }
+                                                return;
+                                            }
+                                            // Intercept link clicks in article content
                                             if (target.tagName === 'A') {
                                                 e.preventDefault();
                                                 const href = (target as HTMLAnchorElement).href;
@@ -1453,9 +1467,10 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             ref={webviewRef}
                             src={webviewUrl}
                             className="webview"
-                            allowpopups="true"
+                            allowpopups={true}
                             webpreferences="nativeWindowOpen=yes, contextIsolation=no, nodeIntegration=no, sandbox=no"
-                            useragent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 SimonReads/3.0"
+                        // useragent is optional, electron uses default if omitted which is usually fine, or we can append
+                        // But for safety let's leave it default to match the OS
                         />
                     ) : Capacitor.isNativePlatform() ? (
                         <div className="webview-placeholder" style={{
@@ -1512,6 +1527,28 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                     />
                 )
             }
+
+            {/* Image Viewer Modal */}
+            {viewerImage && (
+                <div
+                    className="image-viewer-overlay"
+                    onClick={() => setViewerImage(null)}
+                >
+                    <button
+                        className="image-viewer-close"
+                        onClick={() => setViewerImage(null)}
+                        aria-label="Close image viewer"
+                    >
+                        <X size={24} />
+                    </button>
+                    <img
+                        src={viewerImage}
+                        alt="Full size"
+                        className="image-viewer-img"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            )}
         </div >
     );
 }
