@@ -1177,21 +1177,7 @@ function App() {
     const filteredArticles = useMemo(() => {
         let filtered = articles;
 
-        // Feed/category filtering
-        if (selectedFeedId === 'read') {
-            // Show only read articles in the "Read Articles" view
-            filtered = filtered.filter(a => a.isRead);
-        } else if (selectedFeedId === 'saved') {
-            // Show only saved articles in the "Saved Articles" view
-            filtered = filtered.filter(a => a.isSaved);
-        } else {
-            // Show all articles (including read) in normal views
-            if (selectedFeedId) {
-                filtered = filtered.filter(a => a.feedId === selectedFeedId);
-            }
-        }
-
-        // Search query filtering
+        // Search query filtering - prioritize this to show results across all feeds
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
             filtered = filtered.filter(a =>
@@ -1199,6 +1185,28 @@ function App() {
                 a.contentSnippet?.toLowerCase().includes(query) ||
                 a.creator?.toLowerCase().includes(query)
             );
+
+            // When searching, still respect special views (read/saved)
+            if (selectedFeedId === 'read') {
+                filtered = filtered.filter(a => a.isRead);
+            } else if (selectedFeedId === 'saved') {
+                filtered = filtered.filter(a => a.isSaved);
+            }
+            // But ignore regular feed selection when searching - show all matching articles
+        } else {
+            // No search query - use normal feed filtering
+            if (selectedFeedId === 'read') {
+                // Show only read articles in the "Read Articles" view
+                filtered = filtered.filter(a => a.isRead);
+            } else if (selectedFeedId === 'saved') {
+                // Show only saved articles in the "Saved Articles" view
+                filtered = filtered.filter(a => a.isSaved);
+            } else {
+                // Show all articles (including read) in normal views
+                if (selectedFeedId) {
+                    filtered = filtered.filter(a => a.feedId === selectedFeedId);
+                }
+            }
         }
 
         return filtered;
@@ -1523,7 +1531,7 @@ function App() {
                                 onToggleRead={handleToggleRead}
                                 onToggleSaved={handleToggleSaved}
                                 onDeleteArticle={handleDeleteArticle}
-                                title={!selectedFeedId ? 'All Articles' : selectedFeedId === 'read' ? 'Read Articles' : selectedFeedId === 'saved' ? 'Saved Articles' : feeds.find(f => f.id === selectedFeedId)?.title || 'Articles'}
+                                title={searchQuery.trim() ? `Search Results (${filteredArticles.length})` : !selectedFeedId ? 'All Articles' : selectedFeedId === 'read' ? 'Read Articles' : selectedFeedId === 'saved' ? 'Saved Articles' : feeds.find(f => f.id === selectedFeedId)?.title || 'Articles'}
                                 icon={!selectedFeedId ? undefined : selectedFeedId === 'read' || selectedFeedId === 'saved' ? undefined : feeds.find(f => f.id === selectedFeedId)?.icon}
                                 onBack={() => setMobileView('feeds')}
                                 settings={settings}

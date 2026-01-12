@@ -798,233 +798,25 @@
 }
 
 /* Force ArticleView to expand so main window handles scrolling */
-.embedded-article-view .article-view,
-.embedded-article-view .article-view-container,
-.embedded-article-view .article-view-content {
-    height: auto !important;
-    overflow-x: hidden !important;
-    overflow-y: visible !important;
-    flex: none !important;
-    max-width: 100% !important;
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
+.embedded-article-view .article-view {
+    position: relative;
+    height: auto;
+    overflow: visible;
 }
 
-/* Browser Mode Overrides - Expand to full height so Webview can scroll internally */
-.embedded-article-view .article-view.browser-mode,
-.embedded-article-view .article-view.browser-mode .article-view-container,
-.embedded-article-view .article-view.browser-mode .article-view-content {
-    height: 100% !important;
-    /* Must fill container */
-    min-height: 80vh;
-    /* Fallback minimum */
-    overflow: hidden !important;
-    /* Webview handles scroll */
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-.embedded-article-view .article-view.browser-mode .webview {
-    flex: 1 !important;
-    height: 100% !important;
-    width: 100% !important;
+.embedded-article-view .article-content {
+    overflow: visible;
 }
 
 /* ============================================
-   ANDROID-SPECIFIC STYLES
-   Horizontal top bar with bigger icons
+   PLATFORM SPECIFIC OVERRIDES
    ============================================ */
 
-.modern-layout.android {
-    flex-direction: column;
-}
-
-.android-topbar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 52px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 0 4px;
-    /* Add explicit status bar space plus safe area */
-    padding-top: calc(30px + env(safe-area-inset-top, 0));
-    height: calc(52px + 30px + env(safe-area-inset-top, 0));
-}
-
-.android-topbar-icons {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    gap: 0;
-}
-
-.android-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
-}
-
-.android-icon:hover,
-.android-icon:active {
-    background: var(--hover-bg);
-    color: var(--text-primary);
-}
-
-.android-icon.active {
-    background: color-mix(in srgb, var(--accent-color) 20%, transparent);
-    color: var(--accent-color);
-}
-
-.android-icon svg {
-    width: 22px;
-    height: 22px;
-}
-
-.android-icon svg.spinning {
-    animation: spin 1s linear infinite;
-}
-
-/* Android: Adjust main content for top bar */
-.modern-layout.android .modern-content {
-    margin-left: 0;
-    margin-top: calc(52px + 30px + env(safe-area-inset-top, 0));
+/* Linux/Ubuntu: Remove extra top padding as there is already a native title bar */
+html.platform-linux .modern-sidebar {
     padding-top: 12px;
 }
 
-/* Android: Hide the sidebar */
-.modern-layout.android .modern-sidebar {
-    display: none;
-}
-
-/* Android: Adjust embedded article view margins */
-.modern-layout.android .embedded-article-view {
-    margin: 0 -16px 40px -16px;
-}
-
-/* Android: Ensure carousel and content have proper spacing */
-.modern-layout.android .carousel-section {
-    margin-bottom: 24px;
-}
-
-.modern-layout.android .modern-header {
-    margin-bottom: 16px;
-}
-
-/* Android: Notification dot positioning for top bar */
-.android-topbar .notification-dot {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 8px;
-    height: 8px;
-    background-color: #e74c3c;
-    border-radius: 50%;
-    border: 1px solid var(--bg-secondary);
-}
-
-/* Android: Smaller feeds section header */
-.modern-layout.android .feeds-header {
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
-.modern-layout.android .feeds-header h2 {
-    font-size: 18px;
-}
-
-.modern-layout.android .feeds-header-left {
-    gap: 8px;
-}
-
-.modern-layout.android .modern-feed-count {
-    font-size: 11px;
-    padding: 3px 8px;
-}
-
-.modern-layout.android .feeds-sort-actions {
-    gap: 2px;
-    padding: 3px;
-    border-radius: 6px;
-}
-
-.modern-layout.android .sort-action {
-    font-size: 10px;
-    padding: 5px 8px;
-    gap: 4px;
-    border-radius: 5px;
-}
-
-.modern-layout.android .sort-action svg {
-    width: 14px;
-    height: 14px;
-}
-
-/* Android: Smaller search/header section */
-.modern-layout.android .modern-header-stats {
-    font-size: 12px;
-}
-
-.modern-layout.android .modern-search-toggle {
-    width: 36px;
-    height: 36px;
-}
-
-.modern-layout.android .modern-search-toggle svg {
-    width: 18px;
-    height: 18px;
-}
-
-/* Android: Smaller feed cards */
-.modern-layout.android .feeds-grid {
-    gap: 12px;
-}
-
-.modern-layout.android .modern-feed-card {
-    padding: 12px;
-    gap: 12px;
-    border-radius: 12px;
-}
-
-.modern-layout.android .modern-feed-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-}
-
-.modern-layout.android .modern-feed-details h3 {
-    font-size: 14px;
-}
-
-.modern-layout.android .modern-feed-details p {
-    font-size: 12px;
-}
-
-.modern-layout.android .modern-feed-action-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-}
-
-.modern-layout.android .modern-feed-action-btn svg {
-    width: 14px;
-    height: 14px;
+html.platform-linux .modern-content {
+    padding-top: 12px;
 }

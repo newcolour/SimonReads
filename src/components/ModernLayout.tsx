@@ -191,17 +191,29 @@ export default function ModernLayout({
 
     // Filter articles based on section and search
     const filteredArticles = sortedArticles.filter(article => {
-        // Apply search filter
+        // Apply search filter first - when searching, show results across all feeds
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
-            return (
+            const matchesSearch = (
                 article.title.toLowerCase().includes(query) ||
                 article.feedTitle?.toLowerCase().includes(query) ||
                 article.contentSnippet?.toLowerCase().includes(query)
             );
+
+            if (!matchesSearch) return false;
+
+            // When searching, still respect special section filters
+            if (activeSection === 'saved') {
+                return article.isSaved;
+            }
+            if (activeSection === 'read') {
+                return article.isRead;
+            }
+            // But ignore feed selection when searching
+            return true;
         }
 
-        // Apply section filter
+        // No search query - use normal section/feed filtering
         if (activeSection === 'saved') {
             return article.isSaved;
         }
