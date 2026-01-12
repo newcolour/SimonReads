@@ -808,15 +808,22 @@
     overflow: visible;
 }
 
+
 /* ============================================
    PLATFORM SPECIFIC OVERRIDES
    ============================================ */
 
-/* Linux/Ubuntu: Remove extra top padding as there is already a native title bar */
+/* Linux/Ubuntu: Remove extra top padding completely as there is a native title bar 
+   The native title bar already provides the window chrome, so no space is needed */
 html.platform-linux .modern-sidebar {
-    padding-top: 12px;
+    padding-top: 8px;
 }
 
 html.platform-linux .modern-content {
-    padding-top: 12px;
+    padding-top: 8px;
+}
+
+/* Android topbar also doesn't need the extra drag region padding */
+.modern-layout.android .android-topbar {
+    padding-top: 8px;
 }
