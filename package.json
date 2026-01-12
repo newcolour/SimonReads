@@ -122,17 +122,12 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb",
-        "flatpak"
+        "deb"
       ],
       "category": "Network;News",
       "maintainer": "Simone Bianco <simone@example.com>",
       "icon": "build/icons",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
-    },
-    "flatpak": {
-      "license": "LICENSE",
-      "runtimeVersion": "23.08"
     },
     "nsis": {
       "oneClick": false,
