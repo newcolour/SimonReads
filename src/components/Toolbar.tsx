@@ -7,6 +7,7 @@ import PersonalitySelector from './PersonalitySelector';
 import './Toolbar.css';
 
 import SyncSettings from './SyncSettings';
+import HelpSection from './HelpSection';
 import packageJson from '../../package.json';
 
 const FONTS = [
@@ -55,7 +56,7 @@ interface ToolbarProps {
 export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial, hideButtons, setOpenSettingsRef, onDataRestored }: ToolbarProps) {
     const [showSettings, setShowSettings] = useState(false);
     const [tempSettings, setTempSettings] = useState(settings);
-    const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'personality' | 'ai' | 'email' | 'about' | 'sync'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'personality' | 'ai' | 'email' | 'about' | 'sync' | 'help'>('general');
     const [geminiModels, setGeminiModels] = useState<string[]>([]);
     const [openaiModels, setOpenaiModels] = useState<string[]>([]);
     const [claudeModels, setClaudeModels] = useState<string[]>([]);
@@ -477,6 +478,12 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                         onClick={() => setActiveTab('sync')}
                     >
                         Sync
+                    </button>
+                    <button
+                        className={`tab-btn ${activeTab === 'help' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('help')}
+                    >
+                        Help
                     </button>
                     {/* Email tab hidden - feature temporarily disabled */}
                     {false && (window as any).ipcRenderer && (
@@ -1499,6 +1506,10 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 </div>
                             )}
                         </div>
+                    )}
+
+                    {activeTab === 'help' && (
+                        <HelpSection />
                     )}
                 </div>
                 {

@@ -1,7 +1,9 @@
 
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import CryptoJS from 'crypto-js';
 import { AppSettings, Feed, Article } from '../types';
+import { SyncProvider } from './types';
+import { SupabaseProvider } from './providers/supabaseProvider';
+import { WebDavProvider } from './providers/webdavProvider';
 
 export interface SyncData {
     feeds: Feed[];
@@ -12,99 +14,87 @@ export interface SyncData {
 }
 
 export interface SyncConfig {
-    supabaseUrl: string;
-    supabaseAnonKey: string;
-    encryptionKey: string; // The user's password for E2EE
+    provider: 'supabase' | 'webdav';
+    encryptionKey: string;
+    supabase?: { url: string; key: string };
+    webdav?: { url: string; username?: string; password?: string };
 }
 
 class SyncService {
-    private supabase: SupabaseClient | null = null;
+    private provider: SyncProvider | null = null;
     private encryptionKey: string = '';
 
     constructor() {
-        // Singleton initialization if needed, but we'll init with config
+        // Singleton initialization
     }
 
     public isInitialized(): boolean {
-        return !!this.supabase && !!this.encryptionKey;
+        return !!this.provider && !!this.encryptionKey;
+    }
+
+    public getProviderName(): string | null {
+        return this.provider ? this.provider.name : null;
     }
 
     public initialize(config: SyncConfig) {
-        if (!config.supabaseUrl || !config.supabaseAnonKey) {
-            console.error('[SyncService] Missing Supabase credentials');
-            return;
-        }
+        this.encryptionKey = config.encryptionKey;
 
-        try {
-            this.supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
-            this.encryptionKey = config.encryptionKey;
-            console.log('[SyncService] Initialized');
-        } catch (e) {
-            console.error('[SyncService] Initialization failed:', e);
+        if (config.provider === 'supabase' && config.supabase) {
+            this.provider = new SupabaseProvider();
+            // Supabase provider might need init call if we were strictly following interface, 
+            // but for now we pass credentials at login OR strict init.
+            // Our SupabaseProvider interface implementation handles logic inside login/signup mostly,
+            // but for re-init (app restart) we need to re-create the client.
+            // Let's call a silent login/init if possible or just set it up.
+            // The SupabaseProvider 'login' method actually creates the client.
+            // We can add an 'init' method to provider or just lazy load.
+            // For now, let's assume we re-login or just set up.
+            // Modification: SupabaseProvider needs to know keys to be useful even without user session (for anon?)
+            // Actually, we need to pass the URL/Key early.
+            // Let's adapt SupabaseProvider to store these or pass them.
+            // Since we persist the "active" state in UI, we will call login again.
+        } else if (config.provider === 'webdav' && config.webdav) {
+            this.provider = new WebDavProvider();
         }
     }
 
-    public async login(_email: string): Promise<{ error?: string }> {
-        if (!this.supabase) return { error: 'Sync service not initialized' };
+    // Wrapper to pass config to provider login
+    public async login(credentials: any): Promise<{ user?: any; error?: string }> {
+        if (!this.provider) return { error: 'Provider not set' };
 
-        // We use Magic Link for simplicity, or Password if user prefers.
-        // For this v1 implementation plan, let's assume we used the Supabase "Email/Password" auth.
-        // But since we want to keep it simple for the user (just one "Sync Password" for both encryption and auth?)
-        // Actually, it's safer to separate them. But for UX, we might use the same.
-        // Let's implement standard signInWithPassword.
-        // Wait, 'login' takes email and password.
-        return { error: 'Login requires password override' };
-    }
-
-    // Actual login with password
-    public async signIn(email: string, password: string): Promise<{ user?: User; error?: string }> {
-        if (!this.supabase) return { error: 'Sync service not initialized' };
-
-        // Update encryption key to matching password (simplification: auth password = e2ee key)
-        // In a more advanced setup, the encryption key would be separate or derived.
-        // But for "Make it optional" and "Ensure privacy", using the password as the key is a common pattern for simple E2EE.
-        this.encryptionKey = password;
-
-        const { data, error } = await this.supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
-
-        if (error) {
-            return { error: error.message };
+        // We update encryption key if password is used.
+        // For Supabase: Password = credentials.password (if auth used)
+        // For WebDAV: Password = credentials.password
+        // BUT we have a separate encryptionKey in config... 
+        // SyncSettings logic currently uses password as encryption key.
+        if (credentials.password) {
+            this.encryptionKey = credentials.password;
         }
 
-        return { user: data.user, error: undefined };
+        return this.provider.login(credentials);
     }
 
-    public async signUp(email: string, password: string): Promise<{ user?: User; error?: string }> {
-        if (!this.supabase) return { error: 'Sync service not initialized' };
-
-        this.encryptionKey = password;
-
-        const { data, error } = await this.supabase.auth.signUp({
-            email,
-            password,
-        });
-
-        if (error) {
-            return { error: error.message };
+    public async signUp(credentials: any): Promise<{ user?: any; error?: string }> {
+        if (!this.provider) return { error: 'Provider not set' };
+        if (this.provider.signUp) {
+            // For Supabase
+            if (credentials.password) this.encryptionKey = credentials.password;
+            return this.provider.signUp(credentials);
         }
-
-        return { user: data.user || undefined, error: undefined };
+        return { error: 'Sign up not supported by this provider' };
     }
 
     public async logout() {
-        if (this.supabase) {
-            await this.supabase.auth.signOut();
+        if (this.provider) {
+            await this.provider.logout();
+            this.provider = null;
         }
-        this.encryptionKey = ''; // Clear key from memory
+        this.encryptionKey = '';
     }
 
-    public async getUser(): Promise<User | null> {
-        if (!this.supabase) return null;
-        const { data } = await this.supabase.auth.getUser();
-        return data.user;
+    public async getUser(): Promise<any | null> {
+        if (!this.provider) return null;
+        return this.provider.getUser();
     }
 
     private encrypt(data: any): string {
@@ -121,16 +111,12 @@ class SyncService {
     }
 
     private prepareDataForSync(data: SyncData): SyncData {
-        // Deep clone to avoid mutating original
         const cleanData = JSON.parse(JSON.stringify(data));
-
-        // STRIP SENSITIVE KEYS
         const sensitiveKeys = [
             'geminiApiKey', 'openaiApiKey', 'claudeApiKey',
-            'emailSmtpPassword', 'emailSmtpUser', // Maybe user too?
+            'emailSmtpPassword', 'emailSmtpUser',
         ];
 
-        // Sanitize settings
         if (cleanData.settings) {
             sensitiveKeys.forEach(key => {
                 if (key in cleanData.settings) {
@@ -138,37 +124,21 @@ class SyncService {
                 }
             });
         }
-
         return cleanData;
     }
 
     public async pushData(data: SyncData): Promise<{ success: boolean; error?: string }> {
-        if (!this.supabase || !this.encryptionKey) return { success: false, error: 'Not logged in' };
+        if (!this.provider || !this.encryptionKey) return { success: false, error: 'Not initialized' };
 
         try {
-            const user = await this.getUser();
-            if (!user) return { success: false, error: 'Not logged in' };
+            if (!this.provider.isAuthenticated()) return { success: false, error: 'Not logged in' };
 
             const preparedData = this.prepareDataForSync(data);
             preparedData.lastSyncedAt = Date.now();
 
             const encryptedPayload = this.encrypt(preparedData);
+            return this.provider.push(encryptedPayload);
 
-            // Upsert into user_data table
-            // We store everything in a single row with key 'main_backup' for V1 simplicity
-            // or we could split it. 'main_backup' is easiest for full sync.
-            const { error } = await this.supabase
-                .from('user_data')
-                .upsert({
-                    user_id: user.id,
-                    key: 'main_backup', // Fixed key for now
-                    value: { data: encryptedPayload },
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id, key' });
-
-            if (error) throw error;
-
-            return { success: true };
         } catch (e: any) {
             console.error('[SyncService] Push failed:', e);
             return { success: false, error: e.message };
@@ -176,28 +146,16 @@ class SyncService {
     }
 
     public async pullData(): Promise<{ data?: SyncData; error?: string }> {
-        if (!this.supabase || !this.encryptionKey) return { error: 'Not logged in' };
+        if (!this.provider || !this.encryptionKey) return { error: 'Not initialized' };
 
         try {
-            const user = await this.getUser();
-            if (!user) return { error: 'Not logged in' };
+            if (!this.provider.isAuthenticated()) return { error: 'Not logged in' };
 
-            const { data, error } = await this.supabase
-                .from('user_data')
-                .select('value')
-                .eq('user_id', user.id)
-                .eq('key', 'main_backup')
-                .single();
+            const { data, error } = await this.provider.pull();
+            if (error) return { error };
+            if (!data) return { data: undefined };
 
-            if (error) {
-                // If row not found, it's not an error, just empty
-                if (error.code === 'PGRST116') return { data: undefined };
-                throw error;
-            }
-
-            if (!data || !data.value || !data.value.data) return { data: undefined };
-
-            const decrypted = this.decrypt(data.value.data);
+            const decrypted = this.decrypt(data);
             return { data: decrypted };
 
         } catch (e: any) {
@@ -206,19 +164,15 @@ class SyncService {
         }
     }
 
-    // Merge Logic
     public merge(local: SyncData, remote: SyncData): SyncData {
         console.log('[SyncService] Merging data...');
 
-        // 1. Feeds: Union based on ID
+        // 1. Feeds: Union
         const feedMap = new Map<string, Feed>();
         local.feeds.forEach(f => feedMap.set(f.id, f));
         remote.feeds.forEach(f => {
             if (!feedMap.has(f.id)) {
                 feedMap.set(f.id, f);
-            } else {
-                // Determine which feed object to keep? Maybe the one with latest lastFetched?
-                // Just keep local for now, unless remote has something better.
             }
         });
         const mergedFeeds = Array.from(feedMap.values());
@@ -230,44 +184,30 @@ class SyncService {
         remote.articles.forEach(remoteArticle => {
             const localArticle = articleMap.get(remoteArticle.id);
             if (localArticle) {
-                // Merge logic: Read wins
                 const isRead = localArticle.isRead || remoteArticle.isRead;
-                const isSaved = localArticle.isSaved || remoteArticle.isSaved; // Saved wins too
-
+                const isSaved = localArticle.isSaved || remoteArticle.isSaved;
                 articleMap.set(remoteArticle.id, {
-                    ...localArticle, // Keep local content potentially
+                    ...localArticle,
                     isRead,
                     isSaved
                 });
             } else {
-                // New article from remote
                 articleMap.set(remoteArticle.id, remoteArticle);
             }
         });
         const mergedArticles = Array.from(articleMap.values());
 
-        // 3. Settings: Remote wins (Last Write Wins usually means Remote is newer if we just pulled)
-        // But we must PRESERVE local API keys if remote doesn't have them (which it shouldn't)
+        // 3. Settings: Remote wins but preserve local secrets
         const mergedSettings = { ...local.settings, ...remote.settings };
-
-        // Restore local secrets if they are missing in merged (remote would have them undefined)
         if (local.settings.geminiApiKey) mergedSettings.geminiApiKey = local.settings.geminiApiKey;
         if (local.settings.openaiApiKey) mergedSettings.openaiApiKey = local.settings.openaiApiKey;
         if (local.settings.claudeApiKey) mergedSettings.claudeApiKey = local.settings.claudeApiKey;
         if (local.settings.emailSmtpPassword) mergedSettings.emailSmtpPassword = local.settings.emailSmtpPassword;
 
-        // 4. Chats: Last Write Wins per Article
-        // Union of keys
+        // 4. Chats: Last Write Wins (Remote overwrites local collision)
         const mergedChats = { ...local.chats };
         if (remote.chats) {
             Object.keys(remote.chats).forEach(articleId => {
-                // Simple overwrite for now. Improvements: Check timestamps of last message?
-                // Since we don't track "updatedAt" for chat loosely, we assume the remote (if newer sync) is better?
-                // Actually, if we just pulled, remote might be old.
-                // Let's rely on the fact that we push after local changes.
-                // If we pull, we assume we want to sync UP to remote.
-                // But if local has changed since last sync... 
-                // For V1: Remote Overwrites Local if collision.
                 mergedChats[articleId] = remote.chats[articleId];
             });
         }
