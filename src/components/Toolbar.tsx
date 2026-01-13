@@ -5,24 +5,9 @@ import { AppSettings, Feed, Article } from '../types';
 import { exportToOPML, exportToJSON, downloadFile } from '../exportService';
 import PersonalitySelector from './PersonalitySelector';
 import './Toolbar.css';
-import packageJson from '../../package.json';
 
-interface ToolbarProps {
-    onRefresh: () => void;
-    isRefreshing: boolean;
-    settings: AppSettings;
-    onSettingsChange: (settings: AppSettings) => void;
-    feeds: Feed[];
-    onOpenNewsreel?: () => void;
-    onOpenDailyNewsreel?: () => void;
-    selectedCount?: number;
-    onClearAllData: () => void;
-    onImportOPML: (file: File) => void;
-    articles: Article[];
-    onShowTutorial?: () => void;
-    hideButtons?: boolean;
-    setOpenSettingsRef?: (fn: () => void) => void;
-}
+import SyncSettings from './SyncSettings';
+import packageJson from '../../package.json';
 
 const FONTS = [
     { value: 'system-ui', label: 'System Default' },
@@ -48,10 +33,29 @@ const TIME_HORIZONS: { value: number; label: string }[] = [
     { value: 24, label: 'Today (24 Hours)' },
 ];
 
-export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial, hideButtons, setOpenSettingsRef }: ToolbarProps) {
+
+interface ToolbarProps {
+    onRefresh: () => void;
+    isRefreshing: boolean;
+    settings: AppSettings;
+    onSettingsChange: (settings: AppSettings) => void;
+    feeds: Feed[];
+    onOpenNewsreel?: () => void;
+    onOpenDailyNewsreel?: () => void;
+    selectedCount?: number;
+    onClearAllData: () => void;
+    onImportOPML: (file: File) => void;
+    articles: Article[];
+    onShowTutorial?: () => void;
+    hideButtons?: boolean;
+    setOpenSettingsRef?: (fn: () => void) => void;
+    onDataRestored?: () => void;
+}
+
+export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial, hideButtons, setOpenSettingsRef, onDataRestored }: ToolbarProps) {
     const [showSettings, setShowSettings] = useState(false);
     const [tempSettings, setTempSettings] = useState(settings);
-    const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'personality' | 'ai' | 'email' | 'about'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'personality' | 'ai' | 'email' | 'about' | 'sync'>('general');
     const [geminiModels, setGeminiModels] = useState<string[]>([]);
     const [openaiModels, setOpenaiModels] = useState<string[]>([]);
     const [claudeModels, setClaudeModels] = useState<string[]>([]);
@@ -467,6 +471,12 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                         onClick={() => setActiveTab('ai')}
                     >
                         AI
+                    </button>
+                    <button
+                        className={`tab-btn ${activeTab === 'sync' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('sync')}
+                    >
+                        Sync
                     </button>
                     {/* Email tab hidden - feature temporarily disabled */}
                     {false && (window as any).ipcRenderer && (
@@ -1454,6 +1464,18 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 <button className="btn-secondary" onClick={handleSendTestNewsreel}>Send Test Newsreel</button>
                             </div>
                         </>
+                    )}
+
+
+                    {activeTab === 'sync' && (
+                        <SyncSettings
+                            settings={tempSettings}
+                            feeds={feeds}
+                            articles={articles}
+                            onDataRestored={() => {
+                                if (onDataRestored) onDataRestored();
+                            }}
+                        />
                     )}
 
                     {activeTab === 'about' && (
