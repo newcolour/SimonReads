@@ -91,7 +91,7 @@ class SyncService {
             return { error: error.message };
         }
 
-        return { user: data.user, error: undefined };
+        return { user: data.user || undefined, error: undefined };
     }
 
     public async logout() {
