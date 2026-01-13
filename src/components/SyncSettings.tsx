@@ -11,11 +11,12 @@ interface SyncSettingsProps {
     feeds: Feed[];
     articles: Article[];
     onDataRestored: () => void;
+    onSyncStatusChange?: (isConnected: boolean) => void;
 }
 
 type ProviderType = 'supabase' | 'webdav';
 
-export default function SyncSettings({ settings, feeds, articles, onDataRestored }: SyncSettingsProps) {
+export default function SyncSettings({ settings, feeds, articles, onDataRestored, onSyncStatusChange }: SyncSettingsProps) {
     const [provider, setProvider] = useState<ProviderType>('supabase');
 
     // Supabase State
@@ -63,7 +64,12 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
                     // If service is initialized, align local state provider
                     const currentName = syncService.getProviderName();
                     if (currentName) setProvider(currentName as ProviderType);
+                    onSyncStatusChange?.(true);
+                } else {
+                    onSyncStatusChange?.(false);
                 }
+            } else {
+                onSyncStatusChange?.(false);
             }
         };
         loadSettings();
@@ -107,6 +113,7 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
             } else {
                 setIsLoggedIn(true);
                 setStatusMsg({ type: 'success', text: 'Connected successfully' });
+                onSyncStatusChange?.(true);
 
                 // Save settings
                 localStorage.setItem('sync_provider', provider);
@@ -151,7 +158,9 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
     const handleLogout = async () => {
         await syncService.logout();
         setIsLoggedIn(false);
+        setIsLoggedIn(false);
         setStatusMsg({ type: 'success', text: 'Disconnected' });
+        onSyncStatusChange?.(false);
     };
 
     const handlePush = async () => {

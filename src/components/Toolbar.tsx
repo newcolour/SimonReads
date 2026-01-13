@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { AppSettings, Feed, Article } from '../types';
 import { exportToOPML, exportToJSON, downloadFile } from '../exportService';
 import PersonalitySelector from './PersonalitySelector';
+import { syncService } from '../services/syncService';
 import './Toolbar.css';
 
 import SyncSettings from './SyncSettings';
@@ -68,6 +69,18 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
     const [newsreelClaudeModels, setNewsreelClaudeModels] = useState<string[]>([]);
     const [newsreelOllamaModels, setNewsreelOllamaModels] = useState<string[]>([]);
     const [isLoadingNewsreelModels, setIsLoadingNewsreelModels] = useState(false);
+    const [isSyncConnected, setIsSyncConnected] = useState(false);
+
+    // Check sync status on mount
+    useState(() => {
+        const checkSync = async () => {
+            if (syncService.isInitialized()) {
+                const user = await syncService.getUser();
+                setIsSyncConnected(!!user);
+            }
+        };
+        checkSync();
+    });
 
     // Expose the openSettings function to parent
     const openSettings = () => {
@@ -476,8 +489,21 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                     <button
                         className={`tab-btn ${activeTab === 'sync' ? 'active' : ''}`}
                         onClick={() => setActiveTab('sync')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
                         Sync
+                        {isSyncConnected && (
+                            <div
+                                style={{
+                                    width: '8px',
+                                    height: '8px',
+                                    backgroundColor: '#10b981',
+                                    borderRadius: '50%',
+                                    boxShadow: '0 0 5px rgba(16, 185, 129, 0.5)'
+                                }}
+                                title="Sync Connected"
+                            />
+                        )}
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'help' ? 'active' : ''}`}
@@ -1482,6 +1508,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                             onDataRestored={() => {
                                 if (onDataRestored) onDataRestored();
                             }}
+                            onSyncStatusChange={setIsSyncConnected}
                         />
                     )}
 
