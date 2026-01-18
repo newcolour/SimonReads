@@ -488,7 +488,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                         });
 
                         // Specific removal for journalist image on FCInter1908
-                        doc.querySelectorAll('.gzn_author_img').forEach(el => el.remove());
+                        doc.querySelectorAll('.gzn_author_img, .gzn_author_thumbnail').forEach(el => el.remove());
 
                         // Get HTML content
                         let extractedContent = contentElement.innerHTML;
