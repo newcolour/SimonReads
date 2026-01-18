@@ -468,17 +468,11 @@ function cleanArticleHtml(html: string | null | undefined): string | undefined {
         // Handle lazy-loaded images: convert data-src to src
         // Many sites use lazy loading with data-src attribute
         const images = doc.querySelectorAll('img');
-        console.log(`[cleanArticleHtml] Found ${images.length} images in content`);
 
-        images.forEach((img, index) => {
+        images.forEach((img) => {
             const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
             const currentSrc = img.getAttribute('src') || '';
 
-            console.log(`[cleanArticleHtml] Image ${index}:`, {
-                currentSrc: currentSrc.substring(0, 100),
-                dataSrc: dataSrc?.substring(0, 100) || null,
-                hasDataSrc: !!dataSrc
-            });
 
             // If there's a data-src and the current src looks like a placeholder
             if (dataSrc && (
@@ -489,7 +483,6 @@ function cleanArticleHtml(html: string | null | undefined): string | undefined {
                 currentSrc.length < 10 ||
                 !currentSrc
             )) {
-                console.log(`[cleanArticleHtml] Replacing placeholder with data-src for image ${index}`);
                 img.setAttribute('src', dataSrc);
             }
 
