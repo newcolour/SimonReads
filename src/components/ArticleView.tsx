@@ -487,8 +487,25 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             }
                         });
 
+                        // Specific removal for journalist image on FCInter1908
+                        doc.querySelectorAll('.gzn_author_img').forEach(el => el.remove());
+
                         // Get HTML content
                         let extractedContent = contentElement.innerHTML;
+
+                        // Fix double-encoded entities (common in some feeds)
+                        // This handles &amp;#8220; -> &#8220; -> “
+                        extractedContent = extractedContent.replace(/&amp;#(\d+);/g, (_, code) => {
+                            return String.fromCharCode(parseInt(code, 10));
+                        });
+
+                        // Also fix common named entities if double encoded
+                        extractedContent = extractedContent
+                            .replace(/&amp;quot;/g, '"')
+                            .replace(/&amp;apos;/g, "'")
+                            .replace(/&amp;lt;/g, "<")
+                            .replace(/&amp;gt;/g, ">");
+
                         console.log('Successfully extracted content, length:', extractedContent.length);
 
                         // Debug: Show image-related HTML
