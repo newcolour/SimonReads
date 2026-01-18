@@ -84,16 +84,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
     const feedTitle = feed?.title || article?.feedTitle;
     const personalityConfig = usePersonalityConfig(settings.readingPersonality);
 
-    console.log('ArticleView render:', {
-        articleId: article?.id,
-        feedId: article?.feedId,
-        feedProp: feed,
-        feedTitleProp: feed?.title,
-        articleFeedTitle: article?.feedTitle,
-        finalFeedTitle: feedTitle,
-        articleImage: article?.image,
-        articleMediaType: article?.mediaType
-    });
+
 
     const [viewMode, setViewMode] = useState<'reader' | 'browser'>('reader');
     const [summary, setSummary] = useState<string | null>(null);
@@ -406,7 +397,24 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                     const doc = parser.parseFromString(htmlContent, 'text/html');
 
                     // Remove unwanted elements
-                    doc.querySelectorAll('script, style, nav, header, footer, aside, iframe, .ad, .advertisement, .social-share, .newsletter-signup, .related-stories, .ad-wrap, .ad-config-wrap').forEach(el => el.remove());
+                    doc.querySelectorAll('script, style, nav, header, footer, aside, iframe, .ad, .advertisement, .social-share, .newsletter-signup, .related-stories, .ad-wrap, .ad-config-wrap, .breadcrumbs, .tags, .categories, .kicker, .eyebrow').forEach(el => el.remove());
+
+                    // Aggressive text-based removal for specific junk
+                    doc.querySelectorAll('div, span, p, h6, h5').forEach(el => {
+                        const text = el.textContent?.trim().toLowerCase() || '';
+                        if (
+                            text === 'adv' ||
+                            text.startsWith('tempo di lettura') ||
+                            text.startsWith('read time') ||
+                            text.includes('salvato nella pagina')
+                        ) {
+                            el.remove();
+                        }
+                    });
+
+                    // Remove author images/avatars
+                    doc.querySelectorAll('.author-image, .author-avatar, .avatar, img[alt*="Author"], img[alt*="Redatto"], .author-box img').forEach(el => el.remove());
+
 
                     // Try to find main content area with site-specific selectors
                     let contentElement;
