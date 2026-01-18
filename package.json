@@ -2,7 +2,7 @@
   "name": "simon-reads",
   "productName": "SimonReads",
   "private": true,
-  "version": "4.2.0",
+  "version": "4.2.1",
   "description": "A modern RSS Reader",
   "homepage": "https://github.com/simonebianco/simon-reads",
   "author": {
@@ -48,8 +48,7 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "rss-parser": "^3.13.0",
-    "webdav": "^5.8.0"
+    "rss-parser": "^3.13.0"
   },
   "devDependencies": {
     "@capacitor/android": "^7.4.4",
