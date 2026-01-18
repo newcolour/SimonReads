@@ -397,7 +397,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                     const doc = parser.parseFromString(htmlContent, 'text/html');
 
                     // Remove unwanted elements
-                    doc.querySelectorAll('script, style, nav, header, footer, aside, iframe, .ad, .advertisement, .social-share, .newsletter-signup, .related-stories, .ad-wrap, .ad-config-wrap, .breadcrumbs, .tags, .categories, .kicker, .eyebrow').forEach(el => el.remove());
+                    doc.querySelectorAll('script, style, nav, header, footer, aside, iframe, .ad, .advertisement, .social-share, .newsletter-signup, .related-stories, .ad-wrap, .ad-config-wrap, .breadcrumbs, .tags, .categories, .kicker, .eyebrow, .bck-gn-media-news, .sticky-video').forEach(el => el.remove());
 
                     // Aggressive text-based removal for specific junk
                     doc.querySelectorAll('div, span, p, h6, h5').forEach(el => {
@@ -406,8 +406,10 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             text === 'adv' ||
                             text.startsWith('tempo di lettura') ||
                             text.startsWith('read time') ||
-                            text.includes('salvato nella pagina')
+                            text.includes('salvato nella pagina') ||
+                            text.includes('i migliori video scelti dal nostro canale')
                         ) {
+                            el.parentElement?.closest('.media-frame')?.parentElement?.remove(); // Try to remove container
                             el.remove();
                         }
                     });
@@ -444,6 +446,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                         } else {
                             // Generic selectors for other sites
                             contentElement =
+                                doc.querySelector('.body-article') || // Gazzetta Network (FCInter1908)
                                 doc.querySelector('#story') || // Boing Boing
                                 doc.querySelector('.entry-content') || // WordPress
                                 doc.querySelector('.post-content') || // WordPress
