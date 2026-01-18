@@ -84,42 +84,56 @@ class TTSServiceClass {
         onError?: (error: Error) => void
     ): Promise<TTSController> {
         this.isPlaying = true;
+        // Limit for Android TTS is often around 4000 chars. Use 3000 to be safe.
+        const chunks = this.splitTextIntoChunks(text, 3000);
+        let active = true;
 
-        try {
-            // The Capacitor TTS plugin doesn't support pause/resume natively
-            // so we'll use it for speaking only
-            await TextToSpeech.speak({
-                text,
-                lang: language,
-                rate: rate,
-                pitch: 1.0,
-                volume: 1.0,
-                category: 'playback', // Use playback for media audio
-            });
+        // Process chunks sequentially
+        (async () => {
+            try {
+                for (let i = 0; i < chunks.length; i++) {
+                    if (!active || !this.isPlaying) break;
 
-            this.isPlaying = false;
-            onEnd?.();
-        } catch (error) {
-            this.isPlaying = false;
-            console.error('Native TTS error:', error);
-            onError?.(error instanceof Error ? error : new Error(String(error)));
-        }
+                    await TextToSpeech.speak({
+                        text: chunks[i],
+                        lang: language,
+                        rate: rate,
+                        pitch: 1.0,
+                        volume: 1.0,
+                        category: 'playback',
+                    });
+                }
+
+                if (active && this.isPlaying) {
+                    this.isPlaying = false;
+                    onEnd?.();
+                }
+            } catch (error) {
+                if (active) {
+                    this.isPlaying = false;
+                    console.error('Native TTS error:', error);
+                    onError?.(error instanceof Error ? error : new Error(String(error)));
+                }
+            }
+        })();
 
         return {
             pause: async () => {
                 // Capacitor TTS doesn't have pause, just stop
                 try {
+                    active = false;
                     await TextToSpeech.stop();
                 } catch (e) {
                     console.warn('Failed to stop TTS:', e);
                 }
             },
             resume: () => {
-                // Not supported - would need to restart
+                // Not supported
                 console.warn('Resume not supported with native TTS');
             },
             stop: async () => {
                 this.isPlaying = false;
+                active = false;
                 try {
                     await TextToSpeech.stop();
                 } catch (e) {
@@ -128,7 +142,7 @@ class TTSServiceClass {
             },
             setRate: (newRate: number) => {
                 this.currentRate = newRate;
-                // Rate change will apply to next speak call
+                // Rate change applies to next speak call/chunk
             }
         };
     }

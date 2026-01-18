@@ -9,6 +9,7 @@
 
 .newsreel-header {
     padding: 16px 24px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
     border-bottom: 1px solid var(--border-color);
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
     display: flex;

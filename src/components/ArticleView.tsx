@@ -53,7 +53,6 @@ const getPublicationStyle = (feedTitle: string, theme: string) => {
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
-        maxWidth: '400px',
         zIndex: 10
     };
 
