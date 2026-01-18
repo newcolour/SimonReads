@@ -91,8 +91,11 @@ export default function ModernLayout({
             const getLastDate = (feedId: string) => {
                 const feedArticles = articles.filter(art => art.feedId === feedId);
                 if (feedArticles.length === 0) return 0;
-                // Assuming articles are reasonably sorted, but lets maximize
-                return Math.max(...feedArticles.map(art => new Date(art.pubDate || 0).getTime()));
+                // Use reduce instead of spread Math.max to avoid stack overflow with many articles
+                return feedArticles.reduce((max, art) => {
+                    const time = new Date(art.pubDate || 0).getTime();
+                    return time > max ? time : max;
+                }, 0);
             };
 
             const dateA = getLastDate(a.id);
