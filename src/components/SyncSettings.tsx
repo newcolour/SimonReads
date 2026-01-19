@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { RefreshCw, Upload, Download, Check, AlertCircle, Eye, EyeOff, LogOut, Database, HardDrive } from 'lucide-react';
+import { RefreshCw, Upload, Download, Check, AlertCircle, Eye, EyeOff, LogOut, Github } from 'lucide-react';
 import { syncService } from '../services/syncService';
 import { AppSettings, Feed, Article } from '../types';
 import { storage } from '../storage';
@@ -14,56 +14,34 @@ interface SyncSettingsProps {
     onSyncStatusChange?: (isConnected: boolean) => void;
 }
 
-type ProviderType = 'supabase' | 'webdav';
-
 export default function SyncSettings({ settings, feeds, articles, onDataRestored, onSyncStatusChange }: SyncSettingsProps) {
-    const [provider, setProvider] = useState<ProviderType>('supabase');
-
     // Supabase State
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState(''); // Also used as encryption key for Supabase
     const [supabaseUrl, setSupabaseUrl] = useState('');
     const [supabaseAnonKey, setSupabaseAnonKey] = useState('');
 
-    // WebDAV State
-    const [webdavUrl, setWebdavUrl] = useState('');
-    const [webdavUser, setWebdavUser] = useState('');
-    const [webdavPassword, setWebdavPassword] = useState(''); // Auth password
-    const [encryptionKey, setEncryptionKey] = useState(''); // Separate encryption key for WebDAV
-
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [lastSynced, setLastSynced] = useState<string | null>(null);
     const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+    const [encryptionKey, setEncryptionKey] = useState(''); // For OAuth users who don't have a password
 
     // Initial check
     useEffect(() => {
         const loadSettings = async () => {
-            // Load Provider preference
-            const savedProvider = localStorage.getItem('sync_provider') as ProviderType;
-            if (savedProvider) setProvider(savedProvider);
-
             // Supabase Defaults
             const savedSbUrl = localStorage.getItem('sync_supabase_url');
             const savedSbKey = localStorage.getItem('sync_supabase_key');
             if (savedSbUrl) setSupabaseUrl(savedSbUrl);
             if (savedSbKey) setSupabaseAnonKey(savedSbKey);
 
-            // WebDAV Defaults
-            const savedWdUrl = localStorage.getItem('sync_webdav_url');
-            const savedWdUser = localStorage.getItem('sync_webdav_user');
-            if (savedWdUrl) setWebdavUrl(savedWdUrl);
-            if (savedWdUser) setWebdavUser(savedWdUser);
-
             // Check if service is already initialized
             if (syncService.isInitialized()) {
                 const user = await syncService.getUser();
                 if (user) {
                     setIsLoggedIn(true);
-                    // If service is initialized, align local state provider
-                    const currentName = syncService.getProviderName();
-                    if (currentName) setProvider(currentName as ProviderType);
                     onSyncStatusChange?.(true);
                 } else {
                     onSyncStatusChange?.(false);
@@ -73,36 +51,94 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
             }
         };
         loadSettings();
+
+        // Check for OAuth redirect
+        const handleOAuthRedirect = async () => {
+            const hashParams = new URLSearchParams(window.location.hash.substring(1));
+            const accessToken = hashParams.get('access_token');
+
+            if (accessToken) {
+                // Clear the hash from URL
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+                // User came back from OAuth, check if we have saved config
+                const savedUrl = localStorage.getItem('sync_supabase_url');
+                const savedKey = localStorage.getItem('sync_supabase_key');
+                const savedEncKey = localStorage.getItem('sync_encryption_key');
+
+                if (savedUrl && savedKey && savedEncKey) {
+                    try {
+                        syncService.initialize({
+                            provider: 'supabase' as const,
+                            encryptionKey: savedEncKey,
+                            supabase: { url: savedUrl, key: savedKey }
+                        });
+
+                        const user = await syncService.getUser();
+                        if (user) {
+                            setIsLoggedIn(true);
+                            setStatusMsg({ type: 'success', text: 'Connected with GitHub!' });
+                            onSyncStatusChange?.(true);
+                        }
+                    } catch (e: any) {
+                        setStatusMsg({ type: 'error', text: 'OAuth login failed: ' + e.message });
+                    }
+                }
+            }
+        };
+
+        handleOAuthRedirect();
     }, []);
+
+    const handleGitHubLogin = async () => {
+        setStatusMsg(null);
+
+        if (!supabaseUrl || !supabaseAnonKey) {
+            setStatusMsg({ type: 'error', text: 'Please enter Supabase URL and Key first' });
+            return;
+        }
+
+        if (!encryptionKey) {
+            setStatusMsg({ type: 'error', text: 'Please set an encryption key for data privacy' });
+            return;
+        }
+
+        try {
+            // Save config for when we return from OAuth
+            localStorage.setItem('sync_supabase_url', supabaseUrl);
+            localStorage.setItem('sync_supabase_key', supabaseAnonKey);
+            localStorage.setItem('sync_encryption_key', encryptionKey);
+
+            syncService.initialize({
+                provider: 'supabase' as const,
+                encryptionKey: encryptionKey,
+                supabase: { url: supabaseUrl, key: supabaseAnonKey }
+            });
+
+            const { error } = await syncService.loginWithGitHub();
+            if (error) {
+                setStatusMsg({ type: 'error', text: 'GitHub login failed: ' + error });
+            }
+            // If successful, user will be redirected to GitHub
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: e.message });
+        }
+    };
 
     const handleLogin = async () => {
         setStatusMsg(null);
-        let config: any = { provider };
-        let credentials: any = {};
 
-        if (provider === 'supabase') {
-            if (!supabaseUrl || !supabaseAnonKey || !email || !password) {
-                setStatusMsg({ type: 'error', text: 'Please fill in all fields' });
-                return;
-            }
-            config = {
-                ...config,
-                encryptionKey: password,
-                supabase: { url: supabaseUrl, key: supabaseAnonKey }
-            };
-            credentials = { email, password };
-        } else {
-            if (!webdavUrl || !encryptionKey) {
-                setStatusMsg({ type: 'error', text: 'URL and Encryption Password are required' });
-                return;
-            }
-            config = {
-                ...config,
-                encryptionKey: encryptionKey,
-                webdav: { url: webdavUrl, username: webdavUser, password: webdavPassword }
-            };
-            credentials = { url: webdavUrl, username: webdavUser, password: webdavPassword };
+        if (!supabaseUrl || !supabaseAnonKey || !email || !password) {
+            setStatusMsg({ type: 'error', text: 'Please fill in all fields' });
+            return;
         }
+
+        const config = {
+            provider: 'supabase' as const,
+            encryptionKey: password,
+            supabase: { url: supabaseUrl, key: supabaseAnonKey }
+        };
+        const credentials = { email, password };
 
         try {
             syncService.initialize(config);
@@ -116,14 +152,8 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
                 onSyncStatusChange?.(true);
 
                 // Save settings
-                localStorage.setItem('sync_provider', provider);
-                if (provider === 'supabase') {
-                    localStorage.setItem('sync_supabase_url', supabaseUrl);
-                    localStorage.setItem('sync_supabase_key', supabaseAnonKey);
-                } else {
-                    localStorage.setItem('sync_webdav_url', webdavUrl);
-                    localStorage.setItem('sync_webdav_user', webdavUser);
-                }
+                localStorage.setItem('sync_supabase_url', supabaseUrl);
+                localStorage.setItem('sync_supabase_key', supabaseAnonKey);
             }
         } catch (e: any) {
             setStatusMsg({ type: 'error', text: e.message });
@@ -131,7 +161,6 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
     };
 
     const handleRegister = async () => {
-        if (provider !== 'supabase') return;
         if (!supabaseUrl || !supabaseAnonKey || !email || !password) {
             setStatusMsg({ type: 'error', text: 'Please fill in all fields' });
             return;
@@ -139,7 +168,7 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
 
         try {
             syncService.initialize({
-                provider: 'supabase',
+                provider: 'supabase' as const,
                 encryptionKey: password,
                 supabase: { url: supabaseUrl, key: supabaseAnonKey }
             });
@@ -234,7 +263,7 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
         <div className="sync-settings">
             <h3><RefreshCw size={18} /> Cross-Platform Sync</h3>
             <p className="sync-description">
-                Sync using Supabase or your own NAS (WebDAV). Data is client-side encrypted.
+                Sync using Supabase. Data is client-side encrypted.
             </p>
 
             {statusMsg && (
@@ -246,84 +275,66 @@ export default function SyncSettings({ settings, feeds, articles, onDataRestored
 
             {!isLoggedIn ? (
                 <div className="login-form">
-                    <div className="provider-selector">
-                        <button
-                            className={`provider-btn ${provider === 'supabase' ? 'active' : ''}`}
-                            onClick={() => setProvider('supabase')}
-                        >
-                            <Database size={16} /> Supabase
-                        </button>
-                        <button
-                            className={`provider-btn ${provider === 'webdav' ? 'active' : ''}`}
-                            onClick={() => setProvider('webdav')}
-                        >
-                            <HardDrive size={16} /> NAS / WebDAV
-                        </button>
+                    <div className="form-group">
+                        <label>Supabase URL</label>
+                        <input type="text" value={supabaseUrl} onChange={e => setSupabaseUrl(e.target.value)} placeholder="https://xyz.supabase.co" />
+                    </div>
+                    <div className="form-group">
+                        <label>Supabase Key</label>
+                        <input type="password" value={supabaseAnonKey} onChange={e => setSupabaseAnonKey(e.target.value)} placeholder="Key" />
                     </div>
 
-                    {provider === 'supabase' && (
-                        <>
-                            <div className="form-group">
-                                <label>Supabase URL</label>
-                                <input type="text" value={supabaseUrl} onChange={e => setSupabaseUrl(e.target.value)} placeholder="https://xyz.supabase.co" />
-                            </div>
-                            <div className="form-group">
-                                <label>Supabase Key</label>
-                                <input type="password" value={supabaseAnonKey} onChange={e => setSupabaseAnonKey(e.target.value)} placeholder="Key" />
-                            </div>
-                            <div className="form-group">
-                                <label>Email</label>
-                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>Password (Auth + Encryption)</label>
-                                <div className="password-input">
-                                    <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} />
-                                    <button className="toggle-pass" onClick={() => setShowPassword(!showPassword)}>
-                                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="auth-actions">
-                                <button className="btn-primary" onClick={handleLogin}>Login</button>
-                                <button className="btn-secondary" onClick={handleRegister}>Create Account</button>
-                            </div>
-                        </>
-                    )}
+                    <div className="auth-divider">
+                        <span>Email/Password Login</span>
+                    </div>
 
-                    {provider === 'webdav' && (
-                        <>
-                            <div className="form-group">
-                                <label>WebDAV URL (e.g. NAS)</label>
-                                <input type="text" value={webdavUrl} onChange={e => setWebdavUrl(e.target.value)} placeholder="https://nas.local:5006/home" />
-                            </div>
-                            <div className="form-group">
-                                <label>Username (Optional)</label>
-                                <input type="text" value={webdavUser} onChange={e => setWebdavUser(e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>Password (Optional)</label>
-                                <input type="password" value={webdavPassword} onChange={e => setWebdavPassword(e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>Encryption Key (Required for Data Privacy)</label>
-                                <div className="password-input">
-                                    <input type={showPassword ? "text" : "password"} value={encryptionKey} onChange={e => setEncryptionKey(e.target.value)} placeholder="Secret Passphrase" />
-                                    <button className="toggle-pass" onClick={() => setShowPassword(!showPassword)}>
-                                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="auth-actions">
-                                <button className="btn-primary" onClick={handleLogin}>Connect</button>
-                            </div>
-                        </>
-                    )}
+                    <div className="form-group">
+                        <label>Email</label>
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
+                    </div>
+                    <div className="form-group">
+                        <label>Password (Auth + Encryption)</label>
+                        <div className="password-input">
+                            <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} />
+                            <button className="toggle-pass" onClick={() => setShowPassword(!showPassword)}>
+                                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="auth-actions">
+                        <button className="btn-primary" onClick={handleLogin}>Login</button>
+                        <button className="btn-secondary" onClick={handleRegister}>Create Account</button>
+                    </div>
+
+                    <div className="auth-divider">
+                        <span>OR</span>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Encryption Key (for GitHub OAuth)</label>
+                        <div className="password-input">
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                value={encryptionKey}
+                                onChange={e => setEncryptionKey(e.target.value)}
+                                placeholder="Your secret encryption key"
+                            />
+                            <button className="toggle-pass" onClick={() => setShowPassword(!showPassword)}>
+                                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                        </div>
+                        <small style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                            Required for data encryption when using OAuth
+                        </small>
+                    </div>
+                    <button className="btn-github" onClick={handleGitHubLogin}>
+                        <Github size={16} /> Continue with GitHub
+                    </button>
                 </div>
             ) : (
                 <div className="sync-dashboard">
                     <div className="sync-status">
-                        <span className="badge success">Connected ({provider})</span>
+                        <span className="badge success">Connected (Supabase)</span>
                         {lastSynced && <span className="last-synced">Last: {lastSynced}</span>}
                     </div>
 

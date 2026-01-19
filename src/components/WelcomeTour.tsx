@@ -72,11 +72,25 @@ const tourSteps = [
         requiresArticle: true
     },
     {
-        title: 'Read Aloud with Controls',
-        description: 'Listen to articles with text-to-speech. Use pause/resume and adjust playback speed (0.75x to 2.0x) while listening.',
-        image: '🔊',
-        highlight: null,
-        requiresArticle: false
+        title: 'AI Podcast',
+        description: 'Turn articles into engaging audio discussions between two AI hosts (Alex & Jordan), or listen with standard Read Aloud.',
+        image: '🎧',
+        highlight: '.podcast-container',
+        requiresArticle: true
+    },
+    {
+        title: 'Focus Mode',
+        description: 'Eliminate distractions with a dedicated reading view and a persistent timer (Pomodoro style) to track your reading sessions.',
+        image: '🎯',
+        highlight: '.action-btn[data-tooltip="Focus Mode"]',
+        requiresArticle: true
+    },
+    {
+        title: 'Share Beautiful Cards',
+        description: 'Create and share stunning visual cards of your favorite quotes or articles. Perfect for social media!',
+        image: '🎨',
+        highlight: '.action-btn[data-tooltip="Share"]',
+        requiresArticle: true
     },
     {
         title: 'Create Newsreels',
@@ -92,15 +106,6 @@ const tourSteps = [
         highlight: '.newsreel-btn',
         requiresArticle: false
     },
-    /* Email Digests step - feature temporarily disabled
-    {
-        title: 'Email Digests',
-        description: 'Schedule daily email digests to be sent automatically. Configure SMTP settings in the settings menu.',
-        image: '📧',
-        highlight: '.settings-btn',
-        requiresArticle: false
-    },
-    */
     {
         title: 'Customize Everything',
         description: 'Configure AI providers (Gemini, OpenAI, Claude), themes, fonts, TTS settings, and more in the settings menu.',

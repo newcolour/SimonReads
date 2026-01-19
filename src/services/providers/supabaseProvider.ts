@@ -6,12 +6,12 @@ export class SupabaseProvider implements SyncProvider {
     name = 'supabase';
     private supabase: SupabaseClient | null = null;
 
+    initialize(url: string, key: string) {
+        this.supabase = createClient(url, key);
+    }
+
     isAuthenticated(): boolean {
         return !!this.supabase && !!this.supabase.auth.getUser();
-        // Note: auth.getUser() is async, but we can check if client exists.
-        // Better check might be needed, but for now checking client existence + session might be enough?
-        // Actually, let's rely on the service to track state, or check session synchronously if possible.
-        // Supabase client maintains session in local storage.
     }
 
     async login(credentials: { url: string; key: string; email?: string; password?: string }): Promise<{ user?: any; error?: string }> {
@@ -32,6 +32,26 @@ export class SupabaseProvider implements SyncProvider {
             }
             // Just init if no auth provided (unusual for login, but maybe for check)
             return { user: null };
+        } catch (e: any) {
+            return { error: e.message };
+        }
+    }
+
+    async loginWithGitHub(): Promise<{ error?: string }> {
+        if (!this.supabase) {
+            return { error: 'Supabase not initialized' };
+        }
+
+        try {
+            const { error } = await this.supabase.auth.signInWithOAuth({
+                provider: 'github',
+                options: {
+                    redirectTo: window.location.origin + window.location.pathname
+                }
+            });
+
+            if (error) return { error: error.message };
+            return {}; // Success - user will be redirected
         } catch (e: any) {
             return { error: e.message };
         }

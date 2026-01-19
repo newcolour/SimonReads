@@ -1,5 +1,6 @@
 import { AppSettings, Feed } from './types';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { safeFetch } from './utils/fetchUtils';
 
 export interface FeedSuggestion {
     title: string;
@@ -33,7 +34,7 @@ export async function validateFeed(url: string): Promise<boolean> {
         } else {
             // Web fallback - may fail due to CORS
             try {
-                const response = await fetch(url, {
+                const response = await safeFetch(url, {
                     method: 'GET',
                     headers: { 'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml' }
                 });
@@ -167,7 +168,7 @@ async function suggestWithGemini(prompt: string, apiKey: string, settings: AppSe
     const model = settings.geminiModel || 'gemini-1.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -188,7 +189,7 @@ async function suggestWithOpenAI(prompt: string, apiKey: string, settings: AppSe
     if (!apiKey) throw new Error('Please set your OpenAI API Key in Settings.');
     const model = settings.openaiModel || 'gpt-4o-mini';
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await safeFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -213,7 +214,7 @@ async function suggestWithClaude(prompt: string, apiKey: string, settings: AppSe
     if (!apiKey) throw new Error('Please set your Anthropic API Key in Settings.');
     const model = settings.claudeModel || 'claude-3-haiku-20240307';
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await safeFetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
             'x-api-key': apiKey,
@@ -241,7 +242,7 @@ async function suggestWithOllama(prompt: string, settings: AppSettings): Promise
     const model = settings.ollamaModel || 'llama3';
     const baseUrl = (settings.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
 
-    const response = await fetch(`${baseUrl}/api/chat`, {
+    const response = await safeFetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

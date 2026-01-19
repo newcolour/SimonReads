@@ -1,14 +1,18 @@
-import { Settings, RefreshCw, X, Download, Newspaper, Trash2 } from 'lucide-react';
+import { Settings, RefreshCw, X, Download, Newspaper, Trash2, BarChart3, Activity } from 'lucide-react';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AppSettings, Feed, Article } from '../types';
 import { exportToOPML, exportToJSON, downloadFile } from '../exportService';
 import PersonalitySelector from './PersonalitySelector';
 import { syncService } from '../services/syncService';
+import { safeFetch } from '../utils/fetchUtils';
 import './Toolbar.css';
 
 import SyncSettings from './SyncSettings';
 import HelpSection from './HelpSection';
+import KeywordAlerts from './KeywordAlerts';
+import ReadingStatsView from './ReadingStats';
+import FeedHealth from './FeedHealth';
 import packageJson from '../../package.json';
 
 const FONTS = [
@@ -70,6 +74,8 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
     const [newsreelOllamaModels, setNewsreelOllamaModels] = useState<string[]>([]);
     const [isLoadingNewsreelModels, setIsLoadingNewsreelModels] = useState(false);
     const [isSyncConnected, setIsSyncConnected] = useState(false);
+    const [showReadingStats, setShowReadingStats] = useState(false);
+    const [showFeedHealth, setShowFeedHealth] = useState(false);
 
     // Check sync status on mount
     useState(() => {
@@ -116,7 +122,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                     models = await ipcRenderer.invoke('fetch-gemini-models', tempSettings.geminiApiKey);
                 } else {
                     // Direct fetch for Android/mobile
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${tempSettings.geminiApiKey}`);
+                    const response = await safeFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${tempSettings.geminiApiKey}`);
                     if (!response.ok) throw new Error('Failed to fetch Gemini models');
                     const data = await response.json();
                     models = data.models
@@ -132,7 +138,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                     models = await ipcRenderer.invoke('fetch-openai-models', tempSettings.openaiApiKey);
                 } else {
                     // Direct fetch for Android/mobile
-                    const response = await fetch('https://api.openai.com/v1/models', {
+                    const response = await safeFetch('https://api.openai.com/v1/models', {
                         headers: { 'Authorization': `Bearer ${tempSettings.openaiApiKey}` }
                     });
                     if (!response.ok) throw new Error('Failed to fetch OpenAI models');
@@ -169,7 +175,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                 const baseUrl = tempSettings.ollamaUrl || 'http://localhost:11434';
                 const cleanUrl = baseUrl.replace(/\/$/, '');
                 try {
-                    const response = await fetch(`${cleanUrl}/api/tags`);
+                    const response = await safeFetch(`${cleanUrl}/api/tags`);
                     if (!response.ok) throw new Error('Failed to fetch Ollama models');
                     const data = await response.json();
                     // Data format: { models: [ { name: "llama3:latest", ... } ] }
@@ -222,7 +228,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                 if (ipcRenderer) {
                     models = await ipcRenderer.invoke('fetch-openai-models', apiKey);
                 } else {
-                    const response = await fetch('https://api.openai.com/v1/models', {
+                    const response = await safeFetch('https://api.openai.com/v1/models', {
                         headers: { 'Authorization': `Bearer ${apiKey}` }
                     });
                     if (!response.ok) throw new Error('Failed to fetch OpenAI models');
@@ -587,6 +593,10 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 </div>
                                 <p className="setting-hint">Export/import all settings including API keys, themes, and preferences. Use this to transfer your configuration between devices.</p>
                             </div>
+
+                            <div className="setting-divider"></div>
+
+                            <KeywordAlerts />
 
                             <div className="setting-divider"></div>
 
@@ -1583,6 +1593,20 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                             </button>
                         )}
                         <button
+                            className="icon-btn"
+                            onClick={() => setShowReadingStats(true)}
+                            data-tooltip="Reading Stats"
+                        >
+                            <BarChart3 size={18} />
+                        </button>
+                        <button
+                            className="icon-btn"
+                            onClick={() => setShowFeedHealth(true)}
+                            data-tooltip="Feed Health"
+                        >
+                            <Activity size={18} />
+                        </button>
+                        <button
                             className={`refresh-btn ${isRefreshing ? 'spinning' : ''}`}
                             onClick={onRefresh}
                             disabled={isRefreshing}
@@ -1601,6 +1625,20 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                 )}
             </div>
             {createPortal(modal, document.body)}
+            {showReadingStats && createPortal(
+                <ReadingStatsView
+                    onClose={() => setShowReadingStats(false)}
+                    feedTitles={Object.fromEntries(feeds.map(f => [f.id, f.title]))}
+                />,
+                document.body
+            )}
+            {showFeedHealth && createPortal(
+                <FeedHealth
+                    feeds={feeds}
+                    onClose={() => setShowFeedHealth(false)}
+                />,
+                document.body
+            )}
         </>
     );
 }

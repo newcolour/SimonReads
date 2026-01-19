@@ -15,6 +15,7 @@ import WelcomeTour from './components/WelcomeTour';
 import ModernLayout from './components/ModernLayout';
 import { parseOpml } from './importService';
 import { NotificationService } from './services/notificationService';
+import { KeywordAlertService } from './services/keywordAlertService';
 import { usePersonalityAutoSwitch } from './hooks/usePersonality';
 import { generateNewsreelInBackground, getNewsreelState, subscribeToNewsreel } from './services/newsreelService';
 import './App.css';
@@ -798,6 +799,10 @@ function App() {
                 title: 'New Articles',
                 body: `You have ${newCount} new article${newCount > 1 ? 's' : ''}.`
             });
+
+            // Check new articles for keyword alerts
+            const newArticles = mergedArticles.filter(a => !existingArticlesMap.has(a.id));
+            KeywordAlertService.checkArticles(newArticles);
         }
 
         // Add remaining existing articles (those that fell off the RSS feed)

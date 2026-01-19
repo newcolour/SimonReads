@@ -1,0 +1,319 @@
+.share-card-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(4px);
+}
+
+.share-card-container {
+    background: var(--bg-primary);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.share-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.share-card-header h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.share-card-header .close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+}
+
+.share-card-body {
+    padding: 20px;
+}
+
+/* Card Preview Styles */
+.share-card-preview {
+    width: 100%;
+    aspect-ratio: 1.91 / 1;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    box-sizing: border-box;
+}
+
+/* Minimal Style */
+.share-card-preview.minimal {
+    border: 1px solid var(--border-color);
+    justify-content: center;
+}
+
+.share-card-preview.minimal .card-source {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent-color);
+    margin-bottom: 8px;
+}
+
+.share-card-preview.minimal .card-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 12px;
+    line-height: 1.3;
+}
+
+.share-card-preview.minimal .card-excerpt {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0 0 12px;
+    line-height: 1.5;
+}
+
+.share-card-preview.minimal .card-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* Gradient Style */
+.share-card-preview.gradient {
+    color: white;
+    justify-content: flex-end;
+}
+
+.share-card-preview.gradient .card-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
+}
+
+.share-card-preview.gradient .card-content {
+    position: relative;
+    z-index: 1;
+}
+
+.share-card-preview.gradient .card-source {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.8;
+    margin-bottom: 8px;
+}
+
+.share-card-preview.gradient .card-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    line-height: 1.3;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.share-card-preview.gradient .card-meta {
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+/* News Style */
+.share-card-preview.news {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    padding: 0;
+}
+
+.share-card-preview.news .card-image {
+    width: 100%;
+    height: 45%;
+    object-fit: cover;
+}
+
+.share-card-preview.news .card-content {
+    padding: 16px;
+    flex: 1;
+}
+
+.share-card-preview.news .card-badge {
+    display: inline-block;
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.share-card-preview.news .card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 6px;
+    line-height: 1.3;
+}
+
+.share-card-preview.news .card-excerpt {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* Quote Style */
+.share-card-preview.quote {
+    color: white;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.share-card-preview.quote .card-quote-mark {
+    font-size: 80px;
+    font-family: Georgia, serif;
+    line-height: 0.5;
+    opacity: 0.3;
+    margin-bottom: 8px;
+}
+
+.share-card-preview.quote .card-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 16px;
+    line-height: 1.4;
+    max-width: 90%;
+}
+
+.share-card-preview.quote .card-attribution {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+/* Options */
+.share-card-options {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.option-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.style-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.style-buttons button {
+    flex: 1;
+    padding: 10px;
+    background: var(--bg-secondary);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.style-buttons button:hover {
+    background: var(--bg-hover);
+}
+
+.style-buttons button.active {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background: var(--bg-hover);
+}
+
+.gradient-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.gradient-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.gradient-btn:hover {
+    transform: scale(1.1);
+}
+
+.gradient-btn.active {
+    border-color: white;
+    box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+/* Footer */
+.share-card-footer {
+    display: flex;
+    gap: 10px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.share-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.share-btn.secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.share-btn.secondary:hover {
+    background: var(--bg-hover);
+}
+
+.share-btn.primary {
+    flex: 1;
+    background: var(--accent-color);
+    color: white;
+}
+
+.share-btn.primary:hover {
+    opacity: 0.9;
+}

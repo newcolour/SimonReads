@@ -101,6 +101,9 @@
     left: 10px;
     color: var(--icon-color);
     pointer-events: none;
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
 }
 
 .search-input {

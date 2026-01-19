@@ -3,7 +3,6 @@ import CryptoJS from 'crypto-js';
 import { AppSettings, Feed, Article } from '../types';
 import { SyncProvider } from './types';
 import { SupabaseProvider } from './providers/supabaseProvider';
-import { WebDavProvider } from './providers/webdavProvider';
 
 export interface SyncData {
     feeds: Feed[];
@@ -14,10 +13,9 @@ export interface SyncData {
 }
 
 export interface SyncConfig {
-    provider: 'supabase' | 'webdav';
+    provider: 'supabase';
     encryptionKey: string;
-    supabase?: { url: string; key: string };
-    webdav?: { url: string; username?: string; password?: string };
+    supabase: { url: string; key: string };
 }
 
 class SyncService {
@@ -38,24 +36,8 @@ class SyncService {
 
     public initialize(config: SyncConfig) {
         this.encryptionKey = config.encryptionKey;
-
-        if (config.provider === 'supabase' && config.supabase) {
-            this.provider = new SupabaseProvider();
-            // Supabase provider might need init call if we were strictly following interface, 
-            // but for now we pass credentials at login OR strict init.
-            // Our SupabaseProvider interface implementation handles logic inside login/signup mostly,
-            // but for re-init (app restart) we need to re-create the client.
-            // Let's call a silent login/init if possible or just set it up.
-            // The SupabaseProvider 'login' method actually creates the client.
-            // We can add an 'init' method to provider or just lazy load.
-            // For now, let's assume we re-login or just set up.
-            // Modification: SupabaseProvider needs to know keys to be useful even without user session (for anon?)
-            // Actually, we need to pass the URL/Key early.
-            // Let's adapt SupabaseProvider to store these or pass them.
-            // Since we persist the "active" state in UI, we will call login again.
-        } else if (config.provider === 'webdav' && config.webdav) {
-            this.provider = new WebDavProvider();
-        }
+        this.provider = new SupabaseProvider();
+        (this.provider as SupabaseProvider).initialize(config.supabase.url, config.supabase.key);
     }
 
     // Wrapper to pass config to provider login
@@ -64,7 +46,6 @@ class SyncService {
 
         // We update encryption key if password is used.
         // For Supabase: Password = credentials.password (if auth used)
-        // For WebDAV: Password = credentials.password
         // BUT we have a separate encryptionKey in config... 
         // SyncSettings logic currently uses password as encryption key.
         if (credentials.password) {
@@ -82,6 +63,14 @@ class SyncService {
             return this.provider.signUp(credentials);
         }
         return { error: 'Sign up not supported by this provider' };
+    }
+
+    public async loginWithGitHub(): Promise<{ error?: string }> {
+        if (!this.provider) return { error: 'Provider not set' };
+        if ((this.provider as SupabaseProvider).loginWithGitHub) {
+            return (this.provider as SupabaseProvider).loginWithGitHub();
+        }
+        return { error: 'GitHub login not supported by this provider' };
     }
 
     public async logout() {

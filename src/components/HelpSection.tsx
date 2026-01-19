@@ -1,5 +1,5 @@
 
-import { HelpCircle, Database, Key, Rss } from 'lucide-react';
+import { HelpCircle, Database, Key, Rss, Headphones } from 'lucide-react';
 import './HelpSection.css';
 
 export default function HelpSection() {
@@ -43,6 +43,29 @@ export default function HelpSection() {
                         <li><strong>Credentials:</strong> Enter your NAS username and password.</li>
                         <li><strong>Encryption:</strong> Set a secure "Encryption Key". This key must be the same on all devices to decrypt your data.</li>
                     </ol>
+                </div>
+            </div>
+
+            <div className="help-topic">
+                <h4><Headphones size={16} /> Advanced Features</h4>
+
+                <div className="sub-topic">
+                    <h5>AI Podcast & Read Aloud</h5>
+                    <p>Listen to articles on the go with two modes:</p>
+                    <ul>
+                        <li><strong>Standard Read Aloud:</strong> Classic text-to-speech with adjustable speed.</li>
+                        <li><strong>AI Podcast:</strong> Generates a dynamic conversation between two AI hosts (Alex & Jordan) discussing the article. Powered by Edge-TTS for high-quality voices.</li>
+                    </ul>
+                </div>
+
+                <div className="sub-topic">
+                    <h5>Focus Mode</h5>
+                    <p>Click the <strong>Timer icon</strong> to enter a distraction-free mode. Includes a built-in Pomodoro timer (25m focus / 5m break) that persists even if you close the window.</p>
+                </div>
+
+                <div className="sub-topic">
+                    <h5>Share Cards</h5>
+                    <p>Click the <strong>Share icon</strong> to create beautiful visual cards for social media. You can copy the image directly to your clipboard or save it as a file.</p>
                 </div>
             </div>
 

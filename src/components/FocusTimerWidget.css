@@ -1,0 +1,93 @@
+.focus-timer-widget {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    font-weight: 500;
+    user-select: none;
+}
+
+.focus-timer-widget:hover {
+    background: var(--hover-color);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.focus-timer-widget.running {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: transparent;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.focus-timer-widget.running.break {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.focus-timer-widget.paused {
+    opacity: 0.8;
+}
+
+.widget-icon {
+    flex-shrink: 0;
+}
+
+.widget-time {
+    font-variant-numeric: tabular-nums;
+    min-width: 42px;
+    text-align: center;
+}
+
+.widget-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: inherit;
+}
+
+.widget-toggle:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.widget-toggle:active {
+    transform: scale(0.95);
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.7);
+    }
+
+    50% {
+        box-shadow: 0 0 0 8px rgba(102, 126, 234, 0);
+    }
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .focus-timer-widget,
+[data-theme="oled"] .focus-timer-widget {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .focus-timer-widget:hover,
+[data-theme="oled"] .focus-timer-widget:hover {
+    background: rgba(255, 255, 255, 0.1);
+}

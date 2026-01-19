@@ -14,6 +14,7 @@ export interface TTSOptions {
     text: string;
     language?: string;
     playbackRate?: number;
+    voice?: string; // For Edge-TTS: voice name like "en-US-AriaNeural"
     onEnd?: () => void;
     onError?: (error: Error) => void;
 }
@@ -251,6 +252,81 @@ class TTSServiceClass {
                     .then(resolve);
             });
         });
+    }
+
+    /**
+     * Edge-TTS using Microsoft Edge's neural voices via IPC
+     */
+    async speakEdgeTTS(
+        text: string,
+        voice: string,
+        rate: number,
+        onEnd?: () => void,
+        onError?: (error: Error) => void
+    ): Promise<TTSController> {
+        const ipcRenderer = (window as any).ipcRenderer;
+        if (!ipcRenderer) {
+            throw new Error('IPC not available');
+        }
+
+        this.isPlaying = true;
+
+        try {
+            // Fetch audio from Edge-TTS
+            const base64Audio: string = await ipcRenderer.invoke('fetch-edge-tts', {
+                text,
+                voice,
+                rate
+            });
+
+            // Play the audio
+            const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+            audio.playbackRate = rate;
+            this.currentAudio = audio;
+
+            audio.onended = () => {
+                this.isPlaying = false;
+                this.currentAudio = null;
+                onEnd?.();
+            };
+
+            audio.onerror = (_e) => {
+                this.isPlaying = false;
+                this.currentAudio = null;
+                onError?.(new Error('Audio playback failed'));
+            };
+
+            await audio.play();
+        } catch (error) {
+            this.isPlaying = false;
+            throw error;
+        }
+
+        return {
+            pause: () => {
+                if (this.currentAudio) {
+                    this.currentAudio.pause();
+                }
+            },
+            resume: () => {
+                if (this.currentAudio) {
+                    this.currentAudio.play();
+                }
+            },
+            stop: () => {
+                this.isPlaying = false;
+                if (this.currentAudio) {
+                    this.currentAudio.pause();
+                    this.currentAudio = null;
+                }
+            },
+            setRate: (newRate: number) => {
+                this.currentRate = newRate;
+                if (this.currentAudio) {
+                    this.currentAudio.playbackRate = newRate;
+                }
+            }
+        };
     }
 
     /**

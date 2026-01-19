@@ -19,7 +19,7 @@ const config: CapacitorConfig = {
       showSpinner: false
     },
     CapacitorHttp: {
-      enabled: true
+      enabled: false
     },
     StatusBar: {
       overlaysWebView: false,

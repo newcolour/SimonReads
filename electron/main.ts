@@ -146,6 +146,107 @@ ipcMain.handle('fetch-tts', async (event, { text, lang }) => {
   }
 });
 
+// Edge-TTS Handler - Uses Microsoft Edge's neural voices
+ipcMain.handle('fetch-edge-tts', async (event, { text, voice, rate }) => {
+  console.log('Edge-TTS: Received request for text length:', text.length, 'voice:', voice, 'rate:', rate);
+
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  const os = require('os');
+
+  try {
+    // Create temp file paths
+    const tempDir = os.tmpdir();
+    const timestamp = Date.now();
+    const outputFile = path.join(tempDir, `edge-tts-${timestamp}.mp3`);
+    const textFile = path.join(tempDir, `edge-tts-text-${timestamp}.txt`);
+
+    // Write text to temp file to handle special characters
+    await fs.promises.writeFile(textFile, text, 'utf8');
+
+    // Build edge-tts command
+    // Format: edge-tts --voice "voice-name" --rate "+X%" --file input.txt --write-media output.mp3
+    const ratePercent = rate ? `${Math.round((rate - 1) * 100)}%` : '+0%';
+    const rateArg = ratePercent.startsWith('-') ? ratePercent : `+${ratePercent}`;
+
+    // Try to find edge-tts in common locations (pipx installs to ~/.local/bin)
+    const edgeTtsPath = process.env.HOME ?
+      `${process.env.HOME}/.local/bin/edge-tts` :
+      'edge-tts';
+
+    const command = `"${edgeTtsPath}" --voice "${voice}" --rate "${rateArg}" --file "${textFile}" --write-media "${outputFile}"`;
+
+    console.log('Edge-TTS: Executing command:', command);
+
+    // Execute edge-tts command
+    await execAsync(command, { timeout: 30000 });
+
+    // Read the generated audio file
+    const audioBuffer = await fs.promises.readFile(outputFile);
+    const base64Audio = audioBuffer.toString('base64');
+
+    // Cleanup temp files
+    try {
+      await fs.promises.unlink(outputFile);
+      await fs.promises.unlink(textFile);
+    } catch (cleanupError) {
+      console.warn('Edge-TTS: Cleanup error:', cleanupError);
+    }
+
+    console.log('Edge-TTS: Successfully generated audio, size:', audioBuffer.length);
+    return base64Audio;
+  } catch (error) {
+    console.error('Edge-TTS Error:', error);
+
+    // Check if edge-tts is installed
+    if (error instanceof Error && error.message.includes('command not found')) {
+      throw new Error('edge-tts is not installed. Please install it with: pip install edge-tts');
+    }
+
+    throw error;
+  }
+});
+
+// List available Edge-TTS voices
+ipcMain.handle('list-edge-tts-voices', async () => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+
+  try {
+    const edgeTtsPath = process.env.HOME ?
+      `${process.env.HOME}/.local/bin/edge-tts` :
+      'edge-tts';
+
+    const { stdout } = await execAsync(`"${edgeTtsPath}" --list-voices`, { timeout: 10000 });
+
+    // Parse the voice list (format: Name: voice-name)
+    const voices = stdout
+      .split('\n')
+      .filter((line: string) => line.includes('Name:'))
+      .map((line: string) => {
+        const match = line.match(/Name:\s*(.+)/);
+        return match ? match[1].trim() : null;
+      })
+      .filter(Boolean);
+
+    console.log('Edge-TTS: Found', voices.length, 'voices');
+    return voices;
+  } catch (error) {
+    console.error('Edge-TTS voice list error:', error);
+
+    // Return a default set of popular English voices if command fails
+    return [
+      'en-US-AriaNeural',
+      'en-US-GuyNeural',
+      'en-US-JennyNeural',
+      'en-GB-SoniaNeural',
+      'en-GB-RyanNeural'
+    ];
+  }
+});
+
 // Open external link handler
 ipcMain.handle('open-external', async (event, url: string) => {
   console.log('Open external URL:', url);

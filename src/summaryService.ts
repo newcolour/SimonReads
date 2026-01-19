@@ -1,4 +1,5 @@
 import { AppSettings } from './types';
+import { safeFetch } from './utils/fetchUtils';
 
 export async function summarizeArticle(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
     const provider = settings.aiProvider || 'gemini';
@@ -48,7 +49,7 @@ async function summarizeWithGemini(content: string, apiKey: string, settings: Ap
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-        const response = await fetch(url, {
+        const response = await safeFetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -128,7 +129,7 @@ IMPORTANT: Start the response with the translated title of the article as a Mark
 Article Content:
 ${plainText}`;
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        const response = await safeFetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -203,7 +204,7 @@ Article Content:
 ${plainText}`;
 
         // Attempt direct fetch (simulating what was there, or using proxy if implemented)
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await safeFetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
                 'x-api-key': apiKey,
@@ -284,7 +285,7 @@ Article Content:
 ${plainText}`;
 
     try {
-        const response = await fetch(`${cleanUrl}/api/chat`, {
+        const response = await safeFetch(`${cleanUrl}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

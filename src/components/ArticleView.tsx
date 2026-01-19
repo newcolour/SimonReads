@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play, ArrowUp } from 'lucide-react';
+import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play, ArrowUp, Timer, Zap, Share2, Layers, Shield, Mic } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
@@ -13,7 +13,16 @@ import Chat from './Chat';
 import PodcastPlayer from './PodcastPlayer';
 import { openExternalUrl, isElectron } from '../utils/platform';
 import { getPublicationColors, applyPublicationColors } from '../utils/publicationColors';
+import { ReadingPositionService } from '../services/readingPositionService';
+import { ReadingStatsService } from '../services/readingStatsService';
 import RedditComments from './RedditComments';
+import FocusMode from './FocusMode';
+import SpeedReader from './SpeedReader';
+import ShareCard from './ShareCard';
+import StoryComparison from './StoryComparison';
+import FactCheck from './FactCheck';
+import AIPodcast from './AIPodcast';
+import FocusTimerWidget from './FocusTimerWidget';
 import './ArticleView.css';
 
 // Helper to strip HTML tags and decode entities from titles
@@ -27,6 +36,7 @@ const cleanTitle = (title: string): string => {
 interface ArticleViewProps {
     article: Article | null;
     feed?: Feed;
+    feeds?: Feed[];
     settings: AppSettings;
     allArticles?: Article[];
     onClose: () => void;
@@ -80,7 +90,7 @@ const getPublicationStyle = (feedTitle: string, theme: string) => {
     return style;
 };
 
-export default function ArticleView({ article, feed, settings, allArticles = [], onClose, onDelete, onToggleSaved, onSelectArticle }: ArticleViewProps) {
+export default function ArticleView({ article, feed, feeds = [], settings, allArticles = [], onClose, onDelete, onToggleSaved, onSelectArticle }: ArticleViewProps) {
     const feedTitle = feed?.title || article?.feedTitle;
     const personalityConfig = usePersonalityConfig(settings.readingPersonality);
 
@@ -113,25 +123,93 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
     // Image viewer state
     const [viewerImage, setViewerImage] = useState<string | null>(null);
 
+    // Focus mode state
+    const [showFocusMode, setShowFocusMode] = useState(false);
 
+    // Speed reader state
+    const [showSpeedReader, setShowSpeedReader] = useState(false);
 
-    // Reset summary when article changes
+    // Share card state
+    const [showShareCard, setShowShareCard] = useState(false);
+
+    // Story comparison state
+    const [showStoryComparison, setShowStoryComparison] = useState(false);
+
+    // Fact check state
+    const [showFactCheck, setShowFactCheck] = useState(false);
+
+    // AI Podcast state
+    const [showAIPodcast, setShowAIPodcast] = useState(false);
+
+    // Debounce timer ref for saving position
+    const savePositionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Reset summary when article changes and restore reading position
     useEffect(() => {
         if (article && article.id !== currentArticleId) {
             setSummary(null);
             setSummaryError(null);
             setCurrentArticleId(article.id);
+
+            // Start tracking reading stats
+            ReadingStatsService.startReading(article.id);
             setWebviewUrl(article.link); // Set webview URL to article link
             setFetchedContent(null); // Reset fetched content
             setRedditVideo(null); // Reset Reddit video
 
-            // Scroll to top when article changes
+            // Restore reading position if available
             const contentContainer = document.querySelector('.article-view-content');
             if (contentContainer) {
+                // First scroll to top
                 contentContainer.scrollTop = 0;
+
+                // Then restore saved position
+                ReadingPositionService.getPosition(article.id).then(pos => {
+                    if (pos && pos.scrollPercent > 5) {
+                        const maxScroll = contentContainer.scrollHeight - contentContainer.clientHeight;
+                        const targetScroll = (pos.scrollPercent / 100) * maxScroll;
+                        // Small delay to let content render
+                        setTimeout(() => {
+                            contentContainer.scrollTo({ top: targetScroll, behavior: 'smooth' });
+                        }, 100);
+                    }
+                });
             }
         }
     }, [article?.id, article?.link]);
+
+    // Track scroll position with debounce
+    useEffect(() => {
+        if (!article) return;
+
+        const contentContainer = document.querySelector('.article-view-content');
+        if (!contentContainer) return;
+
+        const handleScroll = () => {
+            // Clear existing timer
+            if (savePositionTimer.current) {
+                clearTimeout(savePositionTimer.current);
+            }
+
+            // Debounce save (500ms after scroll stops)
+            savePositionTimer.current = setTimeout(() => {
+                const scrollTop = contentContainer.scrollTop;
+                const scrollHeight = contentContainer.scrollHeight - contentContainer.clientHeight;
+                const scrollPercent = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+
+                ReadingPositionService.savePosition(article.id, scrollPercent);
+            }, 500);
+        };
+
+        contentContainer.addEventListener('scroll', handleScroll);
+
+        return () => {
+            contentContainer.removeEventListener('scroll', handleScroll);
+            if (savePositionTimer.current) {
+                clearTimeout(savePositionTimer.current);
+            }
+        };
+    }, [article?.id]);
 
     // Fetch Reddit video/external link info if this is a Reddit article
     useEffect(() => {
@@ -1085,6 +1163,7 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             {feedTitle}
                         </div>
                     )}
+                    <FocusTimerWidget onClick={() => setShowFocusMode(true)} />
                     <div className="header-actions">
                         <button className="close-btn" onClick={onClose} data-tooltip="Close">
                             <X size={20} />
@@ -1146,6 +1225,54 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                             data-tooltip-align="right"
                         >
                             <MessageCircle size={18} />
+                        </button>
+                        <button
+                            className={`action-btn ${showFocusMode ? 'active' : ''}`}
+                            onClick={() => setShowFocusMode(!showFocusMode)}
+                            data-tooltip="Focus Mode"
+                            data-tooltip-align="right"
+                        >
+                            <Timer size={18} />
+                        </button>
+                        <button
+                            className="action-btn"
+                            onClick={() => setShowSpeedReader(true)}
+                            data-tooltip="Speed Read"
+                            data-tooltip-align="right"
+                        >
+                            <Zap size={18} />
+                        </button>
+                        <button
+                            className="action-btn"
+                            onClick={() => setShowShareCard(true)}
+                            data-tooltip="Share"
+                            data-tooltip-align="right"
+                        >
+                            <Share2 size={18} />
+                        </button>
+                        <button
+                            className="action-btn"
+                            onClick={() => setShowStoryComparison(true)}
+                            data-tooltip="Compare Sources"
+                            data-tooltip-align="right"
+                        >
+                            <Layers size={18} />
+                        </button>
+                        <button
+                            className="action-btn"
+                            onClick={() => setShowFactCheck(true)}
+                            data-tooltip="Fact Check"
+                            data-tooltip-align="right"
+                        >
+                            <Shield size={18} />
+                        </button>
+                        <button
+                            className="action-btn"
+                            onClick={() => setShowAIPodcast(true)}
+                            data-tooltip="AI Podcast"
+                            data-tooltip-align="right"
+                        >
+                            <Mic size={18} />
                         </button>
                         {/* Login button - always rendered for consistent layout, hidden when not in browser mode */}
                         <button
@@ -1575,6 +1702,66 @@ export default function ArticleView({ article, feed, settings, allArticles = [],
                         onClick={(e) => e.stopPropagation()}
                     />
                 </div>
+            )}
+
+            {/* Focus Mode Overlay */}
+            {showFocusMode && (
+                <FocusMode
+                    onClose={() => setShowFocusMode(false)}
+                    articleTitle={article?.title}
+                />
+            )}
+
+            {/* Speed Reader Overlay */}
+            {showSpeedReader && (
+                <SpeedReader
+                    content={fetchedContent || article?.content || article?.contentSnippet || ''}
+                    onClose={() => setShowSpeedReader(false)}
+                />
+            )}
+
+            {/* Share Card Modal */}
+            {showShareCard && article && (
+                <ShareCard
+                    article={article}
+                    feedTitle={feedTitle}
+                    onClose={() => setShowShareCard(false)}
+                />
+            )}
+
+            {/* Story Comparison Modal */}
+            {showStoryComparison && article && (
+                <StoryComparison
+                    article={article}
+                    allArticles={allArticles}
+                    feeds={feeds}
+                    onSelectArticle={(a) => {
+                        setShowStoryComparison(false);
+                        onSelectArticle?.(a);
+                    }}
+                    onClose={() => setShowStoryComparison(false)}
+                />
+            )}
+
+            {/* Fact Check Modal */}
+            {showFactCheck && article && (
+                <FactCheck
+                    articleId={article.id}
+                    title={article.title}
+                    content={fetchedContent || article.content || article.contentSnippet || ''}
+                    settings={settings}
+                    onClose={() => setShowFactCheck(false)}
+                />
+            )}
+
+            {/* AI Podcast Modal */}
+            {showAIPodcast && article && (
+                <AIPodcast
+                    articleTitle={article.title}
+                    articleContent={fetchedContent || article.content || article.contentSnippet || ''}
+                    settings={settings}
+                    onClose={() => setShowAIPodcast(false)}
+                />
             )}
         </div >
     );
