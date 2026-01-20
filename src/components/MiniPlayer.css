@@ -167,17 +167,18 @@
 }
 
 /* Add padding to main content when mini player is visible */
-.app-container.has-mini-player .modern-layout,
-.app-container.has-mini-player .article-list,
-.app-container.has-mini-player .article-view {
+/* Add padding to main content when mini player is visible */
+body.has-mini-player .modern-layout,
+body.has-mini-player .article-list,
+body.has-mini-player .article-view {
     padding-bottom: 68px;
 }
 
 @media (max-width: 480px) {
 
-    .app-container.has-mini-player .modern-layout,
-    .app-container.has-mini-player .article-list,
-    .app-container.has-mini-player .article-view {
+    body.has-mini-player .modern-layout,
+    body.has-mini-player .article-list,
+    body.has-mini-player .article-view {
         padding-bottom: 60px;
     }
 }

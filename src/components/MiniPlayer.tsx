@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Play, Pause, X, SkipBack, SkipForward } from 'lucide-react';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import './MiniPlayer.css';
@@ -17,6 +18,17 @@ export default function MiniPlayer({ onExpand }: MiniPlayerProps) {
         stop,
         skip,
     } = useAudioPlayer();
+
+    useEffect(() => {
+        if (currentTrack) {
+            document.body.classList.add('has-mini-player');
+        } else {
+            document.body.classList.remove('has-mini-player');
+        }
+        return () => {
+            document.body.classList.remove('has-mini-player');
+        };
+    }, [!!currentTrack]);
 
     // Don't show if no track is loaded
     if (!currentTrack) {

@@ -139,8 +139,8 @@ export default function ModernLayout({
         carouselSectionRef.current.style.transform = `scale(${scale})`;
         carouselSectionRef.current.style.transformOrigin = 'center center';
 
-        // Header (Search Bar) visual effects
-        if (headerRef.current) {
+        // Header (Search Bar) visual effects - Skip on Android to prevent blinking
+        if (headerRef.current && !androidMode) {
             headerRef.current.style.opacity = `${opacity}`;
             headerRef.current.style.transform = `scale(${scale})`;
             headerRef.current.style.transformOrigin = 'center center';
@@ -149,7 +149,7 @@ export default function ModernLayout({
         // Disable pointer events when invisible to prevent accidental clicks
         const hidden = opacity < 0.1;
         carouselSectionRef.current.style.pointerEvents = hidden ? 'none' : 'auto';
-        if (headerRef.current) {
+        if (headerRef.current && !androidMode) {
             headerRef.current.style.pointerEvents = hidden ? 'none' : 'auto';
         }
     };
@@ -295,7 +295,13 @@ export default function ModernLayout({
 
     const getFeedIcon = (article: Article): string => {
         const feed = feeds.find(f => f.id === article.feedId);
-        return feed?.icon || `https://www.google.com/s2/favicons?domain=${new URL(article.link).hostname}&sz=64`;
+        if (feed?.icon) return feed.icon;
+
+        try {
+            return `https://www.google.com/s2/favicons?domain=${new URL(article.link).hostname}&sz=64`;
+        } catch (e) {
+            return '';
+        }
     };
 
     const androidMode = isAndroid();
@@ -573,13 +579,15 @@ export default function ModernLayout({
                     <div className="modern-search-container">
                         {showSearch ? (
                             <div className="modern-search-input-wrapper">
-                                <Search size={18} />
+                                <span className="search-icon-wrapper">
+                                    <Search size={18} />
+                                </span>
                                 <input
                                     type="text"
                                     placeholder="Search articles..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    autoFocus
+                                // Removed autoFocus to prevent focus fighting/blinking
                                 />
                                 <button onClick={() => { setShowSearch(false); setSearchQuery(''); }}>
                                     <X size={18} />

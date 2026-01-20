@@ -96,19 +96,30 @@
     align-items: center;
 }
 
-.search-icon {
+.sidebar-search-icon-wrapper {
     position: absolute;
-    left: 10px;
-    color: var(--icon-color);
+    left: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     pointer-events: none;
-    will-change: transform;
-    transform: translateZ(0);
-    backface-visibility: hidden;
+    z-index: 2;
+    background: transparent !important;
+}
+
+.search-icon {
+    /* Removed absolute positioning and GPU hacks to prevent blinking artifacts */
+    position: relative;
+    color: var(--icon-color);
+    background: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent !important;
 }
 
 .search-input {
     width: 100%;
-    padding: 8px 30px 8px 32px;
+    padding: 8px 30px 8px 38px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: 6px;

@@ -255,13 +255,18 @@ body {
   --font-serif: 'Merriweather', 'Georgia', serif;
 }
 
+html {
+  background: var(--bg-primary);
+  /* Ensure background extends behind transparent status bar */
+}
+
 body {
   font-family: var(--app-font, var(--font-sans));
   font-size: var(--app-font-size, 14px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: transparent;
-  /* Allow Electron vibrancy if enabled, or fallback */
+  background: var(--bg-primary);
+  /* Match the theme background */
   color: var(--text-primary);
   overflow: hidden;
 }

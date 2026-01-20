@@ -26,6 +26,7 @@
     flex-direction: column;
     justify-content: space-between;
     padding: 38px 8px 16px 8px;
+    padding-top: calc(38px + env(safe-area-inset-top, 0px));
     z-index: 1000;
     transition: width 0.25s ease, box-shadow 0.25s ease;
     overflow: hidden;
@@ -131,6 +132,7 @@
     flex-direction: column;
     overflow-y: auto;
     padding: 38px 24px 24px 24px;
+    padding-top: calc(38px + env(safe-area-inset-top, 0px));
     /* Reduced side padding for more immersive feel */
     transition: margin-left 0.25s ease;
 }
@@ -180,6 +182,9 @@
     border-radius: 12px;
     padding: 10px 16px;
     transition: border-color 0.2s;
+    /* Prevent blinking from parent opacity changes */
+    opacity: 1 !important;
+    will-change: auto;
 }
 
 .modern-search-input-wrapper:focus-within {
@@ -215,6 +220,30 @@
 .modern-search-input-wrapper button:hover {
     background: var(--hover-bg);
     color: var(--text-primary);
+}
+
+/* Prevent search icon from blinking due to parent opacity changes */
+.search-icon-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.search-icon-wrapper svg {
+    opacity: 1 !important;
+    will-change: auto;
+    background: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+    color: var(--text-secondary);
+    /* Ensure icon color is consistent */
 }
 
 .modern-header-stats {

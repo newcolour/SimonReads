@@ -544,7 +544,9 @@ export default function Sidebar({
 
             <div className="search-container">
                 <div className="search-input-wrapper">
-                    <Search size={14} className="search-icon" />
+                    <span className="sidebar-search-icon-wrapper">
+                        <Search size={14} className="search-icon" />
+                    </span>
                     <input
                         type="text"
                         placeholder="Search feeds and articles..."

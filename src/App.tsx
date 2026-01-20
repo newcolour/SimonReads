@@ -460,12 +460,13 @@ function App() {
             if (Capacitor.getPlatform() === 'android') {
                 // Status Bar Background
                 try {
-                    console.log(`[NativeBars] Setting StatusBar background to: ${bgColor}`);
-                    await StatusBar.setOverlaysWebView({ overlay: false });
-                    await StatusBar.setBackgroundColor({ color: bgColor });
-                    console.log('[NativeBars] StatusBar background set successfully');
+                    console.log(`[NativeBars] Setting StatusBar to edge-to-edge`);
+                    await StatusBar.setOverlaysWebView({ overlay: true });
+                    // Transparent background so app content shows through
+                    await StatusBar.setBackgroundColor({ color: '#00000000' });
+                    console.log('[NativeBars] StatusBar configured successfully');
                 } catch (e) {
-                    console.error('[NativeBars] StatusBar.setBackgroundColor error:', e);
+                    console.error('[NativeBars] StatusBar configuration error:', e);
                 }
 
                 // Navigation Bar (bottom bar)
