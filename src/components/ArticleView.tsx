@@ -11,7 +11,7 @@ import { findRelatedArticles } from '../personalityUtils';
 import { usePersonalityConfig } from '../hooks/usePersonality';
 import Chat from './Chat';
 import PodcastPlayer from './PodcastPlayer';
-import { openExternalUrl, isElectron } from '../utils/platform';
+import { openExternalUrl, isElectron, isAndroid } from '../utils/platform';
 import { getPublicationColors, applyPublicationColors } from '../utils/publicationColors';
 import { ReadingPositionService } from '../services/readingPositionService';
 import { ReadingStatsService } from '../services/readingStatsService';
@@ -484,11 +484,19 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                             text === 'adv' ||
                             text.startsWith('tempo di lettura') ||
                             text.startsWith('read time') ||
-                            text.includes('salvato nella pagina') ||
-                            text.includes('i migliori video scelti dal nostro canale')
+                            text.includes('salvato nella pagina')
                         ) {
-                            el.parentElement?.closest('.media-frame')?.parentElement?.remove(); // Try to remove container
+                            // Just remove the element itself, don't remove parent containers
+                            // (removing .media-frame was too aggressive and removed article content)
                             el.remove();
+                        } else if (text.includes('i migliori video scelti dal nostro canale')) {
+                            // For video banners, remove the entire media-frame container
+                            const mediaFrame = el.parentElement?.closest('.media-frame');
+                            if (mediaFrame) {
+                                mediaFrame.parentElement?.remove();
+                            } else {
+                                el.remove();
+                            }
                         }
                     });
 
@@ -1147,7 +1155,7 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
         : '';
 
     return (
-        <div className={`article-view ${viewMode}-mode`}>
+        <div className={`article-view ${viewMode}-mode`} data-platform={isAndroid() ? 'android' : 'desktop'}>
             <div className="article-view-container">
                 <div className="article-view-header" key={feedTitle || 'no-title'}>
                     {feedTitle && (

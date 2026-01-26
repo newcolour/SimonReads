@@ -205,3 +205,50 @@
     color: #f59e0b;
     margin-top: 2px;
 }
+
+/* Fact Check Source Verification Styles */
+.claim-sources {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85em;
+}
+
+.sources-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.source-tag {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-family: monospace;
+    font-size: 0.9em;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.source-tag:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+.fact-check-loading p {
+    margin-top: 16px;
+    font-size: 1.1em;
+    font-weight: 500;
+}
+
+.fact-check-loading small {
+    display: block;
+    margin-top: 8px;
+    color: var(--text-muted);
+    opacity: 0.8;
+}

@@ -5,8 +5,9 @@ export interface FactCheckResult {
     rating: 'likely-true' | 'needs-context' | 'unverifiable' | 'likely-misleading';
     explanation: string;
     confidence: number; // 0-1
-    sources?: string[];
+    sources?: { index: number, domain: string, url: string, title: string }[];
 }
+
 
 export interface ArticleFactCheck {
     articleId: string;
@@ -64,7 +65,7 @@ export class FactCheckService {
     }
 
     /**
-     * Check an article for factual claims
+     * Check an article for factual claims with external verification
      */
     static async checkArticle(
         articleId: string,
@@ -78,19 +79,60 @@ export class FactCheckService {
         const cached = this.cache.get(articleId);
         if (cached) return cached;
 
-        // Build prompt for fact-checking
-        const prompt = this.buildFactCheckPrompt(title, content);
-
         try {
-            // Use the same AI provider as configured for summaries
-            const response = await this.callAI(prompt, settings);
-            const result = this.parseFactCheckResponse(articleId, response);
+            // Step 1: Analyze Article & Extract Claims
+            console.log('FactCheck: Starting analysis for', articleId);
+            const analysisPrompt = this.buildAnalysisPrompt(title, content);
+            const analysisResponse = await this.callAI(analysisPrompt, settings);
+            const initialResult = this.parseAnalysisResponse(analysisResponse);
+
+            // Step 2: Verify Claims with External Search
+            const verifiedClaims: FactCheckResult[] = [];
+
+            // Limit to top 3 claims to save time/resources
+            const claimsToVerify = initialResult.claims.slice(0, 3);
+
+            for (const claim of claimsToVerify) {
+                if (!claim.rating.includes('unverifiable') && claim.searchQuery) {
+                    console.log(`FactCheck: Verifying claim "${claim.claim}" with query: "${claim.searchQuery}"`);
+
+                    try {
+                        // Perform search
+                        const searchResults = await this.performSearch(claim.searchQuery);
+
+                        if (searchResults.length > 0) {
+                            // Verify against search results
+                            const verificationPrompt = this.buildVerificationPrompt(claim, searchResults);
+                            const verificationResponse = await this.callAI(verificationPrompt, settings);
+                            const verifiedClaim = this.parseVerificationResponse(claim, verificationResponse, searchResults);
+                            verifiedClaims.push(verifiedClaim);
+                        } else {
+                            verifiedClaims.push(claim);
+                        }
+                    } catch (err) {
+                        console.error('FactCheck: specific claim verification failed', err);
+                        verifiedClaims.push(claim);
+                    }
+                } else {
+                    verifiedClaims.push(claim);
+                }
+            }
+
+            // Combine results
+            const finalResult: ArticleFactCheck = {
+                articleId,
+                overallRating: initialResult.overallRating, // Keep overall rating from initial analysis (or recalculate based on verified claims)
+                claims: verifiedClaims,
+                summary: initialResult.summary,
+                checkedAt: new Date().toISOString()
+            };
 
             // Cache the result
-            this.cache.set(articleId, result);
+            this.cache.set(articleId, finalResult);
             this.saveCache();
 
-            return result;
+            return finalResult;
+
         } catch (error) {
             console.error('Fact-check failed:', error);
 
@@ -106,16 +148,35 @@ export class FactCheckService {
     }
 
     /**
-     * Build the fact-check prompt
+     * Perform web search using Electron IPC
      */
-    private static buildFactCheckPrompt(title: string, content: string): string {
+    private static async performSearch(query: string): Promise<{ title: string, url: string, snippet: string }[]> {
+        // Check if running in Electron
+        if ((window as any).ipcRenderer) {
+            try {
+                const results = await (window as any).ipcRenderer.invoke('perform-search', query);
+                // Parse if string, otherwise assume object
+                return typeof results === 'string' ? JSON.parse(results) : results;
+            } catch (e) {
+                console.error('Search failed:', e);
+                return [];
+            }
+        }
+        return [];
+    }
+
+    /**
+     * Build the initial analysis prompt
+     */
+    private static buildAnalysisPrompt(title: string, content: string): string {
         // Truncate content if too long
         const maxContent = 3000;
         const truncatedContent = content.length > maxContent
             ? content.substring(0, maxContent) + '...'
             : content;
 
-        return `Analyze the following article for factual accuracy. Identify key claims and assess their reliability.
+        return `Analyze the following article for factual accuracy. Identify key verifiable claims.
+For each claim, provide a search query that could be used to verify it.
 
 Article Title: ${title}
 
@@ -129,14 +190,84 @@ Please respond in the following JSON format:
     {
       "claim": "The specific claim made",
       "rating": "likely-true" | "needs-context" | "unverifiable" | "likely-misleading",
-      "explanation": "Brief explanation of the rating",
-      "confidence": 0.8
+      "explanation": "Brief explanation based on internal knowledge",
+      "confidence": 0.8,
+      "searchQuery": "Specific search query to verify this claim"
     }
   ],
   "summary": "A one-sentence summary of the factual reliability of this article"
 }
 
-Focus on verifiable factual claims, not opinions. Limit to 3-5 key claims. Be objective and note when claims cannot be verified.`;
+Focus on 3 key verifiable factual claims.`;
+    }
+
+    /**
+     * Build validation prompt using search results
+     */
+    private static buildVerificationPrompt(claim: FactCheckResult, searchResults: { title: string, snippet: string, url: string }[]): string {
+        const sourcesText = searchResults.map((s, i) =>
+            `Source ${i + 1}: ${s.title}\nSnippet: ${s.snippet}\n`
+        ).join('\n');
+
+        return `Verify the following claim against the provided external sources.
+        
+Claim: "${claim.claim}"
+
+External Sources:
+${sourcesText}
+
+Based on these sources, re-evaluate the claim.
+Respond in JSON:
+{
+    "rating": "likely-true" | "needs-context" | "unverifiable" | "likely-misleading",
+    "explanation": "Updated explanation citing the sources if relevant",
+    "confidence": 0.9,
+    "supportedBySources": true/false
+}`;
+    }
+
+    private static parseAnalysisResponse(response: string): any {
+        try {
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('No JSON found');
+            return JSON.parse(jsonMatch[0]);
+        } catch (e) {
+            console.error('Failed to parse analysis response', e);
+            return { overallRating: 'mixed', claims: [], summary: 'Analysis failed' };
+        }
+    }
+
+    private static parseVerificationResponse(originalClaim: FactCheckResult, response: string, sources: any[]): FactCheckResult {
+        try {
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) return originalClaim;
+
+            const verified = JSON.parse(jsonMatch[0]);
+
+            // Map all sources to structured objects with index
+            const structuredSources = sources.map((s, i) => {
+                try {
+                    return {
+                        index: i + 1,
+                        domain: new URL(s.url).hostname.replace('www.', ''),
+                        url: s.url,
+                        title: s.title
+                    };
+                } catch {
+                    return { index: i + 1, domain: 'External Source', url: s.url, title: s.title };
+                }
+            });
+
+            return {
+                ...originalClaim,
+                rating: verified.rating || originalClaim.rating,
+                explanation: verified.explanation || originalClaim.explanation,
+                confidence: verified.confidence || originalClaim.confidence,
+                sources: structuredSources
+            };
+        } catch (e) {
+            return originalClaim;
+        }
     }
 
     /**
@@ -233,42 +364,6 @@ Focus on verifiable factual claims, not opinions. Limit to 3-5 key claims. Be ob
         if (!response.ok) throw new Error('Ollama request failed');
         const data = await response.json();
         return data.response || '';
-    }
-
-    /**
-     * Parse the AI response into a structured result
-     */
-    private static parseFactCheckResponse(articleId: string, response: string): ArticleFactCheck {
-        try {
-            // Extract JSON from response (may be wrapped in markdown)
-            const jsonMatch = response.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) throw new Error('No JSON found');
-
-            const parsed = JSON.parse(jsonMatch[0]);
-
-            return {
-                articleId,
-                overallRating: parsed.overallRating || 'mixed',
-                claims: (parsed.claims || []).map((c: any) => ({
-                    claim: c.claim || '',
-                    rating: c.rating || 'unverifiable',
-                    explanation: c.explanation || '',
-                    confidence: c.confidence || 0.5,
-                    sources: c.sources
-                })),
-                summary: parsed.summary || 'Analysis complete.',
-                checkedAt: new Date().toISOString()
-            };
-        } catch (e) {
-            console.error('Failed to parse fact-check response:', e);
-            return {
-                articleId,
-                overallRating: 'mixed',
-                claims: [],
-                summary: response.substring(0, 200) || 'Unable to parse response.',
-                checkedAt: new Date().toISOString()
-            };
-        }
     }
 
     /**

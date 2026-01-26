@@ -455,18 +455,23 @@ ipcMain.handle('perform-search', async (event, query: string) => {
           const link = article.querySelector('a[data-testid="result-title-a"]');
           const title = article.querySelector('h2')?.textContent || link?.textContent || '';
           const url = link?.href || '';
+          const snippet = article.querySelector('div[data-result="snippet"]')?.textContent || '';
+          
           if (title && url && !url.includes('duckduckgo.com')) {
-            results.push({ title: title.trim(), url: url });
+            results.push({ title: title.trim(), url: url, snippet: snippet.trim() });
           }
         });
         // Fallback: try older DDG structure
         if (results.length === 0) {
           document.querySelectorAll('.result__a').forEach((link, i) => {
             if (i >= 5) return;
+            const item = link.closest('.result');
             const title = link.textContent || '';
             const url = link.href || '';
+            const snippet = item?.querySelector('.result__snippet')?.textContent || '';
+            
             if (title && url) {
-              results.push({ title: title.trim(), url: url });
+              results.push({ title: title.trim(), url: url, snippet: snippet.trim() });
             }
           });
         }
@@ -1123,24 +1128,70 @@ function createWindow() {
 
   // Handle external links - open in default browser
   win.webContents.setWindowOpenHandler(({ url }) => {
+    const lowerUrl = url.toLowerCase();
+    console.log('Window open request:', url);
+
     // List of domains that should be allowed to open in a new Electron window (popups)
     // These are typically authentication providers
-    const authProviders = [
+    const authDomains = [
+      'google.com',
+      'facebook.com',
+      'apple.com',
+      'gedi.it',
+      'repubblica.it',
+      'microsoft.com',
+      'live.com',
+      'github.com',
+      'twitter.com',
+      'x.com',
+      'linkedin.com',
       'accounts.google.com',
-      'facebook.com/v',
-      'facebook.com/dialog',
       'appleid.apple.com',
-      'p.repubblica.it', // Specific for repubblica.it login
-      'login.live.com',
-      'github.com/login/oauth'
     ];
 
-    const isAuthProvider = authProviders.some(domain => url.includes(domain));
+    // Generic auth keywords
+    const authKeywords = [
+      'login',
+      'signin',
+      'sign-in',
+      'signup',
+      'sign-up',
+      'auth',
+      'oauth',
+      'sso',
+      'account',
+      'session',
+      'verification',
+      'challenge',
+      'consent',
+      'password',
+      'credential',
+      'subscribe' // Added for journal subscriptions
+    ];
 
-    // If it's an auth provider, allow it to open in a new guest window
-    if (isAuthProvider) {
+    const isAuthDomain = authDomains.some(domain => lowerUrl.includes(domain));
+    const isAuthKeyword = authKeywords.some(keyword => lowerUrl.includes(keyword));
+    const isAboutBlank = lowerUrl === 'about:blank';
+
+    // If it's an auth provider or looks like a login flow, allow it to open in a new guest window
+    if (isAuthDomain || isAuthKeyword || isAboutBlank) {
       console.log('Allowing auth popup in-app:', url);
-      return { action: 'allow' };
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true,
+          skipTaskbar: false,
+          alwaysOnTop: false,
+          center: true,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            nativeWindowOpen: true,
+            webSecurity: false
+          }
+        }
+      };
     }
 
     // If the URL starts with http/https, open in default browser
@@ -1188,7 +1239,9 @@ function createWindow() {
         'github.com',
         'twitter.com',
         'x.com',
-        'linkedin.com'
+        'linkedin.com',
+        'accounts.google.com',
+        'appleid.apple.com',
       ];
 
       // Generic auth keywords
@@ -1205,7 +1258,10 @@ function createWindow() {
         'session',
         'verification',
         'challenge',
-        'consent'
+        'consent',
+        'password',
+        'credential',
+        'subscribe' // Added for journal subscriptions
       ];
 
       const isAuthDomain = authDomains.some(domain => lowerUrl.includes(domain));

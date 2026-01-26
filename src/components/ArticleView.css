@@ -16,13 +16,22 @@
 
 .article-view-header {
     padding: 12px 16px;
-    padding-top: calc(12px + env(safe-area-inset-top, 0px));
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: var(--bg-secondary);
     gap: 8px;
+}
+
+/* Desktop/iOS: Apply safe area inset for notches */
+.article-view[data-platform="desktop"] .article-view-header {
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+}
+
+/* Android: Use minimal top padding, no safe-area-inset */
+.article-view[data-platform="android"] .article-view-header {
+    padding-top: 8px;
 }
 
 .publication-title {
@@ -519,9 +528,17 @@
     .article-view-header {
         gap: 8px;
         overflow: hidden;
-        /* Contain overflow */
-        padding-top: calc(env(safe-area-inset-top) + 12px) !important;
         padding-bottom: 12px;
+    }
+
+    /* Desktop/iOS mobile: Keep safe-area-inset */
+    .article-view[data-platform="desktop"] .article-view-header {
+        padding-top: calc(env(safe-area-inset-top) + 12px) !important;
+    }
+
+    /* Android mobile: Minimal padding */
+    .article-view[data-platform="android"] .article-view-header {
+        padding-top: 8px !important;
     }
 
     .publication-title {

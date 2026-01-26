@@ -132,6 +132,24 @@ function ClaimCard({ claim }: { claim: FactCheckResult }) {
             </div>
             <div className="claim-text">"{claim.claim}"</div>
             <div className="claim-explanation">{claim.explanation}</div>
+
+            {claim.sources && claim.sources.length > 0 && (
+                <div className="claim-sources">
+                    <span className="sources-label">Verified against:</span>
+                    {claim.sources.map((source, i) => (
+                        <a
+                            key={i}
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="source-tag"
+                            title={source.title}
+                        >
+                            [{source.index}] {source.domain}
+                        </a>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

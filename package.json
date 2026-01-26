@@ -2,7 +2,7 @@
   "name": "simon-reads",
   "productName": "SimonReads",
   "private": true,
-  "version": "4.5.4",
+  "version": "4.5.5",
   "description": "A modern RSS Reader",
   "homepage": "https://github.com/simonebianco/simon-reads",
   "author": {
@@ -88,13 +88,6 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
           "arch": [
             "arm64",
             "x64"
