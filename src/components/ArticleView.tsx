@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play, ArrowUp, Timer, Zap, Share2, Layers, Shield, Mic } from 'lucide-react';
+import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play, ArrowUp, Timer, Zap, Share2, Layers, Shield, Mic, Bug } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
@@ -448,6 +448,14 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                             console.log('[Mobile] Successfully fetched content, length:', htmlContent?.length);
                         } else {
                             console.error('[Mobile] HTTP error:', response.status);
+                            setFetchedContent(`<div class="fetch-error" style="padding: 2.5rem; text-align: center; background: rgba(255,100,0,0.05); border-radius: 12px; border: 1px dashed rgba(255,100,0,0.3); margin: 2rem 0;">
+                                <h3 style="color: #f60; margin-bottom: 1rem;">Full Content Blocked (${response.status})</h3>
+                                <p style="margin-bottom: 1.5rem; opacity: 0.8;">The publisher is blocking our reader view on mobile. This usually happens on sites like FCInter1908 that use aggressive anti-bot protection.</p>
+                                <button onclick="window.dispatchEvent(new CustomEvent('switch-to-browser'))" style="background: #f60; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer;">View in Browser View</button>
+                                <div style="margin-top: 1rem; font-size: 0.8em; opacity: 0.5;">URL: ${article.link}</div>
+                            </div>`);
+                            setIsFetchingContent(false);
+                            return;
                         }
                     } catch (httpError) {
                         console.error('[Mobile] Capacitor HTTP error:', httpError);
@@ -475,7 +483,7 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                     const doc = parser.parseFromString(htmlContent, 'text/html');
 
                     // Remove unwanted elements
-                    doc.querySelectorAll('script, style, nav, header, footer, aside, iframe, .ad, .advertisement, .social-share, .newsletter-signup, .related-stories, .ad-wrap, .ad-config-wrap, .breadcrumbs, .tags, .categories, .kicker, .eyebrow, .bck-gn-media-news, .sticky-video').forEach(el => el.remove());
+                    doc.querySelectorAll('script, style, nav, header, footer, aside, iframe, .ad, .advertisement, .social-share, .newsletter-signup, .related-stories, .ad-wrap, .ad-config-wrap, .breadcrumbs, .tags, .categories, .kicker, .eyebrow, .bck-gn-media-news, .sticky-video, .bck-adv').forEach(el => el.remove());
 
                     // Aggressive text-based removal for specific junk
                     doc.querySelectorAll('div, span, p, h6, h5').forEach(el => {
@@ -744,7 +752,14 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
             });
         }
 
+        const handleSwitchToBrowserEvent = () => {
+            setViewMode('browser');
+        };
+
+        window.addEventListener('switch-to-browser', handleSwitchToBrowserEvent);
+
         return () => {
+            window.removeEventListener('switch-to-browser', handleSwitchToBrowserEvent);
             // Cleanup
             const articleEl = document.querySelector('.article-content');
             if (articleEl) {
@@ -755,6 +770,65 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
             }
         };
     }, [fetchedContent, article?.content]);
+
+    const handleDebug = async () => {
+        if (!article) return;
+
+        try {
+            alert(`Debugging content fetch for:\n${article.link}\n\nPlatform: ${Capacitor.getPlatform()}`);
+
+            // 1. Fetch
+            let html = '';
+            let status = 0;
+
+            if (Capacitor.isNativePlatform()) {
+                const { CapacitorHttp } = await import('@capacitor/core');
+                const response = await CapacitorHttp.get({
+                    url: article.link,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    }
+                });
+                status = response.status;
+                html = response.data || '';
+            } else {
+                const response = await fetch(article.link);
+                status = response.status;
+                html = await response.text();
+            }
+
+            alert(`Fetch Status: ${status}\nHTML Length: ${html.length}\nSample: ${html.substring(0, 150)}...`);
+
+            if (html.toLowerCase().includes('cloudflare') || html.toLowerCase().includes('bot protection') || html.toLowerCase().includes('checking your browser')) {
+                alert("⚠️ DETECTED BOT PROTECTION: This site is using Cloudflare or similar to block non-browser access.");
+            }
+
+            if (html.length < 500) {
+                alert(`HTML is suspiciously short! content: ${html.substring(0, 200)}`);
+            }
+
+            // 2. Parse
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            // Check selectors
+            const bodyArticle = doc.querySelector('.body-article');
+            const contentDiv = doc.querySelector('.content');
+            const nyt = doc.querySelector('[data-testid="article-body"]');
+
+            alert(`Selectors found:\n.body-article: ${!!bodyArticle}\n.content: ${!!contentDiv}\n[data-testid="article-body"]: ${!!nyt}`);
+
+            if (bodyArticle) {
+                alert(`.body-article length: ${bodyArticle.innerHTML.length}\nFirst 100 chars: ${bodyArticle.textContent?.substring(0, 100)}`);
+            } else if (contentDiv) {
+                alert(`.content length: ${contentDiv.innerHTML.length}\nFirst 100 chars: ${contentDiv.textContent?.substring(0, 100)}`);
+            }
+
+        } catch (e: any) {
+            alert(`Debug Error: ${e.message}`);
+        }
+    };
 
     const handleSummarize = async (forceRegenerate: boolean = false) => {
         if (!article) return;
@@ -1281,6 +1355,15 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                             data-tooltip-align="right"
                         >
                             <Mic size={18} />
+                        </button>
+                        <button
+                            className="action-btn"
+                            onClick={handleDebug}
+                            data-tooltip="Debug Article"
+                            data-tooltip-align="right"
+                            style={{ display: article?.link.includes('fcinter1908.it') || article?.link.includes('gazzetta.it') ? 'flex' : 'none', color: 'orange' }}
+                        >
+                            <Bug size={18} />
                         </button>
                         {/* Login button - always rendered for consistent layout, hidden when not in browser mode */}
                         <button

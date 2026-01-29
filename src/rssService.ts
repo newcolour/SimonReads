@@ -1,5 +1,6 @@
 import { Feed, Article } from './types';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { MD5 } from 'crypto-js';
 
 export async function fetchFeed(feed: Feed): Promise<Article[]> {
     const { articles } = await fetchFeedDetails(feed.url, feed.id);
@@ -132,7 +133,9 @@ function parseJSONFeed(json: any, feedId: string, feedTitle: string): Article[] 
         const pubDate = item.date_published ? new Date(item.date_published) : undefined;
 
         // Use item.id if available, otherwise create a stable ID from link/title (no index to avoid position-based changes)
-        const rawId = item.id || btoa(encodeURIComponent(link || title));
+        const uniqueString = (link || '') + (title || '');
+        const hash = MD5(uniqueString).toString();
+        const rawId = item.id || hash;
         const uniqueId = `${feedId}-${rawId}`;
 
         return {
@@ -169,8 +172,19 @@ function parseRSSFeed(xml: Document, feedId: string, feedTitle: string): Article
 
         // Use guid if available, otherwise create a stable ID from feedId + link/title (no index to avoid position-based changes)
         const guidContent = item.querySelector('guid')?.textContent;
-        // Removed slice to ensure uniqueness even with long shared URL prefixes
-        const fallbackId = `${feedId}-${btoa(encodeURIComponent(link || title))}`;
+
+        if (!guidContent) {
+            console.warn(`[RSS] Missing GUID for article "${title}". Falling back to generated ID.`);
+        } else if (guidContent.trim() === '') {
+            console.warn(`[RSS] Empty GUID for article "${title}". Falling back to generated ID.`);
+        }
+
+        // Generate deterministic unique ID using MD5 (articleUrl + articleTitle)
+        // This ensures the ID remains constant across syncs even if the feed re-generates content without IDs
+        const uniqueString = (link || '') + (title || '');
+        const hash = MD5(uniqueString).toString();
+
+        const fallbackId = `${feedId}-${hash}`;
         // Ensure ID is unique per feed by prefixing with feedId if using raw GUID
         const guid = guidContent ? `${feedId}-${guidContent}` : fallbackId;
 
@@ -358,7 +372,10 @@ function parseAtomFeed(xml: Document, feedId: string, feedTitle: string): Articl
 
         const idContent = entry.querySelector('id')?.textContent;
         // Use stable ID without index to prevent read status from being lost when feed order changes
-        const fallbackId = `${feedId}-${btoa(encodeURIComponent(link || title))}`;
+        const uniqueString = (link || '') + (title || '');
+        const hash = MD5(uniqueString).toString();
+
+        const fallbackId = `${feedId}-${hash}`;
         // Ensure ID is unique per feed by prefixing with feedId if using raw ID
         const id = idContent ? `${feedId}-${idContent}` : fallbackId;
 
@@ -450,6 +467,19 @@ function cleanArticleHtml(html: string | null | undefined): string | undefined {
 
         // Remove scripts and styles (usually ads/tracking)
         doc.querySelectorAll('script, style').forEach(el => el.remove());
+
+        // Remove junk patterns often found in snippets (like FCInter1908 video stats)
+        const junkPatterns = [
+            /^\d{2}:\d{2}\s*min$/i,
+            /^ultimora$/i,
+            /^fcinter1908 ultimora$/i
+        ];
+        doc.querySelectorAll('div, p, span, strong').forEach(el => {
+            const text = el.textContent?.trim() || '';
+            if (junkPatterns.some(p => p.test(text))) {
+                el.remove();
+            }
+        });
 
         // Selectively remove iframes (keep video embeds)
         doc.querySelectorAll('iframe').forEach(el => {
