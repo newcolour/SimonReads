@@ -26,6 +26,7 @@ const RATING_ICONS: Record<string, any> = {
 export default function FactCheck({ articleId, title, content, settings, onClose }: FactCheckProps) {
     const [result, setResult] = useState<ArticleFactCheck | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [status, setStatus] = useState('Initializing fact-check...');
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -38,7 +39,8 @@ export default function FactCheck({ articleId, title, content, settings, onClose
                     articleId,
                     title,
                     content,
-                    settings
+                    settings,
+                    (newStatus) => setStatus(newStatus)
                 );
                 setResult(factCheck);
             } catch (e) {
@@ -66,7 +68,7 @@ export default function FactCheck({ articleId, title, content, settings, onClose
                 {isLoading ? (
                     <div className="fact-check-loading">
                         <Loader size={32} className="spin" />
-                        <p>Analyzing claims...</p>
+                        <p>{status}</p>
                         <small>This may take a moment</small>
                     </div>
                 ) : error ? (

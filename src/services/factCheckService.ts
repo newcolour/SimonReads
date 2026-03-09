@@ -1,4 +1,5 @@
 import { AppSettings } from '../types';
+import { searchDuckDuckGo } from '../webSearchService';
 
 export interface FactCheckResult {
     claim: string;
@@ -71,7 +72,8 @@ export class FactCheckService {
         articleId: string,
         title: string,
         content: string,
-        settings: AppSettings
+        settings: AppSettings,
+        onProgress?: (status: string) => void
     ): Promise<ArticleFactCheck> {
         if (!this.loaded) this.loadCache();
 
@@ -82,6 +84,7 @@ export class FactCheckService {
         try {
             // Step 1: Analyze Article & Extract Claims
             console.log('FactCheck: Starting analysis for', articleId);
+            if (onProgress) onProgress('Extracting verifiable claims...');
             const analysisPrompt = this.buildAnalysisPrompt(title, content);
             const analysisResponse = await this.callAI(analysisPrompt, settings);
             const initialResult = this.parseAnalysisResponse(analysisResponse);
@@ -92,15 +95,18 @@ export class FactCheckService {
             // Limit to top 3 claims to save time/resources
             const claimsToVerify = initialResult.claims.slice(0, 3);
 
-            for (const claim of claimsToVerify) {
-                if (!claim.rating.includes('unverifiable') && claim.searchQuery) {
+            for (let i = 0; i < claimsToVerify.length; i++) {
+                const claim = claimsToVerify[i];
+                if (claim.searchQuery) {
                     console.log(`FactCheck: Verifying claim "${claim.claim}" with query: "${claim.searchQuery}"`);
+                    if (onProgress) onProgress(`Searching web for: "${claim.searchQuery}" (${i + 1}/${claimsToVerify.length})...`);
 
                     try {
                         // Perform search
                         const searchResults = await this.performSearch(claim.searchQuery);
 
                         if (searchResults.length > 0) {
+                            if (onProgress) onProgress(`Comparing source results for claim (${i + 1}/${claimsToVerify.length})...`);
                             // Verify against search results
                             const verificationPrompt = this.buildVerificationPrompt(claim, searchResults);
                             const verificationResponse = await this.callAI(verificationPrompt, settings);
@@ -118,12 +124,16 @@ export class FactCheckService {
                 }
             }
 
+            // Step 3: Global summary based on verified claims
+            if (onProgress) onProgress('Generating final fact-check summary...');
+            const finalSummary = await this.generateFinalSummary(title, verifiedClaims, settings);
+
             // Combine results
             const finalResult: ArticleFactCheck = {
                 articleId,
-                overallRating: initialResult.overallRating, // Keep overall rating from initial analysis (or recalculate based on verified claims)
+                overallRating: finalSummary.overallRating as any,
                 claims: verifiedClaims,
-                summary: initialResult.summary,
+                summary: finalSummary.summary,
                 checkedAt: new Date().toISOString()
             };
 
@@ -147,22 +157,8 @@ export class FactCheckService {
         }
     }
 
-    /**
-     * Perform web search using Electron IPC
-     */
     private static async performSearch(query: string): Promise<{ title: string, url: string, snippet: string }[]> {
-        // Check if running in Electron
-        if ((window as any).ipcRenderer) {
-            try {
-                const results = await (window as any).ipcRenderer.invoke('perform-search', query);
-                // Parse if string, otherwise assume object
-                return typeof results === 'string' ? JSON.parse(results) : results;
-            } catch (e) {
-                console.error('Search failed:', e);
-                return [];
-            }
-        }
-        return [];
+        return await searchDuckDuckGo(query, 5);
     }
 
     /**
@@ -175,30 +171,25 @@ export class FactCheckService {
             ? content.substring(0, maxContent) + '...'
             : content;
 
-        return `Analyze the following article for factual accuracy. Identify key verifiable claims.
-For each claim, provide a search query that could be used to verify it.
+        return `Analyze the following article to identify key verifiable factual claims. 
+Do not attempt to verify them yourself. Your task is ONLY to extract the claims and determine the best search query to verify each one.
 
 Article Title: ${title}
 
 Article Content:
 ${truncatedContent}
 
-Please respond in the following JSON format:
+Please respond in the following JSON format ONLY:
 {
-  "overallRating": "reliable" | "mostly-reliable" | "mixed" | "caution",
   "claims": [
     {
-      "claim": "The specific claim made",
-      "rating": "likely-true" | "needs-context" | "unverifiable" | "likely-misleading",
-      "explanation": "Brief explanation based on internal knowledge",
-      "confidence": 0.8,
-      "searchQuery": "Specific search query to verify this claim"
+      "claim": "The specific claim made in the article",
+      "searchQuery": "Specific web search query to find sources that can verify or debunk this claim"
     }
-  ],
-  "summary": "A one-sentence summary of the factual reliability of this article"
+  ]
 }
 
-Focus on 3 key verifiable factual claims.`;
+Focus on up to 3 key verifiable factual claims.`;
     }
 
     /**
@@ -209,20 +200,23 @@ Focus on 3 key verifiable factual claims.`;
             `Source ${i + 1}: ${s.title}\nSnippet: ${s.snippet}\n`
         ).join('\n');
 
-        return `Verify the following claim against the provided external sources.
-        
-Claim: "${claim.claim}"
+        return `You are a neutral fact-checking engine. Compare the given claim from an article against the provided external search results.
 
-External Sources:
+Claim to verify: "${claim.claim}"
+
+External Search Sources:
 ${sourcesText}
 
-Based on these sources, re-evaluate the claim.
-Respond in JSON:
+Your task is to act as a neutral source-comparison engine.
+Compare the sources logically, identifying any corroborations or contradictions among the sources regarding the claim.
+Based *strictly* on these search results, evaluate the claim's truthfulness.
+
+Respond in the following JSON format ONLY:
 {
     "rating": "likely-true" | "needs-context" | "unverifiable" | "likely-misleading",
-    "explanation": "Updated explanation citing the sources if relevant",
+    "explanation": "Detailed explanation comparing the sources, noting whether they corroborate or contradict the claim. Cite source numbers like [1] or [2].",
     "confidence": 0.9,
-    "supportedBySources": true/false
+    "supportedBySources": true
 }`;
     }
 
@@ -230,11 +224,67 @@ Respond in JSON:
         try {
             const jsonMatch = response.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error('No JSON found');
-            return JSON.parse(jsonMatch[0]);
+            const parsed = JSON.parse(jsonMatch[0]);
+
+            // Default ratings since they haven't been verified yet
+            if (parsed.claims && Array.isArray(parsed.claims)) {
+                parsed.claims = parsed.claims.map((c: any) => ({
+                    ...c,
+                    rating: 'unverifiable',
+                    explanation: 'Pending verification...',
+                    confidence: 0
+                }));
+            }
+            return parsed;
         } catch (e) {
             console.error('Failed to parse analysis response', e);
-            return { overallRating: 'mixed', claims: [], summary: 'Analysis failed' };
+            return { claims: [] };
         }
+    }
+
+    private static async generateFinalSummary(title: string, verifiedClaims: FactCheckResult[], settings: AppSettings): Promise<{ overallRating: string, summary: string }> {
+        if (verifiedClaims.length === 0) {
+            return { overallRating: 'unverifiable', summary: 'No verifiable claims found in the article.' };
+        }
+
+        const claimsText = verifiedClaims.map(c =>
+            `Claim: ${c.claim}\nRating: ${c.rating}\nExplanation: ${c.explanation}`
+        ).join('\n\n');
+
+        const prompt = `Based on the following fact-checked claims from the article "${title}", determine the overall reliability of the article.
+
+Verified Claims:
+${claimsText}
+
+Respond in the following JSON format ONLY:
+{
+    "overallRating": "reliable" | "mostly-reliable" | "mixed" | "caution",
+    "summary": "A brief summary of the factual reliability of the article based on these claims."
+}`;
+
+        try {
+            const response = await this.callAI(prompt, settings);
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.error('Failed to generate final summary', e);
+        }
+
+        // Fallback programmatic summary
+        const misleading = verifiedClaims.filter(c => c.rating === 'likely-misleading').length;
+        const trueClaims = verifiedClaims.filter(c => c.rating === 'likely-true').length;
+
+        let overallRating = 'mixed';
+        if (misleading > 0) overallRating = 'caution';
+        else if (trueClaims === verifiedClaims.length) overallRating = 'reliable';
+        else if (trueClaims > 0) overallRating = 'mostly-reliable';
+
+        return {
+            overallRating,
+            summary: 'Fact-check completed based on external sources.'
+        };
     }
 
     private static parseVerificationResponse(originalClaim: FactCheckResult, response: string, sources: any[]): FactCheckResult {

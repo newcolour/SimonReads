@@ -7,9 +7,15 @@ async function searchDuckDuckGo(query, maxResults = 5) {
     try {
         // Use IPC to fetch search results from main process to avoid CORS/User-Agent issues
         const ipcRenderer = window.ipcRenderer;
-        let html = '';
         if (ipcRenderer) {
-            html = await ipcRenderer.invoke('perform-search', query);
+            const resultStr = await ipcRenderer.invoke('perform-search', query);
+            try {
+                const parsed = typeof resultStr === 'string' ? JSON.parse(resultStr) : resultStr;
+                return Array.isArray(parsed) ? parsed.slice(0, maxResults) : [];
+            } catch (e) {
+                console.error('Failed to parse IPC search results:', e);
+                return [];
+            }
         }
         else {
             // Fallback for dev/browser environment (might fail due to CORS)
@@ -22,28 +28,29 @@ async function searchDuckDuckGo(query, maxResults = 5) {
             if (!response.ok) {
                 throw new Error('Search failed');
             }
-            html = await response.text();
-        }
-        // Parse HTML to extract search results
-        const results = [];
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        // DuckDuckGo result structure
-        const resultElements = doc.querySelectorAll('.result');
-        for (let i = 0; i < Math.min(resultElements.length, maxResults); i++) {
-            const element = resultElements[i];
-            const titleElement = element.querySelector('.result__a');
-            const snippetElement = element.querySelector('.result__snippet');
-            const urlElement = element.querySelector('.result__url');
-            if (titleElement && snippetElement) {
-                results.push({
-                    title: titleElement.textContent?.trim() || '',
-                    snippet: snippetElement.textContent?.trim() || '',
-                    url: titleElement.getAttribute('href') || urlElement?.textContent?.trim() || ''
-                });
+            const html = await response.text();
+
+            // Parse HTML to extract search results
+            const results = [];
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            // DuckDuckGo result structure
+            const resultElements = doc.querySelectorAll('.result');
+            for (let i = 0; i < Math.min(resultElements.length, maxResults); i++) {
+                const element = resultElements[i];
+                const titleElement = element.querySelector('.result__a');
+                const snippetElement = element.querySelector('.result__snippet');
+                const urlElement = element.querySelector('.result__url');
+                if (titleElement && snippetElement) {
+                    results.push({
+                        title: titleElement.textContent?.trim() || '',
+                        snippet: snippetElement.textContent?.trim() || '',
+                        url: titleElement.getAttribute('href') || urlElement?.textContent?.trim() || ''
+                    });
+                }
             }
+            return results;
         }
-        return results;
     }
     catch (error) {
         console.error('DuckDuckGo search error:', error);
