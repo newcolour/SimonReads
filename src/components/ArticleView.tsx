@@ -438,21 +438,16 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                         }
 
                         const { CapacitorHttp } = await import('@capacitor/core');
-                        let response = await CapacitorHttp.get({
-                            url: article.link,
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                                'Accept-Language': 'en-US,en;q=0.9',
-                            },
-                            readTimeout: 15000,
-                            connectTimeout: 10000,
-                        });
+                        let response: any;
 
-                        // Fallback for known Cloudflare-blocked sites (e.g., fcinter1908.it)
-                        const isBlocked = response.status >= 400 || (typeof response.data === 'string' && (response.data.toLowerCase().includes('cloudflare') || response.data.toLowerCase().includes('bot protection')));
-                        if (isBlocked && (article.link.includes('fcinter1908.it') || article.link.includes('gazzanet'))) {
-                            console.log('[Mobile] Initial fetch blocked by bot protection. Retrying with AllOrigins proxy...');
+                        // For known Cloudflare/bot-protected sites, always skip the direct fetch
+                        // and go straight to the AllOrigins proxy. These sites return 200 OK but serve
+                        // truncated/paywalled HTML to non-browser clients, so checking for a blocked
+                        // status after the fact is not reliable.
+                        const isKnownProxySite = article.link.includes('fcinter1908.it') || article.link.includes('gazzanet');
+
+                        if (isKnownProxySite) {
+                            console.log('[Mobile] Known proxy-required site detected. Fetching directly via AllOrigins proxy...');
                             try {
                                 const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(article.link)}`;
                                 const proxyResponse = await CapacitorHttp.get({
@@ -461,7 +456,7 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                                     readTimeout: 15000,
                                     connectTimeout: 10000,
                                 });
-                                
+
                                 if (proxyResponse.status >= 200 && proxyResponse.status < 300 && proxyResponse.data) {
                                     // allorigins returns JSON: { contents: "<html>..." }
                                     const data = typeof proxyResponse.data === 'string' ? JSON.parse(proxyResponse.data) : proxyResponse.data;
@@ -472,10 +467,83 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                                             status: 200
                                         };
                                         console.log('[Mobile] Successfully fetched content via proxy');
+                                    } else {
+                                        // Proxy returned empty contents — fall back to direct fetch
+                                        console.warn('[Mobile] Proxy returned empty contents, falling back to direct fetch');
+                                        response = await CapacitorHttp.get({
+                                            url: article.link,
+                                            headers: {
+                                                'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                                                'Accept-Language': 'en-US,en;q=0.9',
+                                            },
+                                            readTimeout: 15000,
+                                            connectTimeout: 10000,
+                                        });
                                     }
+                                } else {
+                                    // Proxy request itself failed — fall back to direct fetch
+                                    console.warn('[Mobile] Proxy request failed, falling back to direct fetch');
+                                    response = await CapacitorHttp.get({
+                                        url: article.link,
+                                        headers: {
+                                            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                                            'Accept-Language': 'en-US,en;q=0.9',
+                                        },
+                                        readTimeout: 15000,
+                                        connectTimeout: 10000,
+                                    });
                                 }
                             } catch (proxyError) {
-                                console.error('[Mobile] Proxy fetch failed:', proxyError);
+                                console.error('[Mobile] Proxy fetch failed, falling back to direct fetch:', proxyError);
+                                response = await CapacitorHttp.get({
+                                    url: article.link,
+                                    headers: {
+                                        'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                                        'Accept-Language': 'en-US,en;q=0.9',
+                                    },
+                                    readTimeout: 15000,
+                                    connectTimeout: 10000,
+                                });
+                            }
+                        } else {
+                            // Standard direct fetch for all other sites
+                            response = await CapacitorHttp.get({
+                                url: article.link,
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                                    'Accept-Language': 'en-US,en;q=0.9',
+                                },
+                                readTimeout: 15000,
+                                connectTimeout: 10000,
+                            });
+
+                            // Secondary fallback: if another site returns a blocked response, try the proxy too
+                            const isBlocked = response.status >= 400 || (typeof response.data === 'string' && (response.data.toLowerCase().includes('cloudflare') || response.data.toLowerCase().includes('bot protection')));
+                            if (isBlocked) {
+                                console.log('[Mobile] Direct fetch was blocked. Retrying with AllOrigins proxy...');
+                                try {
+                                    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(article.link)}`;
+                                    const proxyResponse = await CapacitorHttp.get({
+                                        url: proxyUrl,
+                                        headers: { 'Accept': 'application/json' },
+                                        readTimeout: 15000,
+                                        connectTimeout: 10000,
+                                    });
+
+                                    if (proxyResponse.status >= 200 && proxyResponse.status < 300 && proxyResponse.data) {
+                                        const data = typeof proxyResponse.data === 'string' ? JSON.parse(proxyResponse.data) : proxyResponse.data;
+                                        if (data && data.contents) {
+                                            response = { ...proxyResponse, data: data.contents, status: 200 };
+                                            console.log('[Mobile] Successfully fetched content via proxy (blocked fallback)');
+                                        }
+                                    }
+                                } catch (proxyError) {
+                                    console.error('[Mobile] Proxy fallback failed:', proxyError);
+                                }
                             }
                         }
 
