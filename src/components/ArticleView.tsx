@@ -431,8 +431,14 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                     // Android/iOS path - use Capacitor HTTP
                     console.log('[Mobile] Fetching article via Capacitor HTTP...');
                     try {
+                        // Delay for repubblica.it to allow auth cookies to stream to the native CookieManager
+                        if (article.link.includes('repubblica.it')) {
+                            console.log('[Mobile] repubblica.it detected: delaying fetch by 2500ms to allow cookies to sync...');
+                            await new Promise(resolve => setTimeout(resolve, 2500));
+                        }
+
                         const { CapacitorHttp } = await import('@capacitor/core');
-                        const response = await CapacitorHttp.get({
+                        let response = await CapacitorHttp.get({
                             url: article.link,
                             headers: {
                                 'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
@@ -442,6 +448,36 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                             readTimeout: 15000,
                             connectTimeout: 10000,
                         });
+
+                        // Fallback for known Cloudflare-blocked sites (e.g., fcinter1908.it)
+                        const isBlocked = response.status >= 400 || (typeof response.data === 'string' && (response.data.toLowerCase().includes('cloudflare') || response.data.toLowerCase().includes('bot protection')));
+                        if (isBlocked && (article.link.includes('fcinter1908.it') || article.link.includes('gazzanet'))) {
+                            console.log('[Mobile] Initial fetch blocked by bot protection. Retrying with AllOrigins proxy...');
+                            try {
+                                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(article.link)}`;
+                                const proxyResponse = await CapacitorHttp.get({
+                                    url: proxyUrl,
+                                    headers: { 'Accept': 'application/json' },
+                                    readTimeout: 15000,
+                                    connectTimeout: 10000,
+                                });
+                                
+                                if (proxyResponse.status >= 200 && proxyResponse.status < 300 && proxyResponse.data) {
+                                    // allorigins returns JSON: { contents: "<html>..." }
+                                    const data = typeof proxyResponse.data === 'string' ? JSON.parse(proxyResponse.data) : proxyResponse.data;
+                                    if (data && data.contents) {
+                                        response = {
+                                            ...proxyResponse,
+                                            data: data.contents,
+                                            status: 200
+                                        };
+                                        console.log('[Mobile] Successfully fetched content via proxy');
+                                    }
+                                }
+                            } catch (proxyError) {
+                                console.error('[Mobile] Proxy fetch failed:', proxyError);
+                            }
+                        }
 
                         if (response.status >= 200 && response.status < 300) {
                             htmlContent = response.data;
