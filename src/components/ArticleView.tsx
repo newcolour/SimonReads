@@ -431,10 +431,35 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                     // Android/iOS path - use Capacitor HTTP
                     console.log('[Mobile] Fetching article via Capacitor HTTP...');
                     try {
-                        // Delay for repubblica.it to allow auth cookies to stream to the native CookieManager
+                        // Bridge WebView CookieManager → OkHttp for cookie-authenticated sites (e.g. Repubblica.it).
+                        //
+                        // Root cause of the login loop:
+                        //   - The user logs in via Browser.open() which uses Chrome Custom Tabs on Android.
+                        //   - Custom Tabs DO write their session cookies into Android's WebView CookieManager.
+                        //   - BUT CapacitorHttp uses OkHttp with its own isolated cookie jar, so it never
+                        //     sees those cookies unless we manually bridge them.
+                        //   - A simple time delay cannot fix this — the cookies exist in the wrong jar.
+                        //
+                        // Fix: use CapacitorCookies.getCookies() (which reads from the WebView CookieManager)
+                        // and inject the result as a Cookie header into the CapacitorHttp request.
+                        let extraHeaders: Record<string, string> = {};
                         if (article.link.includes('repubblica.it')) {
-                            console.log('[Mobile] repubblica.it detected: delaying fetch by 2500ms to allow cookies to sync...');
-                            await new Promise(resolve => setTimeout(resolve, 2500));
+                            console.log('[Mobile] repubblica.it detected: bridging WebView cookies → OkHttp...');
+                            // Small delay to let the Custom Tab fully flush its cookies to CookieManager
+                            await new Promise(resolve => setTimeout(resolve, 800));
+                            try {
+                                const { CapacitorCookies } = await import('@capacitor/core');
+                                const cookieJar = await CapacitorCookies.getCookies({ url: 'https://www.repubblica.it' });
+                                const cookieEntries = Object.entries(cookieJar);
+                                if (cookieEntries.length > 0) {
+                                    extraHeaders['Cookie'] = cookieEntries.map(([k, v]) => `${k}=${v}`).join('; ');
+                                    console.log(`[Mobile] Injecting ${cookieEntries.length} cookie(s) into OkHttp request`);
+                                } else {
+                                    console.warn('[Mobile] No cookies found for repubblica.it — user may not be logged in yet.');
+                                }
+                            } catch (cookieError) {
+                                console.warn('[Mobile] Failed to read WebView cookies:', cookieError);
+                            }
                         }
 
                         const { CapacitorHttp } = await import('@capacitor/core');
@@ -509,21 +534,40 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                                 });
                             }
                         } else {
-                            // Standard direct fetch for all other sites
+                            // Standard direct fetch for all other sites (also used for cookie-authenticated sites
+                            // like repubblica.it, where extraHeaders will contain bridged WebView cookies)
                             response = await CapacitorHttp.get({
                                 url: article.link,
                                 headers: {
                                     'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
                                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                                     'Accept-Language': 'en-US,en;q=0.9',
+                                    ...extraHeaders,  // Injects bridged cookies for Repubblica.it etc.
                                 },
                                 readTimeout: 15000,
                                 connectTimeout: 10000,
                             });
 
+                            // If Repubblica.it still returns a login page (no cookies or expired session),
+                            // surface a helpful message rather than rendering login HTML noise.
+                            if (article.link.includes('repubblica.it') && response.status === 200) {
+                                const bodySnippet = (typeof response.data === 'string' ? response.data : '').toLowerCase();
+                                const isLoginPage = bodySnippet.includes('accedi') && bodySnippet.includes('password') && !bodySnippet.includes('article-body');
+                                if (isLoginPage) {
+                                    console.warn('[Mobile] repubblica.it returned a login page — cookies may be missing or expired.');
+                                    setFetchedContent(`<div style="padding: 2.5rem; text-align: center; color: var(--text-muted); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.15); margin: 2rem 0;">
+                                        <p style="font-size: 1.2em; margin-bottom: 1rem;">🔐 Accesso richiesto</p>
+                                        <p style="margin-bottom: 1.5rem; opacity: 0.8;">Effettua l'accesso a Repubblica.it nella modalità browser, poi torna qui per leggere l'articolo.</p>
+                                        <button onclick="window.dispatchEvent(new CustomEvent('switch-to-browser'))" style="background: var(--accent); color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer;">Apri in modalità browser</button>
+                                    </div>`);
+                                    setIsFetchingContent(false);
+                                    return;
+                                }
+                            }
+
                             // Secondary fallback: if another site returns a blocked response, try the proxy too
                             const isBlocked = response.status >= 400 || (typeof response.data === 'string' && (response.data.toLowerCase().includes('cloudflare') || response.data.toLowerCase().includes('bot protection')));
-                            if (isBlocked) {
+                            if (isBlocked && !article.link.includes('repubblica.it')) {
                                 console.log('[Mobile] Direct fetch was blocked. Retrying with AllOrigins proxy...');
                                 try {
                                     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(article.link)}`;
