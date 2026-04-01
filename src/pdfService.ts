@@ -1,4 +1,6 @@
 import jsPDF from 'jspdf';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Article, AppSettings, ArticleRanking } from './types';
 
 interface RankedArticle {
@@ -81,7 +83,23 @@ export async function generateNewspaperPDF(
         // Save the PDF
         const filename = `SimonDailyNews_${today.toISOString().split('T')[0]}.pdf`;
         console.log(`Saving PDF as ${filename} `);
-        pdf.save(filename);
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const base64data = pdf.output('datauristring').split(',')[1];
+                await Filesystem.writeFile({
+                    path: filename,
+                    data: base64data,
+                    directory: Directory.Documents
+                });
+                console.log(`PDF saved to Documents folder as ${filename}`);
+                alert(`PDF saved to Documents folder as ${filename}`);
+            } catch (err) {
+                console.error('Failed to save PDF on device:', err);
+                throw new Error('Failed to save PDF to Documents folder. Ensure permissions are granted.');
+            }
+        } else {
+            pdf.save(filename);
+        }
         console.log('PDF generation complete');
     } catch (error) {
         console.error('PDF generation failed:', error);
@@ -790,7 +808,23 @@ export async function generateNewsreelPDF(
 
         // Save the PDF
         const filename = `SimonNewsreel_${today.toISOString().split('T')[0]}.pdf`;
-        pdf.save(filename);
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const base64data = pdf.output('datauristring').split(',')[1];
+                await Filesystem.writeFile({
+                    path: filename,
+                    data: base64data,
+                    directory: Directory.Documents
+                });
+                console.log(`PDF saved to Documents folder as ${filename}`);
+                alert(`PDF saved to Documents folder as ${filename}`);
+            } catch (err) {
+                console.error('Failed to save PDF on device:', err);
+                throw new Error('Failed to save PDF to Documents folder. Ensure permissions are granted.');
+            }
+        } else {
+            pdf.save(filename);
+        }
         console.log('Newsreel PDF generation complete');
 
     } catch (error) {
