@@ -704,6 +704,14 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
 // Generates a PDF from the exact newsreel markdown output with images per section
 // ============================================================================
 
+function cleanMarkdownForNewsreel(str: string): string {
+    return str.replace(/\*\*([^*]+)\*\*/g, '$1')
+              .replace(/__([^_]+)__/g, '$1')
+              .replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '$1')
+              .replace(/</g, '')
+              .replace(/>/g, ''); 
+}
+
 interface NewsreelSection {
     title: string;
     content: string;
@@ -739,71 +747,260 @@ export async function generateNewsreelPDF(
         const margin = 15;
         const contentWidth = pageWidth - (2 * margin);
 
-        // Add newspaper header
-        addNewspaperHeader(pdf, pageWidth);
-
-        // Add date
-        const today = new Date();
-        const dateStr = today.toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
+        // ---- CUSTOM SPACED HEADER ----
+        pdf.setFont('times', 'bold');
+        pdf.setFontSize(36);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text('SimonDailyNews', pageWidth / 2, 25, { align: 'center' }); 
 
         pdf.setFontSize(10);
+        pdf.setFont('times', 'italic');
+        pdf.setTextColor(80, 80, 80);
+        pdf.text('All the News That\'s Fit to Read', pageWidth / 2, 33, { align: 'center' }); 
+
+        const today = new Date();
+        const dateStr = today.toLocaleDateString('en-US', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+        pdf.setFontSize(10);
         pdf.setTextColor(100, 100, 100);
-        pdf.text(dateStr, pageWidth / 2, 35, { align: 'center' });
+        pdf.text(dateStr, pageWidth / 2, 42, { align: 'center' }); 
+        
         pdf.setDrawColor(0, 0, 0);
         pdf.setLineWidth(0.5);
-        pdf.line(margin, 38, pageWidth - margin, 38);
+        pdf.line(margin, 46, pageWidth - margin, 46); 
 
-        let yPosition = 45;
+        let yPosition = 56;
 
-        // Render each section
+        // ---- TABLE OF CONTENTS ----
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(14);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text('In This Edition:', margin, yPosition);
+        yPosition += 8;
+
         for (const section of sections) {
-            // Check if we need a new page
-            if (yPosition > pageHeight - 60) {
+            if (yPosition > pageHeight - 30) { pdf.addPage(); yPosition = 20; }
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(11);
+            pdf.setTextColor(30, 30, 30);
+            pdf.text(`• ${section.title}`, margin + 5, yPosition);
+            yPosition += 5;
+
+            let teaser = '';
+            for (const line of section.content.split('\n')) {
+                if (line.trim() && !line.startsWith('-') && !line.startsWith('*') && !line.includes('Sources:') && !line.includes('To know more')) {
+                    const cleanLine = cleanMarkdownForNewsreel(line);
+                    const dotSplit = cleanLine.split('. ');
+                    teaser = dotSplit[0] + (dotSplit.length > 1 ? '.' : '...');
+                    break;
+                }
+            }
+            if (teaser) {
+                pdf.setFont('helvetica', 'italic');
+                pdf.setFontSize(10);
+                pdf.setTextColor(80, 80, 80);
+                const teaserLines = pdf.splitTextToSize(teaser, contentWidth - 15);
+                for (const tl of teaserLines) {
+                    if (yPosition > pageHeight - 20) { pdf.addPage(); yPosition = 20; }
+                    pdf.text(tl, margin + 10, yPosition);
+                    yPosition += 4.5;
+                }
+                yPosition += 2;
+            }
+        }
+        yPosition += 10;
+
+        // ---- RENDER SECTIONS ----
+        for (let idx = 0; idx < sections.length; idx++) {
+            const section = sections[idx];
+            
+            if (yPosition > pageHeight - 40) {
                 pdf.addPage();
                 yPosition = 20;
             }
 
-            // Section title
-            pdf.setFont('times', 'bold');
-            pdf.setFontSize(16);
-            pdf.setTextColor(0, 0, 0);
-            const titleLines = pdf.splitTextToSize(section.title, contentWidth);
-            pdf.text(titleLines, margin, yPosition);
-            yPosition += titleLines.length * 7 + 3;
+            // Bold colored header bar
+            pdf.setFillColor(44, 62, 80); // Charcoal Background
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(14);
+            pdf.setTextColor(255, 255, 255);
+            const titleLines = pdf.splitTextToSize(section.title, contentWidth - 10);
+            const headerHeight = Math.max(12, titleLines.length * 6 + 6);
+            pdf.rect(margin, yPosition, contentWidth, headerHeight, 'F');
+            let textY = yPosition + 8 + (titleLines.length > 1 ? 2 : 0);
+            pdf.text(titleLines, margin + 5, textY);
+            yPosition += headerHeight + 8;
 
-            // Section image (if available)
-            if (section.imageUrl) {
-                try {
-                    const imageData = await fetchImageAsBase64(section.imageUrl);
-                    if (imageData) {
-                        const imgWidth = contentWidth * 0.6;
-                        const imgHeight = imgWidth * 0.5625; // 16:9 aspect ratio
+            // Extract body vs references
+            const bodyParagraphs: string[] = [];
+            const references: {text: string, url?: string}[] = [];
+            let inRefs = false;
 
-                        // Check if image fits on current page
-                        if (yPosition + imgHeight > pageHeight - 40) {
-                            pdf.addPage();
-                            yPosition = 20;
+            for (const rawLine of section.content.split('\n')) {
+                const line = rawLine.trim();
+                if (!line) continue;
+
+                if (line.includes('Sources:') || line.includes('To know more') || line.includes('**Sources') || line.includes('**To know more')) {
+                    inRefs = true;
+                    continue;
+                }
+                
+                if (inRefs) {
+                    if (line.startsWith('-')) {
+                        let text = line.substring(1).trim();
+                        let url: string | undefined = undefined;
+                        const match = text.match(/\[([^\]]+)\]\(([^\)]+)\)/);
+                        if (match) {
+                            text = match[1];
+                            url = match[2];
+                        } else {
+                            text = cleanMarkdownForNewsreel(text);
                         }
-
-                        const xOffset = margin + (contentWidth - imgWidth) / 2;
-                        pdf.addImage(imageData, 'JPEG', xOffset, yPosition, imgWidth, imgHeight);
-                        yPosition += imgHeight + 5;
+                        references.push({ text, url });
                     }
-                } catch (imgError) {
-                    console.warn('Failed to add section image:', imgError);
+                } else {
+                    bodyParagraphs.push(cleanMarkdownForNewsreel(line));
                 }
             }
 
-            // Section content (clean markdown for PDF)
-            yPosition = renderMarkdownToPDF(pdf, section.content, margin, yPosition, contentWidth, pageHeight);
+            const paragraphs = bodyParagraphs.join('\n').split('\n\n').filter(p => p.trim());
+            const useTwoColumns = paragraphs.length > 2;
 
-            // Add spacing between sections
-            yPosition += 10;
+            pdf.setFont('times', 'normal');
+            pdf.setFontSize(11);
+            pdf.setTextColor(30, 30, 30);
+            const lineHeight = 5;
+
+            // Image Extraction
+            let imgWidth = 0;
+            let imgHeight = 0;
+            let imgData: string | null = null;
+            if (section.imageUrl) {
+                try {
+                    const data = await fetchImageAsBase64(section.imageUrl);
+                    if (data) {
+                        pdf.getImageProperties(data);
+                        imgData = data;
+                        imgWidth = 50; // Approx 250px limit equivalent
+                    }
+                } catch(e) {}
+            }
+
+            if (useTwoColumns) {
+                const colWidth = (contentWidth - 8) / 2;
+                const halfIdx = Math.ceil(paragraphs.length / 2);
+                let col1Y = yPosition;
+                let col2Y = yPosition;
+
+                if (imgData) {
+                    try {
+                        const props = pdf.getImageProperties(imgData);
+                        const ratio = props.width / props.height;
+                        imgHeight = imgWidth / ratio;
+                        if (imgHeight > 60) { imgHeight = 60; imgWidth = imgHeight * ratio; }
+
+                        if (col2Y + imgHeight > pageHeight - 30) { pdf.addPage(); col1Y = 20; col2Y = 20; }
+                        pdf.addImage(imgData, 'JPEG', margin + colWidth + 8, col2Y, imgWidth, imgHeight);
+                        col2Y += imgHeight + 4;
+                    } catch(e){}
+                }
+
+                for (let i = 0; i < paragraphs.length; i++) {
+                    const isCol1 = i < halfIdx;
+                    let currY = isCol1 ? col1Y : col2Y;
+                    const lines = pdf.splitTextToSize(paragraphs[i], colWidth);
+                    
+                    for (const l of lines) {
+                        if (currY > pageHeight - 25) {
+                            pdf.addPage();
+                            currY = 20;
+                            if (isCol1) col2Y = 20; else col1Y = 20;
+                        }
+                        pdf.text(l, isCol1 ? margin : margin + colWidth + 8, currY);
+                        currY += lineHeight;
+                    }
+                    currY += 3;
+                    if (isCol1) col1Y = currY; else col2Y = currY;
+                }
+                yPosition = Math.max(col1Y, col2Y) + 5;
+            } else {
+                let imgX = pageWidth - margin - imgWidth;
+                let imgY = yPosition;
+
+                if (imgData) {
+                    try {
+                        const props = pdf.getImageProperties(imgData);
+                        const ratio = props.width / props.height;
+                        imgHeight = imgWidth / ratio;
+                        if (imgHeight > 60) { imgHeight = 60; imgWidth = imgHeight * ratio; }
+                        imgX = pageWidth - margin - imgWidth; 
+                        if (yPosition + imgHeight > pageHeight - 30) { pdf.addPage(); yPosition = 20; imgY = 20; }
+                        pdf.addImage(imgData, 'JPEG', imgX, imgY, imgWidth, imgHeight);
+                    } catch(e){ imgWidth = 0; imgHeight = 0; }
+                }
+
+                for (const p of paragraphs) {
+                    let textWidth = contentWidth;
+                    if (imgWidth > 0 && yPosition < imgY + imgHeight + 2) {
+                        textWidth = contentWidth - imgWidth - 5;
+                    }
+                    
+                    const lines = pdf.splitTextToSize(p, textWidth);
+                    for (const l of lines) {
+                        if (yPosition > pageHeight - 20) {
+                            pdf.addPage();
+                            yPosition = 20;
+                            imgY = -1000;
+                        }
+                        pdf.text(l, margin, yPosition);
+                        yPosition += lineHeight;
+                    }
+                    yPosition += 3;
+                }
+                yPosition = Math.max(yPosition, imgY + imgHeight) + 5;
+            }
+
+            if (references.length > 0) {
+                if (yPosition > pageHeight - 30) { pdf.addPage(); yPosition = 20; }
+                pdf.setDrawColor(220, 220, 220);
+                pdf.setLineWidth(0.2);
+                pdf.line(margin + 15, yPosition, pageWidth - margin - 15, yPosition);
+                yPosition += 6;
+
+                pdf.setFont('helvetica', 'italic');
+                pdf.setFontSize(9);
+                pdf.setTextColor(150, 150, 150);
+                pdf.text('References:', margin, yPosition);
+                yPosition += 5;
+
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                pdf.setTextColor(140, 140, 140);
+                
+                for (const ref of references) {
+                    if (yPosition > pageHeight - 20) { pdf.addPage(); yPosition = 20; }
+                    const refLines = pdf.splitTextToSize(`• ${ref.text}`, contentWidth - 5);
+                    for (const rl of refLines) {
+                        if (ref.url && rl === refLines[0]) {
+                            pdf.textWithLink(rl, margin + 4, yPosition, { url: ref.url });
+                        } else {
+                            pdf.text(rl, margin + 4, yPosition);
+                        }
+                        yPosition += 4;
+                    }
+                }
+                yPosition += 4;
+            }
+
+            if (idx < sections.length - 1) {
+                yPosition += 4;
+                if (yPosition > pageHeight - 20) { pdf.addPage(); yPosition = 20; }
+                pdf.setDrawColor(180, 180, 180);
+                pdf.setLineWidth(0.3);
+                pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+                yPosition += 12;
+            }
         }
 
         // Save the PDF
@@ -941,91 +1138,4 @@ async function fetchArticleHTML(url: string): Promise<string | null> {
     }
 }
 
-function renderMarkdownToPDF(
-    pdf: jsPDF,
-    markdown: string,
-    margin: number,
-    yPosition: number,
-    contentWidth: number,
-    pageHeight: number
-): number {
-    // Clean and process markdown for PDF rendering
-    const lines = markdown.split('\n');
 
-    pdf.setFont('times', 'normal');
-    pdf.setFontSize(11);
-    pdf.setTextColor(30, 30, 30);
-
-    const lineHeight = 5;
-
-    for (const line of lines) {
-        if (!line.trim()) {
-            yPosition += lineHeight / 2;
-            continue;
-        }
-
-        // Check for page break
-        if (yPosition > pageHeight - 25) {
-            pdf.addPage();
-            yPosition = 20;
-        }
-
-        // Handle bold text (** or __)
-        let processedLine = line;
-        let linkUrl: string | null = null;
-
-        // Handle "To know more" sections with bold
-        if (line.startsWith('**To know more')) {
-            pdf.setFont('times', 'bold');
-            pdf.setFontSize(11);
-            processedLine = line.replace(/\*\*/g, '');
-        } else if (line.startsWith('- [')) {
-            // Handle bullet point links - these should be clickable
-            pdf.setFont('times', 'normal');
-            pdf.setFontSize(10);
-            pdf.setTextColor(0, 0, 180); // Blue color for links
-
-            const linkMatch = line.match(/- \[([^\]]+)\]\(([^\)]+)\)/);
-            if (linkMatch) {
-                processedLine = `• ${linkMatch[1]}`;
-                linkUrl = linkMatch[2];
-            }
-        } else if (line.startsWith('Sources:') || line.includes('**Sources:**')) {
-            pdf.setFont('times', 'bold');
-            pdf.setFontSize(10);
-            pdf.setTextColor(30, 30, 30);
-            processedLine = 'Sources:';
-        } else {
-            pdf.setFont('times', 'normal');
-            pdf.setFontSize(11);
-            pdf.setTextColor(30, 30, 30);
-            // Remove markdown formatting but keep track of links
-            processedLine = line
-                .replace(/\*\*([^*]+)\*\*/g, '$1')
-                .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-        }
-
-        // Word wrap
-        const wrappedLines = pdf.splitTextToSize(processedLine, contentWidth);
-
-        for (const wrappedLine of wrappedLines) {
-            if (yPosition > pageHeight - 25) {
-                pdf.addPage();
-                yPosition = 20;
-            }
-
-            if (linkUrl) {
-                // Add clickable link
-                pdf.textWithLink(wrappedLine, margin, yPosition, { url: linkUrl });
-            } else {
-                pdf.text(wrappedLine, margin, yPosition);
-            }
-            yPosition += lineHeight;
-        }
-
-        // Reset text color after link
-        pdf.setTextColor(30, 30, 30);
-    }
-
-    return yPosition;
-}

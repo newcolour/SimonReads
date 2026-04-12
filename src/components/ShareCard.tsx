@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { X, Download, Copy, Share2, Check } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Article } from '../types';
 import './ShareCard.css';
 
@@ -72,10 +74,27 @@ export default function ShareCard({ article, feedTitle, onClose }: ShareCardProp
                     useCORS: true
                 });
 
-                const link = document.createElement('a');
-                link.download = `share-${article.id.substring(0, 8)}.png`;
-                link.href = canvas.toDataURL('image/png');
-                link.click();
+                const dataUrl = canvas.toDataURL('image/png');
+                const filename = `share-${article.id.substring(0, 8)}.png`;
+                if (Capacitor.isNativePlatform()) {
+                    try {
+                        const base64data = dataUrl.split(',')[1];
+                        await Filesystem.writeFile({
+                            path: filename,
+                            data: base64data,
+                            directory: Directory.Documents
+                        });
+                        alert(`Image saved to Documents folder as ${filename}`);
+                    } catch (err) {
+                        console.error('Failed to save image:', err);
+                        alert('Failed to save image. Ensure permissions are granted.');
+                    }
+                } else {
+                    const link = document.createElement('a');
+                    link.download = filename;
+                    link.href = dataUrl;
+                    link.click();
+                }
             } else {
                 alert('Image export requires html2canvas library. The card cannot be downloaded as an image.');
             }
@@ -116,12 +135,31 @@ export default function ShareCard({ article, feedTitle, onClose }: ShareCardProp
                         setTimeout(() => setCopied(false), 2000);
                     } catch (clipboardError) {
                         // Fallback: download the image
-                        const url = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.download = `share-${article.id.substring(0, 8)}.png`;
-                        link.href = url;
-                        link.click();
-                        URL.revokeObjectURL(url);
+                        const filename = `share-${article.id.substring(0, 8)}.png`;
+                        if (Capacitor.isNativePlatform()) {
+                            try {
+                                const reader = new FileReader();
+                                reader.onloadend = async () => {
+                                    const base64data = (reader.result as string).split(',')[1];
+                                    await Filesystem.writeFile({
+                                        path: filename,
+                                        data: base64data,
+                                        directory: Directory.Documents
+                                    });
+                                    alert(`Image saved to Documents folder as ${filename}`);
+                                };
+                                reader.readAsDataURL(blob);
+                            } catch (err) {
+                                alert('Failed to save image.');
+                            }
+                        } else {
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.download = filename;
+                            link.href = url;
+                            link.click();
+                            URL.revokeObjectURL(url);
+                        }
                     }
                 }, 'image/png');
             } else {

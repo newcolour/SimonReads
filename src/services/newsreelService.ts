@@ -91,7 +91,8 @@ export async function generateNewsreelInBackground(
             globalProvider: settings.aiProvider,
             newsreelProvider: settings.newsreelAiProvider,
             newsreelUseGlobalAI: settings.newsreelUseGlobalAI,
-            fullSettings: settings
+            fullSettings: settings,
+            isDailyNewsreel
         });
 
         const effectiveSettings: AppSettings = useNewsreelAI ? {
@@ -164,31 +165,17 @@ export async function generateNewsreelInBackground(
 
         const targetLanguage = effectiveSettings.summaryLanguage || 'English';
 
-        const instruction = isDailyNewsreel
-            ? `Please create a comprehensive daily news digest from the following ${articles.length} articles in ${targetLanguage}.
+        const instruction = `Please format the following ${articles.length} stories as a visually rich, multi-story newspaper-style digest in ${targetLanguage}.
 
 IMPORTANT INSTRUCTIONS:
 1. LANGUAGE: The ENTIRE output must be in ${targetLanguage}.
-2. First, identify common topics/themes across the articles
-3. Group related articles together by topic
-4. For each topic group:
-   - Create a topic heading in ${targetLanguage}
-   - Provide a comprehensive summary that synthesizes information from ALL articles in that group
-   - Write 2-4 detailed paragraphs covering the key points
-   - At the END of the section, create a "Sources" list with markdown links: - [Article Title](URL)
-   - After the sources, add: "SEARCH_QUERY: <3-5 word search query for this topic>"
-5. Make sure EVERY article is included in at least one topic group
-6. If an article doesn't fit any group, create a "Miscellaneous" section`
-            : `Please create a news reel summary of the following ${articles.length} articles in ${targetLanguage}.
+2. Include ALL stories from the source material — do not summarize or shorten any story.
+3. Each story gets its own clearly separated section. Create a section heading for each story using "## Story Title" format.
+4. Provide a full body text of at least 2-3 paragraphs for EACH story.
+5. At the END of each story section, list the Source as a bullet point: - [Source Name](URL)
+6. After the source, add: "SEARCH_QUERY: <3-5 word search query for this story>"
 
-IMPORTANT INSTRUCTIONS:
-1. LANGUAGE: The ENTIRE output must be in ${targetLanguage}.
-2. Group articles by common topics/themes
-3. For each topic, provide a comprehensive summary
-4. Write detailed summaries (2-3 paragraphs per topic group)
-5. At the END of each topic section, list the sources as bullet points: - [Article Title](URL)
-6. After the sources, add: "SEARCH_QUERY: <3-5 word search query for this topic>"
-7. Make sure ALL ${articles.length} articles are included`;
+This approach formats each original story directly into the digest without aggregating them into topics.`;
 
         let result = await summarizeArticle(combinedContent, effectiveSettings.geminiApiKey || '', effectiveSettings, instruction);
 

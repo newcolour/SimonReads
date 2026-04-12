@@ -20,12 +20,15 @@ export async function generateInlineSummary(
         console.log('🤖 [InlineSummary] Has API Key:', !!apiKey);
 
         // Use the summary service with personality-specific settings
-        console.log('🤖 [InlineSummary] Calling summarizeArticle...');
+        const targetLanguage = settings.summaryLanguage || 'English';
+        const instruction = `Write a VERY concise 1 to 2 sentence summary of this article. Do NOT include formatting, headings, bullet points, or introductory text like 'Here is a summary'. Just output the summary text directly. IMPORTANT: The ENTIRE output must be written in ${targetLanguage}.`;
+        
+        console.log('🤖 [InlineSummary] Calling summarizeArticle with language:', targetLanguage);
         const summary = await summarizeArticle(content, apiKey, {
             ...settings,
             summaryLength: 'short',
             summaryDepth: 'brief'
-        }, "Write a VERY concise 1 to 2 sentence summary of this article. Do NOT include formatting, headings, bullet points, or introductory text like 'Here is a summary'. Just output the summary text directly.", true);
+        }, instruction, true);
 
         console.log('🤖 [InlineSummary] Summary generated, length:', summary.length);
 

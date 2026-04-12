@@ -279,37 +279,18 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
 
             const targetLanguage = effectiveSettings.summaryLanguage || 'English';
 
-            const instruction = isDailyNewsreel
-                ? `Please create a comprehensive daily news digest from the following ${articles.length} articles in ${targetLanguage}.
+            const instruction = `Please format the following ${articles.length} stories as a visually rich, multi-story newspaper-style digest in ${targetLanguage}.
 
 IMPORTANT INSTRUCTIONS:
 1. LANGUAGE: The ENTIRE output must be in ${targetLanguage}. Translate all titles, headings, and summaries to ${targetLanguage}.
-2. First, identify common topics/themes across the articles
-3. Group related articles together by topic
-4. For each topic group:
-   - Create a topic heading in ${targetLanguage}
-   - Provide a comprehensive summary that synthesizes information from ALL articles in that group
-   - Write 2-4 detailed paragraphs covering the key points from all articles in the group
-   - Do NOT include inline links in the text
-   - At the END of the section, create a "Sources" list with markdown links to each article: - [Article Title (Translated)](URL)
-   - After the sources, add a specific line exactly like this: "SEARCH_QUERY: <3-5 word search query for this topic>"
-5. Make sure EVERY article is included in at least one topic group
-6. If an article doesn't fit any group, create a "Miscellaneous" section
+2. Include ALL stories from the source material — do not summarize or shorten any story.
+3. Each story gets its own clearly separated section. Create a section heading for each story using "## Story Title" format.
+4. Provide a full body text of at least 2-3 paragraphs for EACH story.
+5. Do NOT include inline links in the text.
+6. At the END of each story section, list the Source as a bullet point with a markdown link: - [Source Name (Translated)](URL)
+7. After the source, add a specific line exactly like this: "SEARCH_QUERY: <3-5 word search query for this story>"
 
-This approach allows for more detailed coverage while being efficient with space.`
-                : `Please create a news reel summary of the following ${articles.length} articles in ${targetLanguage}.
-
-IMPORTANT INSTRUCTIONS:
-1. LANGUAGE: The ENTIRE output must be in ${targetLanguage}. Translate all titles, headings, and summaries to ${targetLanguage}.
-2. Group articles by common topics/themes
-3. For each topic, provide a comprehensive summary that covers all related articles
-4. Write detailed summaries (2-3 paragraphs per topic group)
-5. Do NOT include inline links in the text
-6. At the END of each topic section, list the sources as bullet points with markdown links: - [Article Title (Translated)](URL)
-7. After the sources, add a specific line exactly like this: "SEARCH_QUERY: <3-5 word search query for this topic>"
-8. Make sure ALL ${articles.length} articles are included
-
-This topic-based approach allows for richer summaries than individual article summaries.`;
+This approach formats each original story directly into the digest without aggregating them into topics.`;
 
             let result = await summarizeArticle(combinedContent, effectiveSettings.geminiApiKey || '', effectiveSettings, instruction);
 

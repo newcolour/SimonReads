@@ -1,4 +1,6 @@
 import { Feed } from './types';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 
 export function exportToOPML(feeds: Feed[]): string {
     const head = `<?xml version="1.0" encoding="UTF-8"?>
@@ -36,7 +38,24 @@ export function exportToJSON(feeds: Feed[]): string {
     return JSON.stringify(exportData, null, 2);
 }
 
-export function downloadFile(content: string, filename: string, contentType: string) {
+export async function downloadFile(content: string, filename: string, contentType: string) {
+    if (Capacitor.isNativePlatform()) {
+        try {
+            await Filesystem.writeFile({
+                path: filename,
+                data: content,
+                directory: Directory.Documents,
+                encoding: Encoding.UTF8
+            });
+            console.log(`File saved natively to Documents folder as ${filename}`);
+            alert(`File saved to Documents folder as ${filename}`);
+        } catch (err) {
+            console.error('Failed to save file on native device:', err);
+            alert('Failed to save file. Ensure permissions are granted.');
+        }
+        return;
+    }
+
     const blob = new Blob([content], { type: contentType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
