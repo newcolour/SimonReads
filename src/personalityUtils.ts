@@ -25,14 +25,20 @@ export async function generateInlineSummary(
             ...settings,
             summaryLength: 'short',
             summaryDepth: 'brief'
-        });
+        }, "Write a VERY concise 1 to 2 sentence summary of this article. Do NOT include formatting, headings, bullet points, or introductory text like 'Here is a summary'. Just output the summary text directly.", true);
 
         console.log('🤖 [InlineSummary] Summary generated, length:', summary.length);
 
-        // Truncate to max lines (approximately 80 chars per line)
-        const maxChars = maxLines * 80;
+        // Avoid aggressive truncation. Only clean up if it's way too long.
+        const maxChars = maxLines * 120; // Allow more characters so it doesn't cut off awkwardly
         if (summary.length > maxChars) {
-            const truncated = summary.substring(0, maxChars) + '...';
+            let truncated = summary.substring(0, maxChars);
+            // find last space to avoid cutting mid-word
+            const lastSpace = truncated.lastIndexOf(' ');
+            if (lastSpace > 0) {
+                truncated = truncated.substring(0, lastSpace);
+            }
+            truncated += '...';
             console.log('🤖 [InlineSummary] Summary truncated to', truncated.length, 'chars');
             return truncated;
         }

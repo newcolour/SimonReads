@@ -54,7 +54,7 @@ export default function FocusMode({ onClose, articleTitle }: FocusModeProps) {
 
     // Calculate progress percentage
     const totalDuration = state.sessionType === 'focus' ? FOCUS_DURATION :
-        (state.completedSessions % SESSIONS_BEFORE_LONG_BREAK === 0 ? LONG_BREAK_DURATION : SHORT_BREAK_DURATION);
+        (state.completedSessions > 0 && state.completedSessions % SESSIONS_BEFORE_LONG_BREAK === 0 ? LONG_BREAK_DURATION : SHORT_BREAK_DURATION);
     const progressPercent = ((totalDuration - state.timeLeft) / totalDuration) * 100;
 
     return (

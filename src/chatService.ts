@@ -254,7 +254,7 @@ IMPORTANT GUIDELINES:
             'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
             'content-type': 'application/json',
-            'dangerously-allow-browser': 'true'
+            'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
             model: model,
@@ -448,7 +448,7 @@ Answer with just YES or NO:`;
                     'x-api-key': apiKey,
                     'anthropic-version': '2023-06-01',
                     'content-type': 'application/json',
-                    'dangerously-allow-browser': 'true'
+                    'anthropic-dangerous-direct-browser-access': 'true'
                 },
                 body: JSON.stringify({
                     model: model,

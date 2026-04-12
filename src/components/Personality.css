@@ -99,6 +99,7 @@
     font-size: 13px;
     line-height: 1.6;
     color: var(--text-secondary);
+    white-space: pre-wrap;
 }
 
 .article-inline-summary-loading {

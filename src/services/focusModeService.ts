@@ -94,8 +94,16 @@ class FocusModeService {
         this.pause();
 
         if (this.state.sessionType === 'focus') {
+            this.state.completedSessions++;
+            // Note: we don't necessarily add to totalFocusTime here since they skipped, 
+            // but for UI consistency we count it as a completed block to progress the break cycle.
+            
+            const nextBreakDuration = this.state.completedSessions > 0 && this.state.completedSessions % SESSIONS_BEFORE_LONG_BREAK === 0
+                ? LONG_BREAK_DURATION
+                : SHORT_BREAK_DURATION;
+
             this.state.sessionType = 'break';
-            this.state.timeLeft = SHORT_BREAK_DURATION;
+            this.state.timeLeft = nextBreakDuration;
         } else {
             this.state.sessionType = 'focus';
             this.state.timeLeft = FOCUS_DURATION;
@@ -123,7 +131,7 @@ class FocusModeService {
             this.state.totalFocusTime += FOCUS_DURATION;
 
             // Determine break type
-            const nextBreakDuration = this.state.completedSessions % SESSIONS_BEFORE_LONG_BREAK === 0
+            const nextBreakDuration = this.state.completedSessions > 0 && this.state.completedSessions % SESSIONS_BEFORE_LONG_BREAK === 0
                 ? LONG_BREAK_DURATION
                 : SHORT_BREAK_DURATION;
 

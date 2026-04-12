@@ -1,23 +1,23 @@
 import { AppSettings } from './types';
 import { safeFetch } from './utils/fetchUtils';
 
-export async function summarizeArticle(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
+export async function summarizeArticle(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string, isInline: boolean = false): Promise<string> {
     const provider = settings.aiProvider || 'gemini';
 
     if (provider === 'gemini') {
-        return summarizeWithGemini(content, settings.geminiApiKey || apiKey, settings, instructionOverride);
+        return summarizeWithGemini(content, settings.geminiApiKey || apiKey, settings, instructionOverride, isInline);
     } else if (provider === 'openai') {
-        return summarizeWithOpenAI(content, settings.openaiApiKey || '', settings, instructionOverride);
+        return summarizeWithOpenAI(content, settings.openaiApiKey || '', settings, instructionOverride, isInline);
     } else if (provider === 'claude') {
-        return summarizeWithClaude(content, settings.claudeApiKey || '', settings, instructionOverride);
+        return summarizeWithClaude(content, settings.claudeApiKey || '', settings, instructionOverride, isInline);
     } else if (provider === 'ollama') {
-        return summarizeWithOllama(content, settings, instructionOverride);
+        return summarizeWithOllama(content, settings, instructionOverride, isInline);
     }
 
     throw new Error(`Unsupported AI provider: ${provider}`);
 }
 
-async function summarizeWithGemini(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
+async function summarizeWithGemini(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string, isInline?: boolean): Promise<string> {
     if (!apiKey) {
         throw new Error('Please set your Gemini API Key in Settings.');
     }
@@ -43,8 +43,12 @@ async function summarizeWithGemini(content: string, apiKey: string, settings: Ap
             prompt += `\nAdditional Instructions: ${summaryPrompt}`;
         }
 
-        prompt += `\n\nFormat the output as a clean, readable summary (using bullet points if appropriate).`;
-        prompt += `\nIMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.`;
+        if (!isInline) {
+            prompt += `\n\nFormat the output as a clean, readable summary (using bullet points if appropriate).`;
+        }
+        if (!isInline) {
+            prompt += `\nIMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.`;
+        }
         prompt += `\n\nArticle Content:\n${plainText}`;
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -99,7 +103,7 @@ async function summarizeWithGemini(content: string, apiKey: string, settings: Ap
     }
 }
 
-async function summarizeWithOpenAI(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
+async function summarizeWithOpenAI(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string, isInline?: boolean): Promise<string> {
     if (!apiKey) {
         throw new Error('Please set your OpenAI API Key in Settings.');
     }
@@ -122,12 +126,14 @@ Depth: ${summaryDepth || 'detailed'}`;
             systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
         }
 
-        const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
-Format the output as a clean, readable summary (using bullet points if appropriate).
-IMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.
-
-Article Content:
-${plainText}`;
+        let userPrompt = `${instructionOverride || 'Please summarize the following article.'}`;
+        if (!isInline) {
+            userPrompt += `\nFormat the output as a clean, readable summary (using bullet points if appropriate).`;
+        }
+        if (!isInline) {
+            userPrompt += `\nIMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.`;
+        }
+        userPrompt += `\n\nArticle Content:\n${plainText}`;
 
         const response = await safeFetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -172,7 +178,7 @@ ${plainText}`;
     }
 }
 
-async function summarizeWithClaude(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
+async function summarizeWithClaude(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string, isInline?: boolean): Promise<string> {
     if (!apiKey) {
         throw new Error('Please set your Anthropic API Key in Settings.');
     }
@@ -196,12 +202,14 @@ Depth: ${summaryDepth || 'detailed'}`;
             systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
         }
 
-        const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
-Format the output as a clean, readable summary (using bullet points if appropriate).
-IMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.
-
-Article Content:
-${plainText}`;
+        let userPrompt = `${instructionOverride || 'Please summarize the following article.'}`;
+        if (!isInline) {
+            userPrompt += `\nFormat the output as a clean, readable summary (using bullet points if appropriate).`;
+        }
+        if (!isInline) {
+            userPrompt += `\nIMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.`;
+        }
+        userPrompt += `\n\nArticle Content:\n${plainText}`;
 
         // Attempt direct fetch (simulating what was there, or using proxy if implemented)
         const response = await safeFetch('https://api.anthropic.com/v1/messages', {
@@ -258,7 +266,7 @@ ${plainText}`;
 
 }
 
-async function summarizeWithOllama(content: string, settings: AppSettings, instructionOverride?: string): Promise<string> {
+async function summarizeWithOllama(content: string, settings: AppSettings, instructionOverride?: string, isInline?: boolean): Promise<string> {
     const { summaryTone, summaryLanguage, summaryLength, summaryDepth, summaryPrompt, ollamaModel, ollamaUrl } = settings;
     const model = ollamaModel || 'llama3';
     const baseUrl = ollamaUrl || 'http://localhost:11434';
@@ -277,12 +285,14 @@ Depth: ${summaryDepth || 'detailed'}`;
         systemPrompt += `\nAdditional Instructions: ${summaryPrompt}`;
     }
 
-    const userPrompt = `${instructionOverride || 'Please summarize the following article.'}
-Format the output as a clean, readable summary (using bullet points if appropriate).
-IMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.
-
-Article Content:
-${plainText}`;
+    let userPrompt = `${instructionOverride || 'Please summarize the following article.'}`;
+    if (!isInline) {
+        userPrompt += `\nFormat the output as a clean, readable summary (using bullet points if appropriate).`;
+    }
+    if (!isInline) {
+        userPrompt += `\nIMPORTANT: Start the response with the translated title of the article as a Markdown Heading (e.g. # Translated Title), followed by the summary.`;
+    }
+    userPrompt += `\n\nArticle Content:\n${plainText}`;
 
     try {
         const response = await safeFetch(`${cleanUrl}/api/chat`, {
