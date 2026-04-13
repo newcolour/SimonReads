@@ -1,6 +1,20 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, net, session, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
+
+// Node 18 / Electron undici polyfill for JSDOM
+if (typeof global.File === 'undefined') {
+  global.File = class File extends Blob {
+    name: string;
+    lastModified: number;
+    constructor(fileBits: BlobPart[], fileName: string, options?: FilePropertyBag) {
+      super(fileBits, options);
+      this.name = fileName;
+      this.lastModified = options?.lastModified || Date.now();
+    }
+  } as any;
+}
+
 import * as cheerio from 'cheerio';
 import crypto from 'crypto';
 import { Readability } from '@mozilla/readability';
