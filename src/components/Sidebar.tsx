@@ -1,10 +1,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, ChevronDown, ChevronRight, FoldVertical, UnfoldVertical } from 'lucide-react';
+import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, ChevronDown, ChevronRight, FoldVertical, UnfoldVertical, Globe } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
 import { usePersonalityConfig } from '../hooks/usePersonality';
 import { isAndroid } from '../utils/platform';
 import FeedDiscovery from './FeedDiscovery';
+import FeedSettingsModal from './FeedSettingsModal';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -69,6 +70,7 @@ export default function Sidebar({
     const [newCategoryName, setNewCategoryName] = useState('');
     const [sortOption, setSortOption] = useState<SortOption>('updated');
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, feed: null });
+    const [settingsFeed, setSettingsFeed] = useState<Feed | null>(null);
     const contextMenuRef = useRef<HTMLDivElement>(null);
 
     // Personality-aware features
@@ -354,6 +356,13 @@ export default function Sidebar({
         }
         setCategorizingFeedId(null);
         setNewCategory('');
+    };
+
+    const handleOpenSettings = () => {
+        if (contextMenu.feed) {
+            setSettingsFeed(contextMenu.feed);
+            closeContextMenu();
+        }
     };
 
     // Get list of existing categories for autocomplete
@@ -686,7 +695,11 @@ export default function Sidebar({
                                             }}
                                         />
                                     ) : null}
-                                    <Rss size={16} className={feed.icon ? 'hidden' : ''} />
+                                    {feed.type === 'web' ? (
+                                        <Globe size={16} className={feed.icon ? 'hidden' : ''} />
+                                    ) : (
+                                        <Rss size={16} className={feed.icon ? 'hidden' : ''} />
+                                    )}
                                     {renamingFeedId === feed.id ? (
                                         <input
                                             type="text"
@@ -818,8 +831,22 @@ export default function Sidebar({
                             <Trash2 size={14} />
                             <span>Remove Feed</span>
                         </div>
+                        <div className="context-menu-divider"></div>
+                        <div className="context-menu-item" onClick={handleOpenSettings}>
+                            <Settings size={14} />
+                            <span>Settings</span>
+                        </div>
                     </div>,
                     document.body
+                )
+            }
+            {
+                settingsFeed && (
+                    <FeedSettingsModal
+                        feed={settingsFeed}
+                        onClose={() => setSettingsFeed(null)}
+                        onSave={onUpdateFeed}
+                    />
                 )
             }
         </div >

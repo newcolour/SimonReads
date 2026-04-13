@@ -723,15 +723,54 @@ function App() {
             }
 
             try {
-                const feedArticles = await fetchFeed(feeds[i]);
+                let feedArticles: Article[] = [];
+                if (feeds[i].type === 'web') {
+                    // Handle Web Source
+                    const ipcRenderer = (window as any).ipcRenderer;
+                    if (ipcRenderer) {
+                        const result = await ipcRenderer.invoke('fetch-web-source', feeds[i].url, {
+                            useBrowserSession: feeds[i].useBrowserSession,
+                            cookieSession: feeds[i].cookieSession
+                        });
+                        
+                        if (result.success && result.data && result.data.items) {
+                            // Convert ScrapedItem to Article
+                            feedArticles = result.data.items.map((item: any) => ({
+                                id: `${feeds[i].id}-${item.id}`, // Scope hash to this feed
+                                feedId: feeds[i].id,
+                                feedTitle: result.data.siteTitle || feeds[i].title,
+                                title: item.title,
+                                link: item.link,
+                                contentSnippet: item.contentSnippet,
+                                pubDate: item.pubDate ? new Date(item.pubDate) : new Date(),
+                                creator: item.creator,
+                                categories: item.categories || [],
+                                isRead: false,
+                                isWebSource: true
+                            }));
+                            
+                            // Try to update favicon if we discovered a better one
+                            if (result.data.faviconUrl && result.data.faviconUrl !== feeds[i].icon) {
+                                updatedFeeds[i] = { ...feeds[i], icon: result.data.faviconUrl };
+                            }
+                        } else {
+                            throw new Error(result.error || 'Failed to fetch Web Source');
+                        }
+                    } else {
+                        console.warn('Web Source scraping requires Electron backend.');
+                    }
+                } else {
+                    // Handle Standard RSS
+                    feedArticles = await fetchFeed(feeds[i]);
+                }
 
                 // Check for abort signal after fetching (before processing)
                 if (signal.aborted) break;
 
                 fetchedArticles.push(...feedArticles);
-                updatedFeeds[i] = { ...feeds[i], lastFetched: new Date() };
+                updatedFeeds[i] = { ...(updatedFeeds[i] || feeds[i]), lastFetched: new Date() };
             } catch (error) {
-                console.error(`Failed to refresh feed: ${feeds[i].title}`);
+                console.error(`Failed to refresh feed: ${feeds[i].title}`, error);
             }
         }
 
@@ -1017,6 +1056,7 @@ function App() {
                 id: crypto.randomUUID(),
                 title: title || 'Untitled Feed',
                 url,
+                type: 'rss',
                 icon: await fetchFeedIcon(url)
             };
 
@@ -1026,8 +1066,60 @@ function App() {
             storage.saveArticles([...articles, ...feedArticles]);
 
             return; // Success
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error adding feed:', error);
+            
+            if (error.message === 'NO_RSS_FOUND') {
+                if (Capacitor.isNativePlatform()) {
+                    alert("No RSS feed found. Track this page as a Web Source? \n\n// TODO: Android web source scraping requires a backend proxy.");
+                    throw new Error('Web Source not supported on Android yet');
+                }
+                
+                if (confirm("No RSS feed found. Track this page as a Web Source?")) {
+                    const ipcRenderer = (window as any).ipcRenderer;
+                    if (ipcRenderer) {
+                        try {
+                            const result = await ipcRenderer.invoke('fetch-web-source', url);
+                            if (result.success && result.data) {
+                                const newFeedId = crypto.randomUUID();
+                                const newFeed: Feed = {
+                                    id: newFeedId,
+                                    title: result.data.siteTitle || 'Web Source',
+                                    url,
+                                    type: 'web',
+                                    icon: result.data.faviconUrl || await fetchFeedIcon(url)
+                                };
+                                
+                                const feedArticles = result.data.items.map((item: any) => ({
+                                    id: `${newFeedId}-${item.id}`,
+                                    feedId: newFeedId,
+                                    feedTitle: newFeed.title,
+                                    title: item.title,
+                                    link: item.link,
+                                    contentSnippet: item.contentSnippet,
+                                    pubDate: item.pubDate ? new Date(item.pubDate) : new Date(),
+                                    creator: item.creator,
+                                    categories: item.categories || [],
+                                    isRead: false,
+                                    isWebSource: true
+                                }));
+
+                                setFeeds(prev => [...prev, newFeed]);
+                                setArticles(prev => [...prev, ...feedArticles]);
+                                storage.saveFeeds([...feeds, newFeed]);
+                                storage.saveArticles([...articles, ...feedArticles]);
+                                return;
+                            } else {
+                                alert(`Failed to extract anything from the page as a Web Source. Error: ${result.error}`);
+                            }
+                        } catch (e) {
+                            alert("Failed to track Web Source.");
+                        }
+                    }
+                }
+            } else {
+                alert(`Failed to add feed. ${error.message}`);
+            }
             throw error; // Re-throw for caller to handle
         }
     };

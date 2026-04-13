@@ -1,10 +1,17 @@
+export type FeedType = 'rss' | 'atom' | 'web';
+
 export interface Feed {
     id: string;
     title: string;
     url: string;
+    type?: FeedType; // Default is assumed to be 'rss' for backwards compatibility
     icon?: string; // URL to feed icon/favicon
     lastFetched?: Date;
     category?: string; // Optional category/theme for organizing feeds
+    // Settings logic for Web Sources
+    cookieSession?: string; // Encrypted cookie string
+    useBrowserSession?: boolean; // Use Electron hidden BrowserWindow
+    paywallMethodSucceeded?: string; // e.g. "cookie", "browser", "amp", "archive", "partial"
 }
 
 export interface MediaEnclosure {
@@ -34,6 +41,8 @@ export interface Article {
     enclosure?: MediaEnclosure; // Audio/video file
     duration?: string; // Episode duration (e.g., "1:23:45")
     image?: string; // Episode artwork URL
+    categories?: string[];
+    isWebSource?: boolean; // True if scraped from a raw webpage
 }
 
 export type Theme = 'system' | 'dark' | 'light' | 'sepia' | 'black' | 'nord' | 'solarized-dark' | 'dracula' | 'gruvbox' | 'tokyo-night' | 'sorcerer' | 'warm';

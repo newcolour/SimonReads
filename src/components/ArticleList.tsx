@@ -155,6 +155,11 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
                         <Star size={14} fill="currentColor" />
                     </span>
                 )}
+                {article.isWebSource && (
+                    <span className="media-badge web" title="Web Source">
+                        <Globe size={14} />
+                    </span>
+                )}
                 {cleanTitle(article.title)}
 
                 {/* Importance Badge (Daily Brief) */}

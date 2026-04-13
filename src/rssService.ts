@@ -74,7 +74,7 @@ export async function fetchFeedDetails(url: string, feedId: string): Promise<{ t
             }
 
             console.error('XML Parsing Error:', parserError.textContent);
-            throw new Error('Invalid feed format (not valid XML)');
+            throw new Error('NO_RSS_FOUND');
         }
 
         // Check if it's RSS or Atom
@@ -92,7 +92,7 @@ export async function fetchFeedDetails(url: string, feedId: string): Promise<{ t
                 return fetchFeedDetails(resolvedUrl, feedId);
             }
 
-            throw new Error('Invalid feed format: Not RSS or Atom');
+            throw new Error('NO_RSS_FOUND');
         }
 
         const title = getFeedTitle(xml);

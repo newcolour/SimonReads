@@ -763,3 +763,19 @@
 .article-content img:hover {
     opacity: 0.9;
 }
+.partial-content-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.5em;
+    font-weight: 500;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+    padding: 4px 10px;
+    border-radius: 12px;
+    vertical-align: middle;
+    margin-left: 12px;
+    font-family: var(--font-sans);
+    letter-spacing: normal;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}

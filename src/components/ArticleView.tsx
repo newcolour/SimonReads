@@ -106,6 +106,7 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
     const [showInlineSummary, setShowInlineSummary] = useState(false);
     const [fetchedContent, setFetchedContent] = useState<string | null>(null);
     const [isFetchingContent, setIsFetchingContent] = useState(false);
+    const [isPartialContent, setIsPartialContent] = useState(false);
     const webviewRef = useRef<any>(null);
     const [webviewUrl, setWebviewUrl] = useState<string>('');
     const isNavigatingFromChat = useRef(false);
@@ -155,6 +156,7 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
             ReadingStatsService.startReading(article.id);
             setWebviewUrl(article.link); // Set webview URL to article link
             setFetchedContent(null); // Reset fetched content
+            setIsPartialContent(false);
             setRedditVideo(null); // Reset Reddit video
 
             // Restore reading position if available
@@ -424,6 +426,9 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                     const result = await ipcRenderer.invoke('fetch-url', article.link);
                     if (result.success) {
                         htmlContent = result.content;
+                        if (result.paywallMethodUsed === 'partial' || (article.isWebSource && (!htmlContent || htmlContent.length < 800))) {
+                            setIsPartialContent(true);
+                        }
                     } else {
                         console.error('Electron fetch failed:', result.error);
                     }
@@ -1567,7 +1572,15 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                 <div className="article-view-content">
                     {viewMode === 'reader' ? (
                         <div className="reader-view" style={publicationStyle}>
-                            <h1 className="article-view-title">{cleanTitle(article.title)}</h1>
+                            <h1 className="article-view-title">
+                                {cleanTitle(article.title)}
+                                {isPartialContent && (
+                                    <span className="partial-content-badge" title="We could only extract a partial preview of this article.">
+                                        <Shield size={16} />
+                                        Partial Content
+                                    </span>
+                                )}
+                            </h1>
                             {(article.creator || article.pubDate) && (
                                 <div className="article-view-meta">
                                     {article.creator && <span>By {article.creator}</span>}

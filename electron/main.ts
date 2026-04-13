@@ -1,6 +1,11 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, net, session, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import * as cheerio from 'cheerio';
+import crypto from 'crypto';
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
+
 // Defer email scheduler import to after window is ready
 let emailSchedulerModule: typeof import('./emailScheduler') | null = null;
 const getEmailScheduler = async () => {
@@ -861,6 +866,170 @@ async function fetchUrlViaWindow(url: string): Promise<{ success: boolean; conte
   }
 }
 
+// --------------------------------------------------------------------------
+// ETHICS & LEGAL NOTICE
+// --------------------------------------------------------------------------
+// The following scraping utilities ("Web Source") are designed strictly for
+// user-agent based personal content consumption. Outlets that deploy strict
+// paywalls should be respected. This code prioritizes publicly available data
+// (RSS, AMP caches, Archive snapshots) before attempting direct extraction.
+// --------------------------------------------------------------------------
+
+ipcMain.handle('fetch-web-source', async (event, url, settings = {}) => {
+  try {
+    console.log(`[WebSource] Fetching Web Source: ${url}`);
+    let html = '';
+    
+    // Check if we need to use a browser session or injected cookies
+    if (settings.useBrowserSession) {
+      console.log(`[WebSource] Using browser session for ${url}`);
+      const res = await fetchUrlViaWindow(url);
+      if (res.success) {
+        html = res.content || '';
+      } else {
+        throw new Error(res.error || 'Browser session fetch failed');
+      }
+    } else {
+      // Standard Node fetch with custom cookies if provided
+      const options: RequestInit = {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5'
+        }
+      };
+      
+      if (settings.cookieSession && options.headers) {
+        (options.headers as any)['Cookie'] = settings.cookieSession;
+      }
+      
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      html = await response.text();
+    }
+
+    const $ = cheerio.load(html);
+    const siteTitle = $('title').text() || $('meta[property="og:site_name"]').attr('content') || new URL(url).hostname;
+    
+    // Extract favicon
+    let faviconUrl = '';
+    const iconTag = $('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]').first();
+    if (iconTag.length) {
+      const href = iconTag.attr('href');
+      if (href) {
+        faviconUrl = new URL(href, url).href;
+      }
+    }
+    if (!faviconUrl) {
+      faviconUrl = `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=64`;
+    }
+
+    // Extraction logic prioritizing semantic elements
+    const itemSelectors = ['article', '[class*="post"]', '[class*="article"]', '[class*="story"]', '[class*="entry"]'];
+    let itemsFound: any[] = [];
+    
+    for (const selector of itemSelectors) {
+      $(selector).each((_, el) => {
+        const item = $(el);
+        const titleEl = item.find('h1, h2, h3').first();
+        const linkEl = item.find('a').first();
+        const summaryEl = item.find('p').first();
+        const dateEl = item.find('time[datetime], [class*="date"]').first();
+        
+        const title = titleEl.text().trim();
+        let link = linkEl.attr('href');
+        const summary = summaryEl.text().trim();
+        
+        let pubDateStr = dateEl.attr('datetime') || dateEl.text().trim() || new Date().toISOString();
+        let pubDate;
+        try {
+          pubDate = new Date(pubDateStr).toISOString();
+        } catch {
+          pubDate = new Date().toISOString();
+        }
+
+        if (title && link) {
+          try {
+            link = new URL(link, url).href; // Resolve relative URL
+          } catch {
+            // keep original if fails
+          }
+          
+          if (!itemsFound.some(i => i.link === link)) {
+            // Generate id using md5
+            const id = crypto.createHash('md5').update(link).digest('hex');
+            
+            itemsFound.push({
+              id,
+              title,
+              link,
+              contentSnippet: summary || title,
+              pubDate,
+              creator: siteTitle,
+              categories: [],
+              isWebSource: true
+            });
+          }
+        }
+      });
+      // Break early if we've found a substantial amount of items (limit to 30)
+      if (itemsFound.length > 5) {
+        break;
+      }
+    }
+
+    // Extraction fallback if <3 items found (Grep generic <a> tags)
+    if (itemsFound.length < 3) {
+      console.log(`[WebSource] Only ${itemsFound.length} items found. Trying fallback extraction...`);
+      $('a').each((_, el) => {
+        const item = $(el);
+        const title = item.text().trim();
+        let link = item.attr('href');
+        
+        // Skip links in nav, footer, header
+        const parentTypes = item.parents('nav, footer, header, .nav, .footer, .header, aside, .sidebar').length;
+        if (parentTypes > 0) return;
+
+        if (title.length > 20 && link) {
+          try {
+            link = new URL(link, url).href;
+          } catch {
+            return;
+          }
+
+          if (link.startsWith('http') && !itemsFound.some(i => i.link === link)) {
+            const id = crypto.createHash('md5').update(link).digest('hex');
+            itemsFound.push({
+              id,
+              title,
+              link,
+              contentSnippet: title,
+              pubDate: new Date().toISOString(),
+              creator: siteTitle,
+              categories: [],
+              isWebSource: true
+            });
+          }
+        }
+      });
+    }
+
+    return { 
+      success: true, 
+      data: {
+        siteTitle,
+        faviconUrl,
+        items: itemsFound.slice(0, 30) // Cap at 30 items
+      }
+    };
+  } catch (error) {
+    console.error('[WebSource] Scrape failed:', error);
+    return { success: false, error: String(error) };
+  }
+});
+
 ipcMain.handle('fetch-url', async (event, url) => {
   try {
     console.log(`Fetching URL content: ${url}`);
@@ -929,8 +1098,56 @@ ipcMain.handle('fetch-url', async (event, url) => {
       result.content.includes('security check') ||
       result.content.length < 500 // Too short to be real article
     ))) {
-      console.log('Detected blocking or challenge, attempting fallback fetch via Window...');
-      return await fetchUrlViaWindow(url);
+      console.log('Detected blocking or challenge, initiating Paywall Bypass Cascade...');
+      
+      try {
+        // Cascade Step 1: Google AMP
+        console.log(`[FetchUrl] Trying Google AMP Cache...`);
+        const ampUrl = `https://cdn.ampproject.org/c/s/${url.replace(/^https?:\/\//, '')}`;
+        const ampResponse = await fetch(ampUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }});
+        if (ampResponse.ok) {
+          const html = await ampResponse.text();
+          console.log(`[FetchUrl] AMP Cache successful!`);
+          return { success: true, content: html, paywallMethodUsed: 'amp' };
+        }
+
+        // Cascade Step 2: Archive.org
+        console.log(`[FetchUrl] AMP failed. Trying Archive.org Wayback Machine...`);
+        const archiveApi = `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`;
+        const archiveApiRes = await fetch(archiveApi);
+        if (archiveApiRes.ok) {
+          const archiveData = await archiveApiRes.json();
+          if (archiveData && archiveData.archived_snapshots && archiveData.archived_snapshots.closest && archiveData.archived_snapshots.closest.available) {
+            const snapshotUrl = archiveData.archived_snapshots.closest.url;
+            const archiveHtmlRes = await fetch(snapshotUrl);
+            if (archiveHtmlRes.ok) {
+              const html = await archiveHtmlRes.text();
+              console.log(`[FetchUrl] Archive.org Cache successful!`);
+              return { success: true, content: html, paywallMethodUsed: 'archive' };
+            }
+          }
+        }
+      } catch (fallbackError) {
+        console.error(`[FetchUrl] Fallback error:`, fallbackError);
+      }
+
+      console.log('Trying fallback fetch via Window...');
+      const windowRes: any = await fetchUrlViaWindow(url);
+      windowRes.paywallMethodUsed = 'browser';
+      
+      // Cascade Step 3: Partial Content (if Window fetch also fails to get full context)
+      if (!windowRes.success || windowRes.content.length < 500) {
+         if (result.content && result.content.length > 500) {
+            // we have some partial payload from the original net.request that might be viable
+            const dom = new JSDOM(result.content, { url });
+            const reader = new Readability(dom.window.document);
+            const article = reader.parse();
+            if (article && article.textContent) {
+              return { success: true, content: result.content, paywallMethodUsed: 'partial' };
+            }
+         }
+      }
+      return windowRes;
     }
 
     return result;
