@@ -3,7 +3,7 @@ import {
     Rss, Home, Bookmark, List, Settings,
     ChevronRight, ChevronLeft, RefreshCw, Newspaper,
     CheckCheck, Trash2, Search, X, Plus, Sparkles, ArrowLeft,
-    ArrowDownAZ, ArrowUpAZ, Clock, Calendar, CheckCircle2
+    ArrowDownAZ, ArrowUpAZ, Clock, Calendar, CheckCircle2, Gauge
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Article, Feed, AppSettings } from '../types';
@@ -33,6 +33,8 @@ interface ModernLayoutProps {
     isNewsreelReady?: boolean;
     newsreelProgress?: string;
     newsreelError?: string | null;
+    onOpenAskLibrary?: () => void;
+    onOpenDriveMode?: () => void;
 }
 
 export default function ModernLayout({
@@ -55,7 +57,9 @@ export default function ModernLayout({
     isNewsreelGenerating,
     isNewsreelReady,
     newsreelProgress,
-    newsreelError
+    newsreelError,
+    onOpenAskLibrary,
+    onOpenDriveMode
 }: ModernLayoutProps) {
     const [sidebarExpanded, setSidebarExpanded] = useState(false);
     const [activeSection, setActiveSection] = useState<'home' | 'saved' | 'read' | 'feeds'>('home');
@@ -267,9 +271,10 @@ export default function ModernLayout({
 
     const scrollCarousel = (direction: 'left' | 'right') => {
         const cardWidth = 220;
+        const maxIndex = Math.max(0, carouselArticles.length - 4);
         const newIndex = direction === 'left'
             ? Math.max(0, carouselIndex - 1)
-            : Math.min(carouselArticles.length - 4, carouselIndex + 1);
+            : Math.min(maxIndex, carouselIndex + 1);
         setCarouselIndex(newIndex);
 
         if (carouselRef.current) {
@@ -382,6 +387,26 @@ export default function ModernLayout({
                             <CheckCheck size={28} />
                         </button>
 
+                        {onOpenAskLibrary && (
+                            <button
+                                className="android-icon"
+                                onClick={onOpenAskLibrary}
+                                title="Ask AI Library"
+                            >
+                                <Sparkles size={28} style={{ color: '#a855f7' }} />
+                            </button>
+                        )}
+
+                        {onOpenDriveMode && (
+                            <button
+                                className="android-icon"
+                                onClick={onOpenDriveMode}
+                                title="Drive Time Player"
+                            >
+                                <Gauge size={28} style={{ color: '#38bdf8' }} />
+                            </button>
+                        )}
+
                         <button
                             className="android-icon"
                             onClick={onOpenSettings}
@@ -461,6 +486,28 @@ export default function ModernLayout({
                             <Sparkles size={22} />
                             {sidebarExpanded && <span>Discover</span>}
                         </button>
+
+                        {onOpenAskLibrary && (
+                            <button
+                                className="sidebar-icon"
+                                onClick={onOpenAskLibrary}
+                                title="Ask My Library (Cmd+Shift+K)"
+                            >
+                                <Sparkles size={22} style={{ color: '#a855f7' }} />
+                                {sidebarExpanded && <span>Ask AI</span>}
+                            </button>
+                        )}
+
+                        {onOpenDriveMode && (
+                            <button
+                                className="sidebar-icon"
+                                onClick={onOpenDriveMode}
+                                title="Drive Time Audio Player"
+                            >
+                                <Gauge size={22} style={{ color: '#38bdf8' }} />
+                                {sidebarExpanded && <span>Drive Time</span>}
+                            </button>
+                        )}
 
                         <button
                             className="sidebar-icon"

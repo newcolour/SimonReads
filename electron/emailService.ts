@@ -67,7 +67,7 @@ export async function sendDailyNewsreelEmail(
     );
 
     // Clean up PDF file
-    if (fs.existsSync(pdfPath)) {
+    if (pdfPath && fs.existsSync(pdfPath)) {
         fs.unlinkSync(pdfPath);
     }
 
@@ -151,7 +151,7 @@ To manage your email preferences, open SimonReads and go to Settings > Email.
 async function generatePDFForEmail(
     articles: Article[],
     settings: AppSettings
-): Promise<string> {
+): Promise<string | null> {
     const tmpDir = path.join(process.cwd(), 'tmp');
     if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
@@ -161,19 +161,23 @@ async function generatePDFForEmail(
     const filename = `SimonDailyNews_${today.toISOString().split('T')[0]}.pdf`;
     const pdfPath = path.join(tmpDir, filename);
 
-    // Generate PDF (this will save to downloads by default, we need to modify it)
-    await generateNewspaperPDF(articles, settings);
-
-    // For now, return a placeholder path
-    // In production, we'd need to modify generateNewspaperPDF to return the file path
-    // or save to a specific location instead of triggering download
-    return pdfPath;
+    try {
+        if (typeof document !== 'undefined') {
+            await generateNewspaperPDF(articles, settings);
+            if (fs.existsSync(pdfPath)) {
+                return pdfPath;
+            }
+        }
+    } catch (e) {
+        console.warn('PDF generation skipped in background Node process:', e);
+    }
+    return null;
 }
 
 async function sendEmail(
     settings: EmailSettings,
     plainTextContent: string,
-    pdfPath: string,
+    pdfPath: string | null,
     articleCount: number
 ): Promise<void> {
     // Create transporter
@@ -201,7 +205,7 @@ async function sendEmail(
         to: settings.toEmail,
         subject: subject,
         text: plainTextContent,
-        attachments: fs.existsSync(pdfPath) ? [{
+        attachments: (pdfPath && fs.existsSync(pdfPath)) ? [{
             filename: path.basename(pdfPath),
             path: pdfPath,
             contentType: 'application/pdf'

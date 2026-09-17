@@ -157,7 +157,7 @@ export const storage = {
                 font: 'system-ui',
                 fontSize: 'medium',
                 geminiApiKey: '',
-                geminiModel: 'gemini-flash-latest',
+                geminiModel: 'gemini-2.5-flash',
                 openaiApiKey: '',
                 summaryTone: 'neutral',
                 summaryLanguage: 'English',
@@ -193,6 +193,22 @@ export const storage = {
                 }
             };
         }
+
+        // Migrate obsolete or discontinued Gemini models
+        const obsoleteModels = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-1.5-flash-8b', 'gemma-3-12b-it', 'gemini-flash-latest'];
+        let needsSave = false;
+        if (settings.geminiModel && obsoleteModels.includes(settings.geminiModel)) {
+            settings.geminiModel = 'gemini-2.5-flash';
+            needsSave = true;
+        }
+        if (settings.newsreelGeminiModel && obsoleteModels.includes(settings.newsreelGeminiModel)) {
+            settings.newsreelGeminiModel = 'gemini-2.5-flash';
+            needsSave = true;
+        }
+        if (needsSave) {
+            this.saveSettings(settings);
+        }
+
         return settings;
     },
 
@@ -220,6 +236,21 @@ export const storage = {
 
                 // Parse settings
                 const settings = data[SETTINGS_KEY];
+                if (settings) {
+                    const obsoleteModels = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-1.5-flash-8b', 'gemma-3-12b-it', 'gemini-flash-latest'];
+                    let needsSave = false;
+                    if (settings.geminiModel && obsoleteModels.includes(settings.geminiModel)) {
+                        settings.geminiModel = 'gemini-2.5-flash';
+                        needsSave = true;
+                    }
+                    if (settings.newsreelGeminiModel && obsoleteModels.includes(settings.newsreelGeminiModel)) {
+                        settings.newsreelGeminiModel = 'gemini-2.5-flash';
+                        needsSave = true;
+                    }
+                    if (needsSave) {
+                        this.saveSettings(settings);
+                    }
+                }
 
                 return { feeds, articles, settings };
             } catch (error) {

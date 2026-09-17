@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star, Eye, EyeOff } from 'lucide-react';
+import { Headphones, Video, ChevronLeft, Share2, Copy, Trash2, Globe, CheckCircle, Circle, Star, Eye, EyeOff, ListPlus, Check } from 'lucide-react';
 import { Article, AppSettings } from '../types';
+import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import { generateHashtags } from '../summaryService';
 import { usePersonalityConfig } from '../hooks/usePersonality';
 import { generateInlineSummary, calculateImportanceScore, shuffleArray, getPlayfulMicrocopy } from '../personalityUtils';
@@ -32,6 +33,8 @@ interface ArticleItemProps {
 }
 
 const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onContextMenu, onToggleSaved, settings, personalityConfig, allowInlineSummary }: ArticleItemProps) => {
+    const { addToQueue, queue, removeFromQueue } = useAudioPlayer();
+    const isQueued = article.enclosure ? queue.some(t => t.url === article.enclosure?.url) : false;
     const [inlineSummary, setInlineSummary] = useState<string>('');
     const [importanceScore, setImportanceScore] = useState<number>(50);
     const [loadingSummary, setLoadingSummary] = useState(false);
@@ -72,17 +75,13 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
         });
 
         if (personalityConfig.showInlineSummary && allowInlineSummary && isVisible && !inlineSummary) {
-            // Check if API key is configured
-            const hasApiKey = settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey;
-            console.log('📊 [ArticleList] Checking API key availability:', {
-                hasGemini: !!settings.geminiApiKey,
-                hasOpenAI: !!settings.openaiApiKey,
-                hasClaude: !!settings.claudeApiKey,
-                provider: settings.aiProvider || 'gemini'
-            });
+            // Check if AI is configured
+            const isOllama = (settings.aiProvider || 'gemini') === 'ollama';
+            const hasApiKey = Boolean(settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey);
+            const isAIConfigured = isOllama || hasApiKey;
 
-            if (!hasApiKey) {
-                console.warn('❌ [ArticleList] Inline summaries require an AI API key to be configured in Settings → AI');
+            if (!isAIConfigured) {
+                console.warn('❌ [ArticleList] Inline summaries require an AI API key or local Ollama configured in Settings → AI');
                 return;
             }
 
@@ -106,7 +105,7 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
                     }
                 });
         }
-    }, [article.id, personalityConfig.showInlineSummary, allowInlineSummary, isVisible, settings.geminiApiKey, settings.openaiApiKey, settings.claudeApiKey, inlineSummary, article.contentSnippet]);
+    }, [article.id, personalityConfig.showInlineSummary, allowInlineSummary, isVisible, settings.aiProvider, settings.geminiApiKey, settings.geminiModel, settings.openaiApiKey, settings.claudeApiKey, settings.ollamaUrl, settings.ollamaModel, inlineSummary, article.contentSnippet]);
 
     // Calculate importance score for Daily Brief
     useEffect(() => {
@@ -182,6 +181,31 @@ const ArticleItem = memo(({ article, isSelected, isMultiSelected, onSelect, onCo
                         {article.duration ? '• ' : ''}{formatDistanceToNow(article.pubDate, { addSuffix: true })}
                     </span>
                 )}
+                {article.enclosure && article.mediaType === 'audio' && (
+                    <button
+                        className={`article-queue-btn ${isQueued ? 'queued' : ''}`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (isQueued) {
+                                const idx = queue.findIndex(t => t.url === article.enclosure?.url);
+                                if (idx >= 0) removeFromQueue(idx);
+                            } else {
+                                addToQueue({
+                                    url: article.enclosure!.url,
+                                    title: article.title,
+                                    artwork: article.image,
+                                    articleId: article.id,
+                                    duration: article.duration,
+                                    feedTitle: article.feedTitle
+                                });
+                            }
+                        }}
+                        title={isQueued ? 'In Drive Time Queue (click to remove)' : 'Add to Drive Time Queue'}
+                    >
+                        {isQueued ? <Check size={12} style={{ color: '#22c55e' }} /> : <ListPlus size={12} />}
+                        <span>{isQueued ? 'Queued' : '+ Queue'}</span>
+                    </button>
+                )}
             </div>
 
 
@@ -256,7 +280,21 @@ interface ArticleListProps {
     isFeedSelected?: boolean;
 }
 
-export default function ArticleList({ articles, selectedArticle, selectedArticleIds, onSelectArticle, onToggleRead, onToggleSaved, onDeleteArticle, title = 'Articles', icon, onBack, settings, isFeedSelected = false }: ArticleListProps) {
+export default function ArticleList({
+    articles,
+    selectedArticle,
+    selectedArticleIds,
+    onSelectArticle,
+    onToggleRead,
+    onToggleSaved,
+    onDeleteArticle,
+    onBack,
+    title = 'All Articles',
+    icon,
+    settings,
+    isFeedSelected = false
+}: ArticleListProps) {
+    const { addToQueue } = useAudioPlayer();
     // Get personality configuration
     const personalityConfig = usePersonalityConfig(settings.readingPersonality);
 
@@ -414,7 +452,7 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
             let text = `${article.title}\n${article.link}`;
 
             // Generate hashtags if AI is configured
-            if (settings && (settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey)) {
+            if (settings && (settings.aiProvider === 'ollama' || settings.geminiApiKey || settings.openaiApiKey || settings.claudeApiKey)) {
                 document.body.style.cursor = 'wait';
                 try {
                     const content = article.contentSnippet || article.content || article.title;
@@ -615,6 +653,27 @@ export default function ArticleList({ articles, selectedArticle, selectedArticle
                         <span>{contextMenu.article.isSaved ? 'Remove from Saved' : 'Save Article'}</span>
                     </div>
                     <div className="context-menu-divider"></div>
+                    {contextMenu.article.enclosure && (
+                        <div
+                            className="context-menu-item"
+                            onClick={() => {
+                                if (contextMenu.article?.enclosure) {
+                                    addToQueue({
+                                        url: contextMenu.article.enclosure.url,
+                                        title: contextMenu.article.title,
+                                        artwork: contextMenu.article.image,
+                                        articleId: contextMenu.article.id,
+                                        duration: contextMenu.article.duration,
+                                        feedTitle: contextMenu.article.feedTitle
+                                    });
+                                    closeContextMenu();
+                                }
+                            }}
+                        >
+                            <ListPlus size={14} />
+                            <span>Add to Drive Time Queue</span>
+                        </div>
+                    )}
                     <div className="context-menu-item" onClick={handleOpenInBrowser}>
                         <Globe size={14} />
                         <span>Open in Browser</span>

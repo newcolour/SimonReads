@@ -16,11 +16,16 @@ import ModernLayout from './components/ModernLayout';
 import { parseOpml } from './importService';
 import { NotificationService } from './services/notificationService';
 import { KeywordAlertService } from './services/keywordAlertService';
+import { FeedHealthService } from './services/feedHealthService';
 import { usePersonalityAutoSwitch } from './hooks/usePersonality';
 import { generateNewsreelInBackground, getNewsreelState, subscribeToNewsreel } from './services/newsreelService';
+import { useAudioPlayer } from './contexts/AudioPlayerContext';
+import AskLibrary from './components/AskLibrary';
+import { applyFontSettings } from './utils/fontUtils';
 import './App.css';
 
 function App() {
+    const { openDriveMode } = useAudioPlayer();
     const [feeds, setFeeds] = useState<Feed[]>([]);
     const [articles, setArticles] = useState<Article[]>([]);
     const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
@@ -72,10 +77,23 @@ function App() {
     const [isNewsreelReady, setIsNewsreelReady] = useState(false);
     const [newsreelProgress, setNewsreelProgress] = useState('');
     const [showWelcomeTour, setShowWelcomeTour] = useState(false);
+    const [showAskLibrary, setShowAskLibrary] = useState(false);
     // Mobile view state: 'feeds' | 'articles' | 'article'
     const [mobileView, setMobileView] = useState<'feeds' | 'articles' | 'article'>('feeds');
     // Ref to hold the openSettings function from Toolbar
     const openSettingsRef = useRef<(() => void) | null>(null);
+
+    // Global keyboard shortcut for Ask My Library (Cmd/Ctrl + Shift + K)
+    useEffect(() => {
+        const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'K' || e.key === 'k')) {
+                e.preventDefault();
+                setShowAskLibrary(prev => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, []);
 
     // Ref to track latest articles state for async callbacks (prevents stale closure issues)
     const articlesRef = useRef<Article[]>(articles);
@@ -154,7 +172,7 @@ function App() {
                     autoRefreshInterval: savedSettings.autoRefreshInterval || 0,
                     retentionPeriod: savedSettings.retentionPeriod ?? 30,
                     geminiApiKey: savedSettings.geminiApiKey || '',
-                    geminiModel: savedSettings.geminiModel || 'gemini-flash-latest',
+                    geminiModel: savedSettings.geminiModel || 'gemini-2.5-flash',
                     openaiApiKey: savedSettings.openaiApiKey || '',
                     summaryTone: savedSettings.summaryTone ?? 'neutral',
                     summaryLanguage: savedSettings.summaryLanguage ?? 'English',
@@ -212,15 +230,13 @@ function App() {
 
         let changed = false;
         const updatedFeeds = feeds.map(feed => {
-            // If icon is missing or not using Google service (and not a custom data URI), update it
-            if (!feed.icon || (!feed.icon.includes('google.com/s2/favicons') && !feed.icon.startsWith('data:'))) {
+            // Only set fallback if icon is completely missing
+            if (!feed.icon) {
                 try {
                     const url = new URL(feed.url);
                     const newIcon = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`;
-                    if (feed.icon !== newIcon) {
-                        changed = true;
-                        return { ...feed, icon: newIcon };
-                    }
+                    changed = true;
+                    return { ...feed, icon: newIcon };
                 } catch (e) {
                     // Invalid URL, ignore
                 }
@@ -229,7 +245,7 @@ function App() {
         });
 
         if (changed) {
-            console.log('Migrating feed icons to Google Favicon service...');
+            console.log('Adding fallback icons for feeds without icons...');
             setFeeds(updatedFeeds);
             storage.saveFeeds(updatedFeeds);
         }
@@ -326,7 +342,12 @@ function App() {
         }
     }, []);
 
-    // Apply theme and font settings + update native bars
+    // Apply font and font size settings
+    useEffect(() => {
+        applyFontSettings(settings.font, settings.fontSize);
+    }, [settings.font, settings.fontSize]);
+
+    // Apply theme settings + update native bars
     useEffect(() => {
         console.log('Theme useEffect triggered. Current theme setting:', settings.theme);
 
@@ -385,39 +406,9 @@ function App() {
 
         console.log('Setting theme to:', actualTheme);
         document.documentElement.setAttribute('data-theme', actualTheme);
-
-        // Font mappings with proper fallback chains (especially for Linux)
-        const fontFamilies: Record<string, string> = {
-            'system-ui': 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
-            'Inter': '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Ubuntu, sans-serif',
-            'Arial': 'Arial, "Liberation Sans", "Noto Sans", sans-serif',
-            'Georgia': 'Georgia, "Noto Serif", "Liberation Serif", serif',
-            'Merriweather': '"Merriweather", Georgia, "Noto Serif", "Liberation Serif", serif',
-            'Roboto': '"Roboto", "Noto Sans", system-ui, -apple-system, sans-serif',
-            'Open Sans': '"Open Sans", "Noto Sans", system-ui, sans-serif',
-            'Lato': '"Lato", "Noto Sans", system-ui, sans-serif',
-            'Source Sans Pro': '"Source Sans 3", "Source Sans Pro", "Noto Sans", system-ui, sans-serif',
-            'Fira Sans': '"Fira Sans", "Noto Sans", system-ui, sans-serif',
-            'PT Sans': '"PT Sans", "Noto Sans", system-ui, sans-serif',
-            'Ubuntu': '"Ubuntu", "Noto Sans", system-ui, sans-serif',
-            'Nunito': '"Nunito", "Noto Sans", system-ui, sans-serif',
-        };
-
-        const fontFamily = fontFamilies[settings.font] || fontFamilies['system-ui'];
-        document.documentElement.style.setProperty('--app-font', fontFamily);
-
-        const fontSizes = {
-            small: '13px',
-            medium: '14px',
-            large: '16px',
-            xlarge: '18px'
-        };
-        document.documentElement.style.setProperty('--app-font-size', fontSizes[settings.fontSize] || '14px');
-
-        // Update native bars directly when theme changes
         updateNativeBarsForTheme(actualTheme);
 
-    }, [settings.theme, settings.font, settings.fontSize]);
+    }, [settings.theme]);
 
     // Helper function to update native status/navigation bars
     async function updateNativeBarsForTheme(theme: string) {
@@ -517,6 +508,7 @@ function App() {
 
     // Data Integrity Check: Duplicate Feed IDs
     useEffect(() => {
+        if (feeds.length === 0) return;
         const seenIds = new Set<string>();
         let hasDuplicates = false;
         const newFeeds = [...feeds];
@@ -534,15 +526,13 @@ function App() {
         if (hasDuplicates) {
             setFeeds(newFeeds);
             storage.saveFeeds(newFeeds);
-            // Trigger refresh to populate new IDs
-            setTimeout(() => handleRefresh(), 100);
         }
-    }, []); // Run once on mount
+    }, [feeds]);
 
     // Data Integrity Check: Orphan Articles
     useEffect(() => {
-        // Only run if we have feeds loaded
-        if (feeds.length === 0 && articles.length === 0) return;
+        // Only run if we have both feeds and articles loaded
+        if (feeds.length === 0 || articles.length === 0) return;
 
         const feedIds = new Set(feeds.map(f => f.id));
         // Keep articles that either belong to an existing feed OR are saved
@@ -619,10 +609,8 @@ function App() {
             setIsNewsreelGenerating(state.isGenerating);
             setNewsreelProgress(state.progress || '');
 
-            // Check if summary exists and is fresh (generated within 24 hours)
-            const isFresh = state.generatedAt && (Date.now() - state.generatedAt < 24 * 60 * 60 * 1000);
-
-            if (!state.isGenerating && state.summary && isFresh) {
+            // Summary is ready if it exists and is not currently generating
+            if (!state.isGenerating && state.summary) {
                 console.log('✅ Newsreel is READY');
                 setIsNewsreelReady(true);
             } else {
@@ -769,8 +757,10 @@ function App() {
 
                 fetchedArticles.push(...feedArticles);
                 updatedFeeds[i] = { ...(updatedFeeds[i] || feeds[i]), lastFetched: new Date() };
-            } catch (error) {
+                FeedHealthService.recordSuccess(feeds[i].id, feedArticles.length);
+            } catch (error: any) {
                 console.error(`Failed to refresh feed: ${feeds[i].title}`, error);
+                FeedHealthService.recordError(feeds[i].id, error?.message || 'Failed to fetch');
             }
         }
 
@@ -803,6 +793,7 @@ function App() {
         let newCount = 0;
         let matchedCount = 0;
         let linkMatchedCount = 0;
+        const newlyDiscoveredArticles: Article[] = [];
 
         const mergedArticles: Article[] = fetchedArticles.map(newArticle => {
             let existing = existingArticlesMap.get(newArticle.id);
@@ -828,21 +819,21 @@ function App() {
                 return { ...newArticle, isRead: existing.isRead, isSaved: existing.isSaved };
             }
             newCount++;
+            newlyDiscoveredArticles.push(newArticle);
             return newArticle;
         });
 
         console.log('[Refresh] Matched:', matchedCount, `(by Link: ${linkMatchedCount})`, 'New:', newCount,
             'Remaining in storage (old):', existingArticlesMap.size);
 
-        if (newCount > 0) {
+        if (newlyDiscoveredArticles.length > 0) {
             NotificationService.send({
                 title: 'New Articles',
-                body: `You have ${newCount} new article${newCount > 1 ? 's' : ''}.`
+                body: `You have ${newlyDiscoveredArticles.length} new article${newlyDiscoveredArticles.length > 1 ? 's' : ''}.`
             });
 
-            // Check new articles for keyword alerts
-            const newArticles = mergedArticles.filter(a => !existingArticlesMap.has(a.id));
-            KeywordAlertService.checkArticles(newArticles);
+            // Check newly discovered articles for keyword alerts
+            KeywordAlertService.checkArticles(newlyDiscoveredArticles);
         }
 
         // Add remaining existing articles (those that fell off the RSS feed)
@@ -1033,8 +1024,10 @@ function App() {
             setFeeds(updatedFeeds);
             await storage.saveArticlesAsync(articlesToSave);
             storage.saveFeeds(updatedFeeds);
-        } catch (error) {
+            FeedHealthService.recordSuccess(feedId, feedArticles.length);
+        } catch (error: any) {
             console.error(`Failed to refresh feed: ${feed.title}`, error);
+            FeedHealthService.recordError(feedId, error?.message || 'Failed to refresh feed');
             alert(`Failed to refresh "${feed.title}". Please try again.`);
         } finally {
             setIsRefreshing(false);
@@ -1560,6 +1553,8 @@ function App() {
                         isNewsreelReady={isNewsreelReady}
                         newsreelProgress={newsreelProgress}
                         newsreelError={newsreelStatus.error}
+                        onOpenAskLibrary={() => setShowAskLibrary(true)}
+                        onOpenDriveMode={openDriveMode}
                     />
                     {showDailyNewsreel && (
                         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'var(--bg-primary)' }}>
@@ -1572,6 +1567,8 @@ function App() {
                                 })}
                                 settings={settings}
                                 onClose={handleCloseDailyNewsreel}
+                                onArticleClick={handleArticleClick}
+                                isDailyNewsreel={true}
                             />
                         </div>
                     )}
@@ -1594,7 +1591,8 @@ function App() {
                         onShowTutorial={handleShowTutorial}
                         hideButtons={true}
                         setOpenSettingsRef={(fn) => { openSettingsRef.current = fn; }}
-                        onDataRestored={reloadData}
+                        onOpenAskLibrary={() => setShowAskLibrary(true)}
+                        onOpenDriveMode={openDriveMode}
                     />
                     <div className="app-content" data-mobile-view={mobileView}>
                         <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex' }}>
@@ -1617,6 +1615,8 @@ function App() {
                                 isRefreshing={isRefreshing}
                                 onOpenSettings={() => openSettingsRef.current?.()}
                                 onOpenDailyNewsreel={handleOpenDailyNewsreel}
+                                onOpenAskLibrary={() => setShowAskLibrary(true)}
+                                onOpenDriveMode={openDriveMode}
                             />
                         </div>
                         <div
@@ -1733,6 +1733,20 @@ function App() {
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* Global Ask My Library AI Assistant */}
+            {showAskLibrary && (
+                <AskLibrary
+                    articles={articles}
+                    feeds={feeds}
+                    settings={settings}
+                    onClose={() => setShowAskLibrary(false)}
+                    onSelectArticle={(article) => {
+                        handleSelectArticle(article);
+                        setShowAskLibrary(false);
+                    }}
+                />
             )}
         </>
     );

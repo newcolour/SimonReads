@@ -4,6 +4,7 @@ import App from './App.tsx'
 import SummaryWindow from './components/SummaryWindow.tsx'
 import { AudioPlayerProvider } from './contexts/AudioPlayerContext.tsx'
 import MiniPlayer from './components/MiniPlayer.tsx'
+import DriveMode from './components/DriveMode.tsx'
 import './index.css'
 
 // Simple hash-based routing
@@ -33,6 +34,7 @@ function RootComponent() {
         <AudioPlayerProvider>
             <App />
             <MiniPlayer />
+            <DriveMode />
         </AudioPlayerProvider>
     );
 }

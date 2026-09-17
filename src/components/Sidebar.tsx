@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, ChevronDown, ChevronRight, FoldVertical, UnfoldVertical, Globe } from 'lucide-react';
+import { Plus, Trash2, Rss, CheckCircle, Search, X, Check, Edit2, ArrowDownAZ, ArrowUpAZ, Clock, CheckCheck, Sparkles, Copy, Share2, RefreshCw, Folder, Star, Settings, Newspaper, ChevronDown, ChevronRight, FoldVertical, UnfoldVertical, Globe, Gauge, Compass } from 'lucide-react';
 import { Feed, Article, AppSettings } from '../types';
 import { usePersonalityConfig } from '../hooks/usePersonality';
 import { isAndroid } from '../utils/platform';
@@ -28,6 +28,8 @@ interface SidebarProps {
     isRefreshing?: boolean;
     onOpenSettings?: () => void;
     onOpenDailyNewsreel?: () => void;
+    onOpenAskLibrary?: () => void;
+    onOpenDriveMode?: () => void;
 }
 
 type SortOption = 'updated' | 'alpha-asc' | 'alpha-desc';
@@ -57,7 +59,9 @@ export default function Sidebar({
     onRefresh,
     isRefreshing,
     onOpenSettings,
-    onOpenDailyNewsreel
+    onOpenDailyNewsreel,
+    onOpenAskLibrary,
+    onOpenDriveMode
 }: SidebarProps) {
     const [isAdding, setIsAdding] = useState(false);
     const [showDiscovery, setShowDiscovery] = useState(false);
@@ -517,13 +521,35 @@ export default function Sidebar({
                 >
                     {areAllCollapsed ? <UnfoldVertical size={15} /> : <FoldVertical size={15} />}
                 </button>
+                {onOpenAskLibrary && (
+                    <button
+                        className="toolbar-icon-btn ask-ai-toolbar-btn"
+                        onClick={() => { setTooltip(null); onOpenAskLibrary(); }}
+                        onMouseEnter={(e) => handleMouseEnter(e, "Ask My Library (Cmd+Shift+K)")}
+                        onMouseLeave={handleMouseLeave}
+                        style={{ color: '#a855f7' }}
+                    >
+                        <Sparkles size={15} />
+                    </button>
+                )}
+                {onOpenDriveMode && (
+                    <button
+                        className="toolbar-icon-btn drive-toolbar-btn"
+                        onClick={() => { setTooltip(null); onOpenDriveMode(); }}
+                        onMouseEnter={(e) => handleMouseEnter(e, "Drive Time Audio Player")}
+                        onMouseLeave={handleMouseLeave}
+                        style={{ color: '#38bdf8' }}
+                    >
+                        <Gauge size={15} />
+                    </button>
+                )}
                 <button
                     className="toolbar-icon-btn"
                     onClick={() => { setTooltip(null); setShowDiscovery(true); }}
                     onMouseEnter={(e) => handleMouseEnter(e, "Discover Feeds")}
                     onMouseLeave={handleMouseLeave}
                 >
-                    <Sparkles size={15} />
+                    <Compass size={15} />
                 </button>
                 <button
                     className="toolbar-icon-btn"

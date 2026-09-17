@@ -1,5 +1,6 @@
 import { AppSettings, Article } from './types';
 import { searchAndSummarize } from './webSearchService';
+import { safeFetch } from './utils/fetchUtils';
 
 interface ChatMessage {
     role: 'user' | 'assistant';
@@ -33,7 +34,7 @@ async function chatWithGemini(article: Article, userMessage: string, previousMes
         throw new Error('Please set your Gemini API Key in Settings.');
     }
 
-    const model = settings.geminiModel || 'gemini-1.5-flash';
+    const model = settings.geminiModel || 'gemini-2.5-flash';
     const language = settings.summaryLanguage || 'English';
 
     const plainText = (article.content || article.contentSnippet || '').replace(/<[^>]+>/g, ' ').slice(0, 8000);
@@ -100,7 +101,7 @@ IMPORTANT GUIDELINES:
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -175,7 +176,7 @@ IMPORTANT GUIDELINES:
 
     messages.push({ role: 'user', content: userMessage });
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await safeFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -248,7 +249,7 @@ IMPORTANT GUIDELINES:
     });
     messages.push({ role: 'user', content: userMessage });
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await safeFetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
             'x-api-key': apiKey,
@@ -327,7 +328,7 @@ IMPORTANT GUIDELINES:
     messages.push({ role: 'user', content: userMessage });
 
     try {
-        const response = await fetch(`${cleanUrl}/api/chat`, {
+        const response = await safeFetch(`${cleanUrl}/api/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -406,9 +407,9 @@ Answer with just YES or NO:`;
 
     try {
         if (provider === 'gemini') {
-            const model = settings.geminiModel || 'gemini-1.5-flash';
+            const model = settings.geminiModel || 'gemini-2.5-flash';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-            const response = await fetch(url, {
+            const response = await safeFetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -423,7 +424,7 @@ Answer with just YES or NO:`;
             }
         } else if (provider === 'openai') {
             const model = settings.openaiModel || 'gpt-4o-mini';
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            const response = await safeFetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -442,7 +443,7 @@ Answer with just YES or NO:`;
             }
         } else if (provider === 'claude') {
             const model = settings.claudeModel || 'claude-3-haiku-20240307';
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
+            const response = await safeFetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: {
                     'x-api-key': apiKey,
@@ -467,7 +468,7 @@ Answer with just YES or NO:`;
             const baseUrl = settings.ollamaUrl || 'http://localhost:11434';
             const cleanUrl = baseUrl.replace(/\/$/, '');
 
-            const response = await fetch(`${cleanUrl}/api/chat`, {
+            const response = await safeFetch(`${cleanUrl}/api/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

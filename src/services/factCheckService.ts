@@ -1,5 +1,6 @@
 import { AppSettings } from '../types';
 import { searchDuckDuckGo } from '../webSearchService';
+import { safeFetch } from '../utils/fetchUtils';
 
 export interface FactCheckResult {
     claim: string;
@@ -344,8 +345,8 @@ Respond in the following JSON format ONLY:
         const apiKey = settings.geminiApiKey;
         if (!apiKey) throw new Error('Gemini API key not configured');
 
-        const model = settings.geminiModel || 'gemini-1.5-flash';
-        const response = await fetch(
+        const model = settings.geminiModel || 'gemini-2.5-flash';
+        const response = await safeFetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
             {
                 method: 'POST',
@@ -369,7 +370,7 @@ Respond in the following JSON format ONLY:
         const apiKey = settings.openaiApiKey;
         if (!apiKey) throw new Error('OpenAI API key not configured');
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        const response = await safeFetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -388,19 +389,37 @@ Respond in the following JSON format ONLY:
         return data.choices?.[0]?.message?.content || '';
     }
 
-    private static async callClaude(_prompt: string, settings: AppSettings): Promise<string> {
+    private static async callClaude(prompt: string, settings: AppSettings): Promise<string> {
         const apiKey = settings.claudeApiKey;
         if (!apiKey) throw new Error('Claude API key not configured');
+        const model = settings.claudeModel || 'claude-3-haiku-20240307';
 
-        // Note: Claude API requires proxy due to CORS
-        throw new Error('Claude fact-check requires Electron. Use Gemini or OpenAI for web.');
+        const response = await safeFetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json',
+                'anthropic-dangerous-direct-browser-access': 'true'
+            },
+            body: JSON.stringify({
+                model,
+                max_tokens: 1024,
+                temperature: 0.3,
+                messages: [{ role: 'user', content: prompt }]
+            })
+        });
+
+        if (!response.ok) throw new Error('Claude API request failed');
+        const data = await response.json();
+        return data.content?.[0]?.text || '';
     }
 
     private static async callOllama(prompt: string, settings: AppSettings): Promise<string> {
         const baseUrl = settings.ollamaUrl || 'http://localhost:11434';
         const model = settings.ollamaModel || 'llama3';
 
-        const response = await fetch(`${baseUrl}/api/generate`, {
+        const response = await safeFetch(`${baseUrl}/api/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

@@ -49,10 +49,11 @@ export default function SummaryWindow() {
 
         const ipcRenderer = (window as any).ipcRenderer;
 
-        // Extract article ID
+        // Extract article ID safely without breaking on slashes
         const hash = window.location.hash;
-        const idPart = hash.split('/')[2] || 'unknown';
-        const articleId = decodeURIComponent(idPart.split('?')[0]);
+        const pathPart = hash.startsWith('#/summary/') ? hash.slice('#/summary/'.length) : (hash.split('/')[2] || '');
+        const rawId = pathPart.split('?')[0];
+        const articleId = decodeURIComponent(rawId);
 
         console.log('SummaryWindow: Article ID from hash:', articleId);
 

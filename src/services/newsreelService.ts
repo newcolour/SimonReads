@@ -1,6 +1,8 @@
 import { Article, AppSettings } from '../types';
 import { summarizeArticle } from '../summaryService';
 import { fetchRelatedArticles } from '../relatedArticlesService';
+import { safeFetch } from '../utils/fetchUtils';
+import { scoreAndSortArticles, buildNewsreelScoringPrompt } from './newsreelRankingService';
 
 // Global state for background newsreel generation
 interface NewsreelState {
@@ -12,13 +14,52 @@ interface NewsreelState {
     generatedAt: number | null;
 }
 
+const STORAGE_KEY = 'simonreads_daily_newsreel';
+
+function loadPersistedNewsreel(): Partial<NewsreelState> {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            const data = JSON.parse(stored);
+            if (data && data.summary) {
+                return {
+                    summary: data.summary,
+                    articleHash: data.articleHash || null,
+                    generatedAt: data.generatedAt || null
+                };
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load newsreel from localStorage', e);
+    }
+    return {};
+}
+
+function persistNewsreel(state: NewsreelState) {
+    try {
+        if (state.summary) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                summary: state.summary,
+                articleHash: state.articleHash,
+                generatedAt: state.generatedAt
+            }));
+        } else {
+            localStorage.removeItem(STORAGE_KEY);
+        }
+    } catch (e) {
+        console.error('Failed to persist newsreel to localStorage', e);
+    }
+}
+
+const persisted = loadPersistedNewsreel();
+
 let currentState: NewsreelState = {
     isGenerating: false,
-    summary: null,
-    articleHash: null,
+    summary: persisted.summary || null,
+    articleHash: persisted.articleHash || null,
     error: null,
     progress: '',
-    generatedAt: null
+    generatedAt: persisted.generatedAt || null
 };
 
 // Listeners for state changes
@@ -45,6 +86,11 @@ function updateState(updates: Partial<NewsreelState>) {
 }
 
 export function clearNewsreelCache() {
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+        console.error('Failed to remove newsreel from localStorage', e);
+    }
     updateState({
         summary: null,
         articleHash: null,
@@ -56,24 +102,25 @@ export function clearNewsreelCache() {
 export async function generateNewsreelInBackground(
     articles: Article[],
     settings: AppSettings,
-    isDailyNewsreel: boolean
+    isDailyNewsreel: boolean,
+    force: boolean = false
 ): Promise<void> {
     if (articles.length === 0) return;
 
+    // Check if already generating - never start duplicate generation
+    if (currentState.isGenerating) {
+        console.log('⏳ Newsreel generation already in progress, skipping trigger');
+        return;
+    }
+
+    // Check if we already have a generated summary - only regenerate on explicit button push
+    if (currentState.summary && !force) {
+        console.log('✅ Newsreel summary already generated. Regeneration requires manual button push.');
+        return;
+    }
+
     // Create article hash
     const articleHash = articles.map(a => a.id).sort().join('|');
-
-    // Check if we already have this cached
-    if (currentState.articleHash === articleHash && currentState.summary) {
-        console.log('✅ Newsreel already cached');
-        return;
-    }
-
-    // Check if already generating
-    if (currentState.isGenerating) {
-        console.log('⏳ Newsreel generation already in progress');
-        return;
-    }
 
     updateState({
         isGenerating: true,
@@ -99,7 +146,7 @@ export async function generateNewsreelInBackground(
             ...settings,
             aiProvider: settings.newsreelAiProvider || 'gemini',
             geminiApiKey: settings.newsreelGeminiApiKey || settings.geminiApiKey,
-            geminiModel: settings.newsreelGeminiModel || settings.geminiModel || 'gemini-1.5-flash',
+            geminiModel: settings.newsreelGeminiModel || settings.geminiModel || 'gemini-2.5-flash',
             openaiApiKey: settings.newsreelOpenaiApiKey || settings.openaiApiKey,
             openaiModel: settings.newsreelOpenaiModel || settings.openaiModel || 'gpt-4o-mini',
             claudeApiKey: settings.newsreelClaudeApiKey || settings.claudeApiKey,
@@ -111,14 +158,17 @@ export async function generateNewsreelInBackground(
             // Use global AI settings as-is (including Ollama)
         };
 
-        updateState({ progress: `Fetching ${articles.length} articles...` });
+        updateState({ progress: `Ranking and fetching ${articles.length} articles...` });
+
+        // Pre-rank candidate articles by heuristic importance (clustering, recency, impact signals)
+        const rankedArticles = scoreAndSortArticles(articles);
 
         // Fetch article contents
         const targetTotalChars = 500000;
-        const charsPerArticle = Math.max(2000, Math.floor(targetTotalChars / articles.length));
+        const charsPerArticle = Math.max(2000, Math.floor(targetTotalChars / rankedArticles.length));
 
         const articleContents = await Promise.all(
-            articles.map(async (article) => {
+            rankedArticles.map(async (article) => {
                 try {
                     let html = '';
                     const ipcRenderer = (window as any).ipcRenderer;
@@ -128,11 +178,11 @@ export async function generateNewsreelInBackground(
                         if (result.success) {
                             html = result.content;
                         } else {
-                            const response = await fetch(article.link);
+                            const response = await safeFetch(article.link);
                             html = await response.text();
                         }
                     } else {
-                        const response = await fetch(article.link);
+                        const response = await safeFetch(article.link);
                         html = await response.text();
                     }
 
@@ -157,25 +207,14 @@ export async function generateNewsreelInBackground(
             })
         );
 
-        updateState({ progress: 'Generating AI summary...' });
+        updateState({ progress: 'Evaluating importance and generating AI digest...' });
 
         const combinedContent = articleContents.map((item, index) => {
             return `Article ${index + 1}: ${item.title}\nURL: ${item.url}\n${item.content}`;
         }).join('\n\n---\n\n');
 
         const targetLanguage = effectiveSettings.summaryLanguage || 'English';
-
-        const instruction = `Please format the following ${articles.length} stories as a visually rich, multi-story newspaper-style digest in ${targetLanguage}.
-
-IMPORTANT INSTRUCTIONS:
-1. LANGUAGE: The ENTIRE output must be in ${targetLanguage}.
-2. Include ALL stories from the source material — do not summarize or shorten any story.
-3. Each story gets its own clearly separated section. Create a section heading for each story using "## Story Title" format.
-4. Provide a full body text of at least 2-3 paragraphs for EACH story.
-5. At the END of each story section, list the Source as a bullet point: - [Source Name](URL)
-6. After the source, add: "SEARCH_QUERY: <3-5 word search query for this story>"
-
-This approach formats each original story directly into the digest without aggregating them into topics.`;
+        const instruction = buildNewsreelScoringPrompt(rankedArticles.length, targetLanguage);
 
         let result = await summarizeArticle(combinedContent, effectiveSettings.geminiApiKey || '', effectiveSettings, instruction);
 
@@ -212,6 +251,7 @@ This approach formats each original story directly into the digest without aggre
             progress: 'Newsreel ready!',
             generatedAt: Date.now()
         });
+        persistNewsreel(currentState);
 
         console.log('✅ Background newsreel generation complete');
 

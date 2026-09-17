@@ -9,11 +9,31 @@ export async function safeFetch(url: string, options: any = {}): Promise<Respons
 
     // For Native (iOS/Android), use CapacitorHttp to bypass CORS
     if (Capacitor.isNativePlatform()) {
+        let headers: Record<string, string> = {};
+        if (options.headers) {
+            if (typeof (options.headers as any).forEach === 'function') {
+                (options.headers as Headers).forEach((value, key) => {
+                    headers[key] = value;
+                });
+            } else if (typeof options.headers === 'object') {
+                headers = { ...options.headers };
+            }
+        }
+
+        let requestData = options.body;
+        if (typeof options.body === 'string') {
+            try {
+                requestData = JSON.parse(options.body);
+            } catch {
+                requestData = options.body;
+            }
+        }
+
         const capOptions: HttpOptions = {
             url: url,
             method: options.method || 'GET',
-            headers: options.headers || {},
-            data: options.body ? JSON.parse(options.body) : undefined,
+            headers,
+            data: requestData,
         };
 
         try {
@@ -24,7 +44,7 @@ export async function safeFetch(url: string, options: any = {}): Promise<Respons
                 ok: response.status >= 200 && response.status < 300,
                 status: response.status,
                 statusText: response.status.toString(),
-                json: async () => response.data,
+                json: async () => typeof response.data === 'string' ? JSON.parse(response.data) : response.data,
                 text: async () => typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
                 headers: new Headers(response.headers as any),
             } as Response;

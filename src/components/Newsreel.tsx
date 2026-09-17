@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Sparkles, Loader, X, Volume2, RotateCw, FileDown, Pause, Play } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,6 +8,7 @@ import { generateNewsreelPDF } from '../pdfService';
 import { fetchRelatedArticles } from '../relatedArticlesService';
 import { TTSService, TTSController } from '../services/ttsService';
 import { getNewsreelState, subscribeToNewsreel, generateNewsreelInBackground, clearNewsreelCache } from '../services/newsreelService';
+import { scoreAndSortArticles, buildNewsreelScoringPrompt } from '../services/newsreelRankingService';
 import './Newsreel.css';
 
 interface NewsreelProps {
@@ -18,8 +19,28 @@ interface NewsreelProps {
     isDailyNewsreel?: boolean;
 }
 
+function extractCategoriesFromSummary(markdown: string): { title: string; id: string }[] {
+    const cats: { title: string; id: string }[] = [];
+    const seen = new Set<string>();
+    const lines = markdown.split('\n');
+    for (const line of lines) {
+        if (line.startsWith('# ') && !line.startsWith('## ')) {
+            const rawTitle = line.replace(/^#\s+/, '').trim();
+            if (rawTitle) {
+                const id = 'section-' + rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                if (!seen.has(id)) {
+                    seen.add(id);
+                    cats.push({ title: rawTitle, id });
+                }
+            }
+        }
+    }
+    return cats;
+}
+
 export default function Newsreel({ articles, settings, onClose, onArticleClick, isDailyNewsreel = false }: NewsreelProps) {
     const [summary, setSummary] = useState<string | null>(null);
+    const [activeCategory, setActiveCategory] = useState<string>('all');
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isReadingAloud, setIsReadingAloud] = useState(false);
@@ -27,9 +48,14 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
     const [playbackRate, setPlaybackRate] = useState(1.0);
     const [isExportingPdf, setIsExportingPdf] = useState(false);
     const isReadingAloudRef = useRef(false);
+    const isGeneratingRef = useRef(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const ttsControllerRef = useRef<TTSController | null>(null);
     const articleMapRef = useRef<Map<string, Article>>(new Map());
+    const contentRef = useRef<HTMLDivElement | null>(null);
+    const categoryBarRef = useRef<HTMLDivElement | null>(null);
+    const isManualScrollRef = useRef(false);
+    const manualScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Cache key based on type (daily or custom)
     const CACHE_KEY = `newsreel_cache_${isDailyNewsreel ? 'daily' : 'custom'}`;
@@ -45,6 +71,9 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
                 audioRef.current.pause();
                 audioRef.current = null;
             }
+            if (manualScrollTimerRef.current) {
+                clearTimeout(manualScrollTimerRef.current);
+            }
             TTSService.stopCurrent();
             setIsReadingAloud(false);
             setIsPaused(false);
@@ -59,6 +88,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             if (state.summary) {
                 setSummary(state.summary);
                 setIsSummarizing(false);
+                setError(null);
             } else if (state.isGenerating) {
                 setIsSummarizing(true);
             }
@@ -68,6 +98,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
                 if (newState.summary) {
                     setSummary(newState.summary);
                     setIsSummarizing(false);
+                    setError(null);
                 }
                 if (newState.error) {
                     setError(newState.error);
@@ -84,56 +115,75 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
 
     useEffect(() => {
         // Don't regenerate if we're exporting a PDF - prevent race conditions
-        if (!isExportingPdf) {
-            // For daily newsreel, check global service first
-            if (isDailyNewsreel) {
-                const state = getNewsreelState();
-                const articleHash = articles.map(a => a.id).sort().join('|');
+        if (isExportingPdf) return;
 
-                // If we have a cached result from background service, use it
-                if (state.articleHash === articleHash && state.summary) {
+        // For daily newsreel, check global service first
+        if (isDailyNewsreel) {
+            const state = getNewsreelState();
+
+            // 1. If we already have a generated summary from background service, use it and NEVER auto-regenerate
+            if (state.summary) {
+                if (summary !== state.summary) {
                     console.log('✅ Using cached newsreel from background service');
                     setSummary(state.summary);
-                    return;
                 }
+                setIsSummarizing(false);
+                return;
+            }
 
-                // If background is generating, wait for it
-                if (state.isGenerating) {
-                    console.log('⏳ Background generation in progress...');
-                    setIsSummarizing(true);
-                    return;
-                }
+            // 2. If component already has summary in local state, do not regenerate
+            if (summary) {
+                return;
+            }
 
-                // Otherwise start background generation
-                console.log('📰 Starting background newsreel generation...');
-                generateNewsreelInBackground(articles, settings, true);
+            // 3. If background is currently generating, wait for it
+            if (state.isGenerating) {
+                console.log('⏳ Background generation in progress...');
                 setIsSummarizing(true);
                 return;
             }
 
-            // For custom newsreel (selected articles), use local generation
-            const articleHash = articles.map(a => a.id).sort().join('|');
-
-            // Try to load from session storage
-            let cachedData = null;
-            try {
-                const stored = sessionStorage.getItem(CACHE_KEY);
-                if (stored) {
-                    cachedData = JSON.parse(stored);
-                }
-            } catch (e) {
-                console.error('Failed to parse newsreel cache', e);
-            }
-
-            // Check if we have a valid cache match
-            if (cachedData && cachedData.hash === articleHash && cachedData.summary) {
-                console.log('✅ Using cached newsreel from session storage');
-                setSummary(cachedData.summary);
-            } else {
-                console.log('📰 Articles changed or no cache, generating new newsreel...');
-                generateNewsreel(articleHash);
-            }
+            // 4. Otherwise start initial background generation (first time only)
+            console.log('📰 Starting initial background newsreel generation...');
+            generateNewsreelInBackground(articles, settings, true, false);
+            setIsSummarizing(true);
+            return;
         }
+
+        // For custom newsreel (selected articles):
+        // 1. If summary is already generated, do NOT regenerate when new articles arrive
+        if (summary) {
+            return;
+        }
+
+        // 2. If currently generating, do NOT restart generation when new articles arrive
+        if (isSummarizing || isGeneratingRef.current) {
+            return;
+        }
+
+        const articleHash = articles.map(a => a.id).sort().join('|');
+
+        // 3. Try to load from session storage
+        let cachedData = null;
+        try {
+            const stored = sessionStorage.getItem(CACHE_KEY);
+            if (stored) {
+                cachedData = JSON.parse(stored);
+            }
+        } catch (e) {
+            console.error('Failed to parse newsreel cache', e);
+        }
+
+        // Check if we have a valid cache match
+        if (cachedData && cachedData.hash === articleHash && cachedData.summary) {
+            console.log('✅ Using cached newsreel from session storage');
+            setSummary(cachedData.summary);
+            return;
+        }
+
+        // 4. Initial generation for this custom selection
+        console.log('📰 Generating newsreel for selected articles...');
+        generateNewsreel(articleHash, false);
     }, [articles, isExportingPdf, CACHE_KEY, isDailyNewsreel]);
 
     const handleTogglePause = () => {
@@ -170,9 +220,20 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
         }
     };
 
-    const generateNewsreel = async (currentArticleHash: string) => {
+    const generateNewsreel = async (currentArticleHash: string, force = false) => {
         if (articles.length === 0) return;
 
+        if (isGeneratingRef.current) {
+            console.log('⏳ Local newsreel generation already in progress, skipping');
+            return;
+        }
+
+        if (summary && !force) {
+            console.log('✅ Local newsreel summary already generated, skipping');
+            return;
+        }
+
+        isGeneratingRef.current = true;
         setIsSummarizing(true);
         setError(null);
 
@@ -185,7 +246,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
                 ...settings,
                 aiProvider: settings.newsreelAiProvider || 'gemini',
                 geminiApiKey: settings.newsreelGeminiApiKey || settings.geminiApiKey,
-                geminiModel: settings.newsreelGeminiModel || settings.geminiModel || 'gemini-1.5-flash',
+                geminiModel: settings.newsreelGeminiModel || settings.geminiModel || 'gemini-2.5-flash',
                 openaiApiKey: settings.newsreelOpenaiApiKey || settings.openaiApiKey,
                 openaiModel: settings.newsreelOpenaiModel || settings.openaiModel || 'gpt-4o-mini',
                 claudeApiKey: settings.newsreelClaudeApiKey || settings.claudeApiKey,
@@ -198,22 +259,25 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             };
 
             // Determine model name for logging
-            let modelName = effectiveSettings.geminiModel || 'gemini-1.5-flash';
+            let modelName = effectiveSettings.geminiModel || 'gemini-2.5-flash';
             if (effectiveSettings.aiProvider === 'openai') modelName = effectiveSettings.openaiModel || 'gpt-4o-mini';
             else if (effectiveSettings.aiProvider === 'claude') modelName = effectiveSettings.claudeModel || 'claude-3-haiku';
             else if (effectiveSettings.aiProvider === 'ollama') modelName = effectiveSettings.ollamaModel || 'llama3';
 
             console.log(`🤖 Newsreel AI: ${effectiveSettings.aiProvider} - ${modelName}`);
 
+            // Pre-rank candidate articles by heuristic importance
+            const rankedArticles = scoreAndSortArticles(articles);
+
             // Use a more generous limit per article for better quality
             const targetTotalChars = 500000;
-            const charsPerArticle = Math.max(2000, Math.floor(targetTotalChars / articles.length));
+            const charsPerArticle = Math.max(2000, Math.floor(targetTotalChars / rankedArticles.length));
 
-            console.log(`Processing ${articles.length} articles with ${charsPerArticle} chars each`);
+            console.log(`Processing ${rankedArticles.length} articles with ${charsPerArticle} chars each`);
 
             // Fetch full content from each article URL
             const articleContents = await Promise.all(
-                articles.map(async (article) => {
+                rankedArticles.map(async (article) => {
                     try {
                         let html = '';
                         const ipcRenderer = (window as any).ipcRenderer;
@@ -270,7 +334,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             // Combine all article content and create article map
             articleMapRef.current.clear();
             const combinedContent = articleContents.map((item, index) => {
-                const article = articles[index];
+                const article = rankedArticles[index];
                 articleMapRef.current.set(item.url, article);
                 return `Article ${index + 1}: ${item.title}\nURL: ${item.url}\n${item.content}`;
             }).join('\n\n---\n\n');
@@ -278,19 +342,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             console.log(`Total combined content: ${combinedContent.length} characters`);
 
             const targetLanguage = effectiveSettings.summaryLanguage || 'English';
-
-            const instruction = `Please format the following ${articles.length} stories as a visually rich, multi-story newspaper-style digest in ${targetLanguage}.
-
-IMPORTANT INSTRUCTIONS:
-1. LANGUAGE: The ENTIRE output must be in ${targetLanguage}. Translate all titles, headings, and summaries to ${targetLanguage}.
-2. Include ALL stories from the source material — do not summarize or shorten any story.
-3. Each story gets its own clearly separated section. Create a section heading for each story using "## Story Title" format.
-4. Provide a full body text of at least 2-3 paragraphs for EACH story.
-5. Do NOT include inline links in the text.
-6. At the END of each story section, list the Source as a bullet point with a markdown link: - [Source Name (Translated)](URL)
-7. After the source, add a specific line exactly like this: "SEARCH_QUERY: <3-5 word search query for this story>"
-
-This approach formats each original story directly into the digest without aggregating them into topics.`;
+            const instruction = buildNewsreelScoringPrompt(rankedArticles.length, targetLanguage);
 
             let result = await summarizeArticle(combinedContent, effectiveSettings.geminiApiKey || '', effectiveSettings, instruction);
 
@@ -339,24 +391,28 @@ This approach formats each original story directly into the digest without aggre
         } catch (err: any) {
             setError(err.message);
         } finally {
+            isGeneratingRef.current = false;
             setIsSummarizing(false);
         }
     };
 
     const handleRegenerate = () => {
-        console.log('🔄 Force regenerating newsreel...');
+        console.log('🔄 Force regenerating newsreel on user request...');
         sessionStorage.removeItem(CACHE_KEY); // Clear local cache
 
         if (isDailyNewsreel) {
             // Clear global service cache and start fresh background generation
             clearNewsreelCache();
-            generateNewsreelInBackground(articles, settings, true);
-            setIsSummarizing(true);
             setSummary(null);
+            setError(null);
+            setIsSummarizing(true);
+            generateNewsreelInBackground(articles, settings, true, true);
         } else {
-            // For custom newsreel, use local generation
+            // For custom newsreel, use local generation with force = true
             const articleHash = articles.map(a => a.id).sort().join('|');
-            generateNewsreel(articleHash);
+            setSummary(null);
+            setError(null);
+            generateNewsreel(articleHash, true);
         }
     };
 
@@ -489,6 +545,119 @@ This approach formats each original story directly into the digest without aggre
         }
     };
 
+    const categories = useMemo(() => {
+        return summary ? extractCategoriesFromSummary(summary) : [];
+    }, [summary]);
+
+    // Scroll spy: update active category pill as user scrolls through sections
+    useEffect(() => {
+        const contentEl = contentRef.current;
+        if (!contentEl || categories.length === 0) return;
+
+        let ticking = false;
+
+        const handleScroll = () => {
+            if (isManualScrollRef.current) return;
+
+            if (!ticking) {
+                window.requestAnimationFrame(() => {
+                    if (!contentEl) {
+                        ticking = false;
+                        return;
+                    }
+
+                    const containerTop = contentEl.getBoundingClientRect().top;
+                    const scrollTop = contentEl.scrollTop;
+
+                    // Scrolled near top -> activate "All Sections"
+                    if (scrollTop < 50) {
+                        setActiveCategory('all');
+                        ticking = false;
+                        return;
+                    }
+
+                    // Scrolled near bottom -> activate last section
+                    const isAtBottom = contentEl.scrollHeight - scrollTop - contentEl.clientHeight < 50;
+                    if (isAtBottom && categories.length > 0) {
+                        setActiveCategory(categories[categories.length - 1].id);
+                        ticking = false;
+                        return;
+                    }
+
+                    // Determine which section heading is currently at or above the viewing line
+                    let currentCatId = 'all';
+                    for (const cat of categories) {
+                        const el = document.getElementById(cat.id);
+                        if (el) {
+                            const rect = el.getBoundingClientRect();
+                            // If heading has reached or passed within 90px of top of scroll container
+                            if (rect.top <= containerTop + 90) {
+                                currentCatId = cat.id;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+
+                    setActiveCategory(currentCatId);
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        };
+
+        const handleUserScrollInteraction = () => {
+            if (isManualScrollRef.current) {
+                isManualScrollRef.current = false;
+                if (manualScrollTimerRef.current) {
+                    clearTimeout(manualScrollTimerRef.current);
+                }
+            }
+        };
+
+        contentEl.addEventListener('scroll', handleScroll, { passive: true });
+        contentEl.addEventListener('wheel', handleUserScrollInteraction, { passive: true });
+        contentEl.addEventListener('touchmove', handleUserScrollInteraction, { passive: true });
+
+        return () => {
+            contentEl.removeEventListener('scroll', handleScroll);
+            contentEl.removeEventListener('wheel', handleUserScrollInteraction);
+            contentEl.removeEventListener('touchmove', handleUserScrollInteraction);
+        };
+    }, [categories]);
+
+    // Keep active category pill in view within the horizontal category bar
+    useEffect(() => {
+        if (!categoryBarRef.current) return;
+        const activePill = categoryBarRef.current.querySelector<HTMLElement>('.category-pill.active');
+        if (activePill) {
+            activePill.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }
+    }, [activeCategory]);
+
+    const scrollToCategory = (catId: string) => {
+        setActiveCategory(catId);
+        isManualScrollRef.current = true;
+        if (manualScrollTimerRef.current) {
+            clearTimeout(manualScrollTimerRef.current);
+        }
+        manualScrollTimerRef.current = setTimeout(() => {
+            isManualScrollRef.current = false;
+        }, 800);
+
+        if (catId === 'all') {
+            contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+            const target = document.getElementById(catId);
+            if (target && contentRef.current) {
+                const containerRect = contentRef.current.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const scrollOffset = targetRect.top - containerRect.top + contentRef.current.scrollTop - 10;
+                contentRef.current.scrollTo({ top: Math.max(0, scrollOffset), behavior: 'smooth' });
+            }
+        }
+    };
+
     return (
         <div className="newsreel">
             <div className="newsreel-header">
@@ -548,7 +717,27 @@ This approach formats each original story directly into the digest without aggre
                 </div>
             </div>
 
-            <div className="newsreel-content">
+            {categories.length > 0 && !isSummarizing && (
+                <div className="newsreel-category-bar" ref={categoryBarRef}>
+                    <button
+                        className={`category-pill ${activeCategory === 'all' ? 'active' : ''}`}
+                        onClick={() => scrollToCategory('all')}
+                    >
+                        📰 All Sections
+                    </button>
+                    {categories.map((cat) => (
+                        <button
+                            key={cat.id}
+                            className={`category-pill ${activeCategory === cat.id ? 'active' : ''}`}
+                            onClick={() => scrollToCategory(cat.id)}
+                        >
+                            {cat.title}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            <div className="newsreel-content" ref={contentRef}>
                 {isSummarizing ? (
                     <div className="newsreel-loading">
                         <Loader size={32} className="spin" />
@@ -557,16 +746,29 @@ This approach formats each original story directly into the digest without aggre
                 ) : error ? (
                     <div className="newsreel-error">
                         <p>{error}</p>
-                        <button onClick={() => {
-                            const articleHash = articles.map(a => a.id).sort().join('|');
-                            generateNewsreel(articleHash);
-                        }}>Try Again</button>
+                        <button onClick={handleRegenerate}>Try Again</button>
                     </div>
                 ) : summary ? (
                     <div className="newsreel-summary">
                         <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
+                                h1: ({ children, ...props }) => {
+                                    const text = String(children);
+                                    const id = 'section-' + text.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                                    return (
+                                        <h1 id={id} className="newsreel-category-heading" {...props}>
+                                            {children}
+                                        </h1>
+                                    );
+                                },
+                                h2: ({ children, ...props }) => {
+                                    return (
+                                        <h2 className="newsreel-story-heading" {...props}>
+                                            {children}
+                                        </h2>
+                                    );
+                                },
                                 a: ({ node, href, children, ...props }) => {
                                     // Check if this is an article link
                                     const article = href ? articleMapRef.current.get(href) : null;

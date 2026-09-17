@@ -23,10 +23,7 @@ async function summarizeWithGemini(content: string, apiKey: string, settings: Ap
     }
 
     const { summaryTone, summaryLanguage, summaryLength, summaryDepth, summaryPrompt, geminiModel } = settings;
-    const initialModel = geminiModel || 'gemini-1.5-flash';
-
-    // Fallback chain: Chosen Model -> 1.5 Flash
-    // If choice IS Flash, no fallback (or maybe 1.0 Pro if available, but Flash is best bet)
+    const initialModel = geminiModel || 'gemini-2.5-flash';
 
     const executeRequest = async (model: string): Promise<string> => {
         // Strip HTML tags to save tokens
@@ -68,39 +65,63 @@ async function summarizeWithGemini(content: string, apiKey: string, settings: Ap
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-
-            // Check for Quota Exceeded (429)
-            if (response.status === 429) {
-                throw new Error('QUOTA_EXCEEDED');
+            let errorData: any = {};
+            try {
+                errorData = await response.json();
+            } catch {
+                const text = await response.text();
+                errorData = { error: { message: text } };
             }
 
-            throw new Error(errorData.error?.message || `Failed to generate summary with Gemini (${model})`);
+            const error: any = new Error(errorData.error?.message || `Failed to generate summary with Gemini (${model}) [Status ${response.status}]`);
+            error.status = response.status;
+            throw error;
         }
 
         const data = await response.json();
         return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No summary generated.';
     };
 
-    try {
-        console.log(`🤖 Gemini: Attempting with ${initialModel}...`);
-        return await executeRequest(initialModel);
-    } catch (error: any) {
-        if (error.message === 'QUOTA_EXCEEDED') {
-            const fallbackModel = 'gemini-1.5-flash';
-
-            // Only fallback if we haven't already tried the fallback
-            if (initialModel !== fallbackModel) {
-                console.warn(`⚠️ Gemini Quota Exceeded for ${initialModel}. Falling back to ${fallbackModel}...`);
-                try {
-                    return await executeRequest(fallbackModel);
-                } catch (fallbackError: any) {
-                    throw new Error(`Gemini Quota Exceeded (even with fallback to ${fallbackModel}). Please try again later.`);
-                }
-            }
-        }
-        throw error;
+    // Resilient fallback chain: Requested model -> gemini-2.5-flash -> gemini-2.5-flash-lite
+    const candidates = [initialModel];
+    if (!candidates.includes('gemini-2.5-flash')) {
+        candidates.push('gemini-2.5-flash');
     }
+    if (!candidates.includes('gemini-2.5-flash-lite')) {
+        candidates.push('gemini-2.5-flash-lite');
+    }
+
+    let lastError: any = null;
+    for (const modelToTry of candidates) {
+        try {
+            console.log(`🤖 Gemini: Attempting with ${modelToTry}...`);
+            return await executeRequest(modelToTry);
+        } catch (error: any) {
+            lastError = error;
+            const msg = (error.message || '').toLowerCase();
+            const shouldFallback = 
+                error.status === 404 || 
+                error.status === 400 || 
+                error.status === 429 || 
+                error.status === 503 ||
+                msg.includes('quota') ||
+                msg.includes('not found') ||
+                msg.includes('not supported') ||
+                msg.includes('high demand') ||
+                msg.includes('unavailable') ||
+                msg.includes('429') ||
+                msg.includes('404') ||
+                msg.includes('503');
+
+            if (shouldFallback && modelToTry !== candidates[candidates.length - 1]) {
+                console.warn(`⚠️ Gemini failed with ${modelToTry} (${error.message}). Trying fallback...`);
+                continue;
+            }
+            throw error;
+        }
+    }
+
+    throw lastError || new Error('Failed to generate summary with Gemini');
 }
 
 async function summarizeWithOpenAI(content: string, apiKey: string, settings: AppSettings, instructionOverride?: string, isInline?: boolean): Promise<string> {
@@ -294,9 +315,13 @@ Depth: ${summaryDepth || 'detailed'}`;
     }
     userPrompt += `\n\nArticle Content:\n${plainText}`;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
     try {
         const response = await safeFetch(`${cleanUrl}/api/chat`, {
             method: 'POST',
+            signal: controller.signal,
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -310,6 +335,8 @@ Depth: ${summaryDepth || 'detailed'}`;
             })
         });
 
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Failed to generate summary with Ollama: ${response.status} ${response.statusText} - ${errorText}`);
@@ -318,7 +345,11 @@ Depth: ${summaryDepth || 'detailed'}`;
         const data = await response.json();
         return data.message?.content || 'No summary generated.';
     } catch (e: any) {
+        clearTimeout(timeoutId);
         console.error('Ollama summary failed:', e);
+        if (e.name === 'AbortError') {
+            throw new Error(`Ollama summary timed out after 30 seconds. Ensure Ollama at ${cleanUrl} is running and responsive.`);
+        }
         throw new Error(`Ollama summary failed: ${e.message}. Ensure Ollama is running at ${cleanUrl}.`);
     }
 }
@@ -337,6 +368,8 @@ export async function generateHashtags(content: string, settings: AppSettings): 
             text = await summarizeWithOpenAI(plainText, settings.openaiApiKey || '', settings, prompt);
         } else if (provider === 'claude') {
             text = await summarizeWithClaude(plainText, settings.claudeApiKey || '', settings, prompt);
+        } else if (provider === 'ollama') {
+            text = await summarizeWithOllama(plainText, settings, prompt);
         } else {
             return [];
         }

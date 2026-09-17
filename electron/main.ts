@@ -711,6 +711,7 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: true,
         contextIsolation: false,
+        webSecurity: false,
       },
     });
 
@@ -771,6 +772,14 @@ ipcMain.handle('create-summary-window', async (event, { summary, articleTitle, a
       pendingSummaryData.delete(articleId);
     }
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+});
+
+// Handle regenerate summary request from summary popup window
+ipcMain.on('regenerate-summary', () => {
+  console.log('Main: Received regenerate-summary signal, forwarding to main window');
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('trigger-regenerate-summary');
   }
 });
 

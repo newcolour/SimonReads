@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Mic, Play, Pause, Loader, FileText, Radio } from 'lucide-react';
 import { AppSettings } from '../types';
 import { AIPodcastService, GeneratedPodcast } from '../services/aiPodcastService';
 import { TTSService } from '../services/ttsService';
+import { safeFetch } from '../utils/fetchUtils';
 import './AIPodcast.css';
 
 interface AIPodcastProps {
@@ -28,11 +29,18 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
     const [podcast, setPodcast] = useState<GeneratedPodcast | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const isPlayingRef = useRef(false);
+    const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
     // Stop audio when component unmounts or closes
     useEffect(() => {
         return () => {
             console.log('AIPodcast unmounting, stopping audio');
+            isPlayingRef.current = false;
+            if (currentAudioRef.current) {
+                currentAudioRef.current.pause();
+                currentAudioRef.current = null;
+            }
             TTSService.stopCurrent();
         };
     }, []);
@@ -123,10 +131,11 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
         };
 
         for (let i = 0; i < dialogue.length; i++) {
+            if (!isPlayingRef.current) break;
             const { speaker, text } = dialogue[i];
             const voice = voiceMap[speaker] || 'alloy';
 
-            const response = await fetch('https://api.openai.com/v1/audio/speech', {
+            const response = await safeFetch('https://api.openai.com/v1/audio/speech', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${settings.openaiApiKey}`,
@@ -139,16 +148,26 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
                 })
             });
 
+            if (!isPlayingRef.current) break;
             if (!response.ok) throw new Error('OpenAI TTS failed');
 
             const audioBlob = await response.blob();
             const audioUrl = URL.createObjectURL(audioBlob);
 
             await new Promise<void>((resolve, reject) => {
+                if (!isPlayingRef.current) return resolve();
                 const audio = new Audio(audioUrl);
-                audio.onended = () => resolve();
-                audio.onerror = () => reject(new Error('Audio playback failed'));
-                audio.play();
+                currentAudioRef.current = audio;
+                audio.onended = () => {
+                    currentAudioRef.current = null;
+                    resolve();
+                };
+                audio.onerror = () => {
+                    currentAudioRef.current = null;
+                    if (!isPlayingRef.current) return resolve();
+                    reject(new Error('Audio playback failed'));
+                };
+                audio.play().catch(() => resolve());
             });
         }
     };
@@ -161,6 +180,7 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
         const useEdgeTTS = !!ipcRenderer;
 
         for (let i = 0; i < dialogue.length; i++) {
+            if (!isPlayingRef.current) break;
             const { speaker, text } = dialogue[i];
 
             if (useEdgeTTS) {
@@ -174,12 +194,14 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
                 const voice = voiceMap[speaker] || 'en-US-AriaNeural';
 
                 await new Promise<void>((resolve, reject) => {
+                    if (!isPlayingRef.current) return resolve();
                     TTSService.speakEdgeTTS(
                         text,
                         voice,
                         1.0, // Normal rate for Edge-TTS (it already sounds natural)
                         () => resolve(),
                         (error) => {
+                            if (!isPlayingRef.current) return resolve();
                             console.error('Edge-TTS error:', error);
                             reject(error);
                         }
@@ -196,12 +218,14 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
                 const rate = rateMap[speaker] || 1.0;
 
                 await new Promise<void>((resolve, reject) => {
+                    if (!isPlayingRef.current) return resolve();
                     TTSService.speak({
                         text,
                         language,
                         playbackRate: rate,
                         onEnd: () => resolve(),
                         onError: (error) => {
+                            if (!isPlayingRef.current) return resolve();
                             console.error('TTS error:', error);
                             reject(error);
                         }
@@ -216,10 +240,16 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
 
         if (isPlaying) {
             console.log('Stopping playback');
+            isPlayingRef.current = false;
+            if (currentAudioRef.current) {
+                currentAudioRef.current.pause();
+                currentAudioRef.current = null;
+            }
             await TTSService.stopCurrent();
             setIsPlaying(false);
         } else {
             console.log('Starting playback');
+            isPlayingRef.current = true;
             setIsPlaying(true);
             const provider = settings.ttsProvider || 'free';
 
@@ -249,7 +279,7 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
                     // Single voice playback for summary and news-brief styles
                     console.log('Using single voice, provider:', provider);
                     if (provider === 'openai' && settings.openaiApiKey) {
-                        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+                        const response = await safeFetch('https://api.openai.com/v1/audio/speech', {
                             method: 'POST',
                             headers: {
                                 'Authorization': `Bearer ${settings.openaiApiKey}`,
@@ -267,17 +297,23 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
                         const audioBlob = await response.blob();
                         const audioUrl = URL.createObjectURL(audioBlob);
                         const audio = new Audio(audioUrl);
+                        currentAudioRef.current = audio;
 
                         await new Promise<void>((resolve) => {
                             audio.onended = () => {
+                                currentAudioRef.current = null;
                                 console.log('Audio ended');
                                 resolve();
                             };
                             audio.onerror = () => {
+                                currentAudioRef.current = null;
                                 console.error('Audio error');
                                 resolve();
                             };
-                            audio.play();
+                            audio.play().catch(() => {
+                                currentAudioRef.current = null;
+                                resolve();
+                            });
                         });
                     } else {
                         const language = settings.readAloudLanguage || 'en-US';
@@ -300,9 +336,11 @@ export default function AIPodcast({ articleTitle, articleContent, settings, onCl
                 }
 
                 console.log('Playback finished, setting isPlaying to false');
+                isPlayingRef.current = false;
                 setIsPlaying(false);
             } catch (e) {
                 console.error('TTS error:', e);
+                isPlayingRef.current = false;
                 setIsPlaying(false);
             }
         }

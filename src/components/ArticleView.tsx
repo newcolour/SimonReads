@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play, ArrowUp, Timer, Zap, Share2, Layers, Shield, Mic, Bug } from 'lucide-react';
+import { Loader, LogIn, X, Trash2, Globe, BookOpen, Brain, MessageCircle, Star, Volume2, Play, ArrowUp, Timer, Zap, Share2, Layers, Shield, Mic, Bug, ListPlus, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
 import { Article, AppSettings, Feed } from '../types';
+import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import { summarizeArticle } from '../summaryService';
 import { findRelatedArticles } from '../personalityUtils';
 import { usePersonalityConfig } from '../hooks/usePersonality';
@@ -54,7 +55,7 @@ const getPublicationStyle = (feedTitle: string, theme: string) => {
 
     // Default styles
     let style: React.CSSProperties = {
-        fontFamily: 'var(--font-serif)',
+        fontFamily: 'var(--app-font)',
         fontSize: '1.2em',
         fontWeight: 'bold',
         color: 'var(--text-primary)',
@@ -91,6 +92,8 @@ const getPublicationStyle = (feedTitle: string, theme: string) => {
 };
 
 export default function ArticleView({ article, feed, feeds = [], settings, allArticles = [], onClose, onDelete, onToggleSaved, onSelectArticle }: ArticleViewProps) {
+    const { addToQueue, queue, removeFromQueue } = useAudioPlayer();
+    const isAudioQueued = article?.enclosure ? queue.some(t => t.url === article.enclosure?.url) : false;
     const feedTitle = feed?.title || article?.feedTitle;
     const personalityConfig = usePersonalityConfig(settings.readingPersonality);
 
@@ -148,6 +151,10 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
     // Reset summary when article changes and restore reading position
     useEffect(() => {
         if (article && article.id !== currentArticleId) {
+            if (currentArticleId) {
+                ReadingStatsService.finishReading(currentArticleId, article.feedId);
+            }
+
             setSummary(null);
             setSummaryError(null);
             setCurrentArticleId(article.id);
@@ -178,7 +185,16 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                 });
             }
         }
-    }, [article?.id, article?.link]);
+    }, [article?.id, article?.link, article?.feedId]);
+
+    // Finish reading stats on unmount
+    useEffect(() => {
+        return () => {
+            if (article?.id) {
+                ReadingStatsService.finishReading(article.id, article.feedId);
+            }
+        };
+    }, [article?.id, article?.feedId]);
 
     // Track scroll position with debounce
     useEffect(() => {
@@ -1028,8 +1044,8 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
         }
 
         // Generate new summary
-        const contentToSummarize = article.content || article.contentSnippet || '';
-        if (!contentToSummarize) {
+        const contentToSummarize = fetchedContent || article.content || article.contentSnippet || article.title || '';
+        if (!contentToSummarize || contentToSummarize.trim().length === 0) {
             setSummaryError('No content available to summarize.');
             return;
         }
@@ -1083,6 +1099,22 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
             setIsSummarizing(false);
         }
     };
+
+    // Listen for regenerate-summary request from summary popup window
+    useEffect(() => {
+        const ipcRenderer = (window as any).ipcRenderer;
+        if (!ipcRenderer) return;
+
+        const handleRegenerate = () => {
+            console.log('ArticleView: Received trigger-regenerate-summary signal');
+            handleSummarize(true);
+        };
+
+        ipcRenderer.on('trigger-regenerate-summary', handleRegenerate);
+        return () => {
+            ipcRenderer.removeListener('trigger-regenerate-summary', handleRegenerate);
+        };
+    }, [article?.id, fetchedContent, settings, summaryMode]);
 
 
     const handleLogin = () => {
@@ -1509,6 +1541,31 @@ export default function ArticleView({ article, feed, feeds = [], settings, allAr
                         >
                             <Mic size={18} />
                         </button>
+                        {article?.enclosure && article.mediaType === 'audio' && (
+                            <button
+                                className={`action-btn ${isAudioQueued ? 'active' : ''}`}
+                                onClick={() => {
+                                    if (isAudioQueued) {
+                                        const idx = queue.findIndex(t => t.url === article.enclosure?.url);
+                                        if (idx >= 0) removeFromQueue(idx);
+                                    } else {
+                                        addToQueue({
+                                            url: article.enclosure!.url,
+                                            title: article.title,
+                                            artwork: article.image,
+                                            articleId: article.id,
+                                            duration: article.duration,
+                                            feedTitle: feedTitle || article.feedTitle
+                                        });
+                                    }
+                                }}
+                                data-tooltip={isAudioQueued ? "In Drive Time Queue (Click to remove)" : "Add to Drive Time Queue"}
+                                data-tooltip-align="right"
+                                style={{ color: isAudioQueued ? '#22c55e' : '#38bdf8' }}
+                            >
+                                {isAudioQueued ? <Check size={18} /> : <ListPlus size={18} />}
+                            </button>
+                        )}
                         <button
                             className="action-btn"
                             onClick={handleDebug}

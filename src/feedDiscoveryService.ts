@@ -165,7 +165,7 @@ IMPORTANT: Return ONLY the raw JSON array. Do not include markdown formatting (l
 
 async function suggestWithGemini(prompt: string, apiKey: string, settings: AppSettings): Promise<string> {
     if (!apiKey) throw new Error('Please set your Gemini API Key in Settings.');
-    const model = settings.geminiModel || 'gemini-1.5-flash';
+    const model = settings.geminiModel || 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const response = await safeFetch(url, {

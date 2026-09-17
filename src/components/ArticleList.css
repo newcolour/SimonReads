@@ -305,3 +305,33 @@
     flex-direction: column;
     gap: 0;
 }
+
+/* Article Audio Queue Button */
+.article-queue-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    margin-left: 6px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    color: #38bdf8;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    vertical-align: middle;
+}
+
+.article-queue-btn:hover {
+    background: rgba(56, 189, 248, 0.22);
+    border-color: #38bdf8;
+    transform: scale(1.03);
+}
+
+.article-queue-btn.queued {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #22c55e;
+}

@@ -1,4 +1,4 @@
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, ListPlus, Check } from 'lucide-react';
 import { useAudioPlayer, AudioTrack } from '../contexts/AudioPlayerContext';
 import './PodcastPlayer.css';
 
@@ -28,7 +28,22 @@ export default function PodcastPlayer({ url, type, title, duration, artwork, art
         toggleMute,
         skip,
         setPlaybackRate,
+        addToQueue,
+        queue,
     } = useAudioPlayer();
+
+    const isInQueue = queue.some(t => t.url === url);
+
+    const handleAddToQueue = () => {
+        const track: AudioTrack = {
+            url,
+            title,
+            artwork,
+            articleId,
+            duration,
+        };
+        addToQueue(track);
+    };
 
     // Check if this player's track is currently playing
     const isCurrentTrack = currentTrack?.url === url;
@@ -182,6 +197,14 @@ export default function PodcastPlayer({ url, type, title, duration, artwork, art
                         title="Playback speed"
                     >
                         {playbackRate}x
+                    </button>
+
+                    <button
+                        onClick={handleAddToQueue}
+                        className="control-btn"
+                        title={isInQueue ? 'In Drive Time Queue' : 'Add to Drive Time Queue'}
+                    >
+                        {isInQueue ? <Check size={20} style={{ color: '#22c55e' }} /> : <ListPlus size={20} />}
                     </button>
 
                     <div className="volume-control">

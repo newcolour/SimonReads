@@ -150,6 +150,9 @@ export interface NewsreelMetadata {
 // Known model context limits (in tokens)
 const MODEL_CONTEXT_LIMITS: Record<string, number> = {
     // Gemini models
+    'gemini-2.5-flash': 1000000,
+    'gemini-2.5-flash-lite': 1000000,
+    'gemini-2.5-pro': 2000000,
     'gemini-1.5-flash': 1000000,
     'gemini-1.5-flash-latest': 1000000,
     'gemini-1.5-flash-8b': 1000000,
@@ -157,6 +160,8 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
     'gemini-1.5-pro-latest': 2000000,
     'gemini-2.0-flash-exp': 1000000,
     'gemini-flash-latest': 1000000,
+    'gemma-4-26b-a4b-it': 131072,
+    'gemma-4-31b-it': 131072,
     // OpenAI models
     'gpt-4o': 128000,
     'gpt-4o-mini': 128000,

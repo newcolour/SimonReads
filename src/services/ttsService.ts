@@ -241,6 +241,7 @@ class TTSServiceClass {
             };
 
             audio.onerror = () => {
+                if (!this.isPlaying) return resolve();
                 // Skip errored segment
                 this.playElectronSegments(segments, index + 1, this.currentRate, onEnd, onError)
                     .then(resolve);
@@ -248,6 +249,7 @@ class TTSServiceClass {
 
             audio.play().catch((e) => {
                 console.error('Audio play error:', e);
+                if (!this.isPlaying) return resolve();
                 this.playElectronSegments(segments, index + 1, this.currentRate, onEnd, onError)
                     .then(resolve);
             });
@@ -428,7 +430,13 @@ class TTSServiceClass {
         }
 
         // Stop browser speech synthesis
-        window.speechSynthesis.cancel();
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
+            try {
+                window.speechSynthesis.cancel();
+            } catch (e) {
+                // Ignore
+            }
+        }
 
         // Stop native TTS
         if (this.isNative()) {
@@ -460,10 +468,13 @@ class TTSServiceClass {
             }
         } else {
             // Web Speech API voices
-            return window.speechSynthesis.getVoices().map(v => ({
-                name: v.name,
-                lang: v.lang
-            }));
+            if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
+                return window.speechSynthesis.getVoices().map(v => ({
+                    name: v.name,
+                    lang: v.lang
+                }));
+            }
+            return [{ name: 'Default', lang: 'en' }];
         }
     }
 }

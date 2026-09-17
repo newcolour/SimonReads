@@ -38,12 +38,13 @@ export function exportToJSON(feeds: Feed[]): string {
     return JSON.stringify(exportData, null, 2);
 }
 
-export async function downloadFile(content: string, filename: string, contentType: string) {
+export async function downloadFile(content: string | Blob, filename: string, contentType: string) {
     if (Capacitor.isNativePlatform()) {
         try {
+            const dataStr = typeof content === 'string' ? content : await content.text();
             await Filesystem.writeFile({
                 path: filename,
-                data: content,
+                data: dataStr,
                 directory: Directory.Documents,
                 encoding: Encoding.UTF8
             });
@@ -56,7 +57,7 @@ export async function downloadFile(content: string, filename: string, contentTyp
         return;
     }
 
-    const blob = new Blob([content], { type: contentType });
+    const blob = content instanceof Blob ? content : new Blob([content], { type: contentType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;

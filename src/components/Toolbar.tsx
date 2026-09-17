@@ -1,14 +1,14 @@
-import { Settings, RefreshCw, X, Download, Newspaper, Trash2, BarChart3, Activity } from 'lucide-react';
-import { useState } from 'react';
+import { Settings, RefreshCw, X, Download, Newspaper, Trash2, BarChart3, Activity, Sparkles, BookOpen, Gauge } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AppSettings, Feed, Article } from '../types';
 import { exportToOPML, exportToJSON, downloadFile } from '../exportService';
+import { downloadArticlesAsEpub } from '../services/epubService';
 import PersonalitySelector from './PersonalitySelector';
-import { syncService } from '../services/syncService';
 import { safeFetch } from '../utils/fetchUtils';
+import { applyFontSettings } from '../utils/fontUtils';
 import './Toolbar.css';
 
-import SyncSettings from './SyncSettings';
 import HelpSection from './HelpSection';
 import KeywordAlerts from './KeywordAlerts';
 import ReadingStatsView from './ReadingStats';
@@ -55,13 +55,14 @@ interface ToolbarProps {
     onShowTutorial?: () => void;
     hideButtons?: boolean;
     setOpenSettingsRef?: (fn: () => void) => void;
-    onDataRestored?: () => void;
+    onOpenAskLibrary?: () => void;
+    onOpenDriveMode?: () => void;
 }
 
-export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial, hideButtons, setOpenSettingsRef, onDataRestored }: ToolbarProps) {
+export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsChange, feeds, onOpenNewsreel, onOpenDailyNewsreel, selectedCount = 0, onClearAllData, onImportOPML, articles, onShowTutorial, hideButtons, setOpenSettingsRef, onOpenAskLibrary, onOpenDriveMode }: ToolbarProps) {
     const [showSettings, setShowSettings] = useState(false);
     const [tempSettings, setTempSettings] = useState(settings);
-    const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'personality' | 'ai' | 'email' | 'about' | 'sync' | 'help'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'personality' | 'ai' | 'email' | 'about' | 'help'>('general');
     const [geminiModels, setGeminiModels] = useState<string[]>([]);
     const [openaiModels, setOpenaiModels] = useState<string[]>([]);
     const [claudeModels, setClaudeModels] = useState<string[]>([]);
@@ -73,20 +74,8 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
     const [newsreelClaudeModels, setNewsreelClaudeModels] = useState<string[]>([]);
     const [newsreelOllamaModels, setNewsreelOllamaModels] = useState<string[]>([]);
     const [isLoadingNewsreelModels, setIsLoadingNewsreelModels] = useState(false);
-    const [isSyncConnected, setIsSyncConnected] = useState(false);
     const [showReadingStats, setShowReadingStats] = useState(false);
     const [showFeedHealth, setShowFeedHealth] = useState(false);
-
-    // Check sync status on mount
-    useState(() => {
-        const checkSync = async () => {
-            if (syncService.isInitialized()) {
-                const user = await syncService.getUser();
-                setIsSyncConnected(!!user);
-            }
-        };
-        checkSync();
-    });
 
     // Expose the openSettings function to parent
     const openSettings = () => {
@@ -102,13 +91,17 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
             originalTheme = isDark ? 'dark' : 'light';
         }
         document.documentElement.setAttribute('data-theme', originalTheme);
+        // Restore font settings (undo preview)
+        applyFontSettings(settings.font, settings.fontSize);
         setShowSettings(false);
     };
 
     // Call setOpenSettingsRef once on mount to pass the function up
-    if (setOpenSettingsRef) {
-        setOpenSettingsRef(openSettings);
-    }
+    useEffect(() => {
+        if (setOpenSettingsRef) {
+            setOpenSettingsRef(openSettings);
+        }
+    }, [setOpenSettingsRef]);
 
     const fetchModels = async (provider: 'gemini' | 'openai' | 'claude' | 'ollama') => {
         setIsLoadingModels(true);
@@ -213,7 +206,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                 if (ipcRenderer) {
                     models = await ipcRenderer.invoke('fetch-gemini-models', apiKey);
                 } else {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                    const response = await safeFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
                     if (!response.ok) throw new Error('Failed to fetch Gemini models');
                     const data = await response.json();
                     models = data.models
@@ -258,7 +251,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
             } else if (provider === 'ollama') {
                 const baseUrl = tempSettings.newsreelOllamaUrl || tempSettings.ollamaUrl || 'http://localhost:11434';
                 const cleanUrl = baseUrl.replace(/\/$/, '');
-                const response = await fetch(`${cleanUrl}/api/tags`);
+                const response = await safeFetch(`${cleanUrl}/api/tags`);
                 if (!response.ok) throw new Error('Failed to fetch Ollama models');
                 const data = await response.json();
                 models = data.models.map((m: any) => m.name);
@@ -377,6 +370,17 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
         downloadFile(json, 'simonreads_feeds.json', 'application/json');
     };
 
+    const handleExportEpub = async () => {
+        try {
+            const targetArticles = articles.filter(a => !a.isRead).length > 0
+                ? articles.filter(a => !a.isRead)
+                : articles;
+            await downloadArticlesAsEpub(targetArticles.slice(0, 50), 'SimonReads_Weekend_Edition');
+        } catch (e: any) {
+            alert('Failed to export EPUB: ' + (e?.message || e));
+        }
+    };
+
     const handleImportClick = () => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -493,25 +497,6 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                         AI
                     </button>
                     <button
-                        className={`tab-btn ${activeTab === 'sync' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('sync')}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                        Sync
-                        {isSyncConnected && (
-                            <div
-                                style={{
-                                    width: '8px',
-                                    height: '8px',
-                                    backgroundColor: '#10b981',
-                                    borderRadius: '50%',
-                                    boxShadow: '0 0 5px rgba(16, 185, 129, 0.5)'
-                                }}
-                                title="Sync Connected"
-                            />
-                        )}
-                    </button>
-                    <button
                         className={`tab-btn ${activeTab === 'help' ? 'active' : ''}`}
                         onClick={() => setActiveTab('help')}
                     >
@@ -577,6 +562,9 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                     </button>
                                     <button className="btn-secondary" onClick={handleExportJSON}>
                                         <Download size={14} /> Export JSON
+                                    </button>
+                                    <button className="btn-secondary" onClick={handleExportEpub} title="Export unread articles as an eBook for Kindle / e-reader">
+                                        <BookOpen size={14} /> Export EPUB (.epub)
                                     </button>
                                 </div>
                             </div>
@@ -670,7 +658,11 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 <label>Font</label>
                                 <select
                                     value={tempSettings.font}
-                                    onChange={e => setTempSettings({ ...tempSettings, font: e.target.value })}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        setTempSettings({ ...tempSettings, font: val });
+                                        applyFontSettings(val, tempSettings.fontSize);
+                                    }}
                                 >
                                     {FONTS.map(font => (
                                         <option key={font.value} value={font.value}>{font.label}</option>
@@ -681,7 +673,11 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                 <label>Font Size</label>
                                 <select
                                     value={tempSettings.fontSize || 'medium'}
-                                    onChange={e => setTempSettings({ ...tempSettings, fontSize: e.target.value as any })}
+                                    onChange={e => {
+                                        const val = e.target.value as any;
+                                        setTempSettings({ ...tempSettings, fontSize: val });
+                                        applyFontSettings(tempSettings.font, val);
+                                    }}
                                 >
                                     <option value="small">Small</option>
                                     <option value="medium">Medium</option>
@@ -761,7 +757,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                         <div style={{ display: 'flex', gap: '8px' }}>
                                             {geminiModels.length > 0 ? (
                                                 <select
-                                                    value={tempSettings.geminiModel || 'gemini-1.5-flash'}
+                                                    value={tempSettings.geminiModel || 'gemini-2.5-flash'}
                                                     onChange={e => setTempSettings({ ...tempSettings, geminiModel: e.target.value })}
                                                     className="api-key-input"
                                                     style={{ flex: 1 }}
@@ -773,9 +769,9 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                             ) : (
                                                 <input
                                                     type="text"
-                                                    value={tempSettings.geminiModel || 'gemini-1.5-flash'}
+                                                    value={tempSettings.geminiModel || 'gemini-2.5-flash'}
                                                     onChange={e => setTempSettings({ ...tempSettings, geminiModel: e.target.value })}
-                                                    placeholder="e.g. gemini-1.5-flash"
+                                                    placeholder="e.g. gemini-2.5-flash"
                                                     className="api-key-input"
                                                     style={{ flex: 1 }}
                                                 />
@@ -1161,7 +1157,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                                 <div style={{ display: 'flex', gap: '8px' }}>
                                                     {newsreelGeminiModels.length > 0 ? (
                                                         <select
-                                                            value={tempSettings.newsreelGeminiModel || 'gemini-1.5-flash'}
+                                                            value={tempSettings.newsreelGeminiModel || 'gemini-2.5-flash'}
                                                             onChange={e => setTempSettings({ ...tempSettings, newsreelGeminiModel: e.target.value })}
                                                             className="api-key-input"
                                                             style={{ flex: 1 }}
@@ -1173,9 +1169,9 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                                                     ) : (
                                                         <input
                                                             type="text"
-                                                            value={tempSettings.newsreelGeminiModel || 'gemini-1.5-flash'}
+                                                            value={tempSettings.newsreelGeminiModel || 'gemini-2.5-flash'}
                                                             onChange={e => setTempSettings({ ...tempSettings, newsreelGeminiModel: e.target.value })}
-                                                            placeholder="e.g. gemini-1.5-flash"
+                                                            placeholder="e.g. gemini-2.5-flash"
                                                             className="api-key-input"
                                                             style={{ flex: 1 }}
                                                         />
@@ -1510,17 +1506,7 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                     )}
 
 
-                    {activeTab === 'sync' && (
-                        <SyncSettings
-                            settings={tempSettings}
-                            feeds={feeds}
-                            articles={articles}
-                            onDataRestored={() => {
-                                if (onDataRestored) onDataRestored();
-                            }}
-                            onSyncStatusChange={setIsSyncConnected}
-                        />
-                    )}
+
 
                     {activeTab === 'about' && (
                         <div className="setting-group about">
@@ -1572,6 +1558,25 @@ export default function Toolbar({ onRefresh, isRefreshing, settings, onSettingsC
                 </div>
                 {!hideButtons && (
                     <div className="toolbar-right">
+                        {onOpenAskLibrary && (
+                            <button
+                                className="icon-btn ask-ai-btn"
+                                onClick={onOpenAskLibrary}
+                                data-tooltip="Ask My Library (Cmd+Shift+K)"
+                            >
+                                <Sparkles size={18} />
+                            </button>
+                        )}
+                        {onOpenDriveMode && (
+                            <button
+                                className="icon-btn drive-mode-btn"
+                                onClick={onOpenDriveMode}
+                                data-tooltip="Drive Time Audio Player"
+                                style={{ color: '#38bdf8' }}
+                            >
+                                <Gauge size={18} />
+                            </button>
+                        )}
                         {onOpenDailyNewsreel && (
                             <button
                                 className="newsreel-btn"

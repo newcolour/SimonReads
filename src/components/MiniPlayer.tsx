@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Play, Pause, X, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, X, SkipBack, SkipForward, Gauge } from 'lucide-react';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import './MiniPlayer.css';
 
@@ -17,6 +17,8 @@ export default function MiniPlayer({ onExpand }: MiniPlayerProps) {
         resume,
         stop,
         skip,
+        queue,
+        openDriveMode,
     } = useAudioPlayer();
 
     useEffect(() => {
@@ -53,7 +55,7 @@ export default function MiniPlayer({ onExpand }: MiniPlayerProps) {
 
             <div className="mini-player-content">
                 {/* Artwork */}
-                <div className="mini-player-artwork" onClick={onExpand}>
+                <div className="mini-player-artwork" onClick={openDriveMode || onExpand}>
                     {currentTrack.artwork ? (
                         <img src={currentTrack.artwork} alt="" />
                     ) : (
@@ -62,10 +64,11 @@ export default function MiniPlayer({ onExpand }: MiniPlayerProps) {
                 </div>
 
                 {/* Title and time */}
-                <div className="mini-player-info" onClick={onExpand}>
+                <div className="mini-player-info" onClick={openDriveMode || onExpand}>
                     <div className="mini-player-title">{currentTrack.title}</div>
                     <div className="mini-player-time">
                         {formatTime(currentTime)} / {formatTime(duration)}
+                        {queue.length > 1 && <span className="mini-player-queue-tag"> • {queue.length} in queue</span>}
                     </div>
                 </div>
 
@@ -93,6 +96,15 @@ export default function MiniPlayer({ onExpand }: MiniPlayerProps) {
                         aria-label="Forward 15 seconds"
                     >
                         <SkipForward size={18} />
+                    </button>
+
+                    <button
+                        className="mini-player-btn drive-mode-btn"
+                        onClick={openDriveMode}
+                        title="Open Drive Mode"
+                        aria-label="Drive Mode"
+                    >
+                        <Gauge size={18} />
                     </button>
 
                     <button

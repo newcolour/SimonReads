@@ -129,6 +129,20 @@
     color: white;
 }
 
+.mini-player-queue-tag {
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+.mini-player-btn.drive-mode-btn {
+    color: var(--accent-primary);
+}
+
+.mini-player-btn.drive-mode-btn:hover {
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--accent-hover);
+}
+
 .mini-player-btn.close {
     color: var(--text-muted);
 }

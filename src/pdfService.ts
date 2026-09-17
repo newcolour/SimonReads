@@ -712,7 +712,12 @@ function cleanMarkdownForNewsreel(str: string): string {
               .replace(/>/g, ''); 
 }
 
+function cleanEmojiForPDF(str: string): string {
+    return str.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '').trim();
+}
+
 interface NewsreelSection {
+    category?: string;
     title: string;
     content: string;
     sourceUrls: string[];
@@ -779,7 +784,20 @@ export async function generateNewsreelPDF(
         pdf.text('In This Edition:', margin, yPosition);
         yPosition += 8;
 
+        let lastTOCCategory: string | undefined = undefined;
         for (const section of sections) {
+            const cleanCategory = section.category ? cleanEmojiForPDF(section.category) : '';
+            if (cleanCategory && cleanCategory !== lastTOCCategory) {
+                lastTOCCategory = cleanCategory;
+                if (yPosition > pageHeight - 35) { pdf.addPage(); yPosition = 20; }
+                yPosition += 2;
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(12);
+                pdf.setTextColor(41, 128, 185); // elegant blue accent for category
+                pdf.text(cleanCategory.toUpperCase(), margin + 2, yPosition);
+                yPosition += 6;
+            }
+
             if (yPosition > pageHeight - 30) { pdf.addPage(); yPosition = 20; }
             pdf.setFont('helvetica', 'bold');
             pdf.setFontSize(11);
@@ -812,8 +830,30 @@ export async function generateNewsreelPDF(
         yPosition += 10;
 
         // ---- RENDER SECTIONS ----
+        let lastRenderedCategory: string | undefined = undefined;
         for (let idx = 0; idx < sections.length; idx++) {
             const section = sections[idx];
+            const cleanCategory = section.category ? cleanEmojiForPDF(section.category) : '';
+
+            // Render category banner if category changed
+            if (cleanCategory && cleanCategory !== lastRenderedCategory) {
+                lastRenderedCategory = cleanCategory;
+                if (yPosition > pageHeight - 50) {
+                    pdf.addPage();
+                    yPosition = 20;
+                } else if (yPosition > 25) {
+                    yPosition += 4;
+                }
+
+                // Category divider ribbon banner
+                pdf.setFillColor(30, 58, 82); // Sleek slate navy
+                pdf.rect(margin, yPosition, contentWidth, 8, 'F');
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(11);
+                pdf.setTextColor(255, 255, 255);
+                pdf.text(cleanCategory.toUpperCase(), margin + 4, yPosition + 5.5);
+                yPosition += 12;
+            }
             
             if (yPosition > pageHeight - 40) {
                 pdf.addPage();
@@ -1032,30 +1072,45 @@ export async function generateNewsreelPDF(
 
 function parseNewsreelSections(markdown: string): NewsreelSection[] {
     const sections: NewsreelSection[] = [];
+    const lines = markdown.split('\n');
 
-    // Split by ## headings
-    const parts = markdown.split(/^## /m);
+    let currentCategory: string | undefined = undefined;
+    let currentTitle: string | null = null;
+    let currentContentLines: string[] = [];
 
-    for (const part of parts) {
-        if (!part.trim()) continue;
-
-        const lines = part.split('\n');
-        const title = lines[0].trim();
-        const content = lines.slice(1).join('\n').trim();
-
-        // Extract source URLs from markdown links
-        const urlMatches = content.matchAll(/\]\((https?:\/\/[^\)]+)\)/g);
-        const sourceUrls: string[] = [];
-        for (const match of urlMatches) {
-            sourceUrls.push(match[1]);
+    const flushSection = () => {
+        if (currentTitle !== null) {
+            const content = currentContentLines.join('\n').trim();
+            const urlMatches = content.matchAll(/\]\((https?:\/\/[^\)]+)\)/g);
+            const sourceUrls: string[] = [];
+            for (const match of urlMatches) {
+                sourceUrls.push(match[1]);
+            }
+            sections.push({
+                category: currentCategory,
+                title: currentTitle,
+                content,
+                sourceUrls
+            });
+            currentTitle = null;
+            currentContentLines = [];
         }
+    };
 
-        sections.push({
-            title,
-            content,
-            sourceUrls
-        });
+    for (const line of lines) {
+        if (line.startsWith('# ') && !line.startsWith('## ')) {
+            flushSection();
+            currentCategory = line.replace(/^#\s+/, '').trim();
+        } else if (line.startsWith('## ')) {
+            flushSection();
+            currentTitle = line.replace(/^##\s+/, '').trim();
+        } else {
+            if (currentTitle !== null) {
+                currentContentLines.push(line);
+            }
+        }
     }
+    flushSection();
 
     return sections;
 }
