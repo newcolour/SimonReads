@@ -5,6 +5,7 @@ import { Feed, Article, AppSettings } from './types';
 const FEEDS_KEY = 'rss-reader-feeds';
 const ARTICLES_KEY = 'rss-reader-articles';
 const SETTINGS_KEY = 'rss-reader-settings';
+const SECTION_ORDER_KEY = 'rss-reader-section-order';
 
 // Safe ipcRenderer access - use lazy getter to ensure preload has run
 function getIpcRenderer() {
@@ -214,6 +215,15 @@ export const storage = {
 
     saveSettings(settings: AppSettings): void {
         setItem(SETTINGS_KEY, settings);
+    },
+
+    getSectionOrder(): string[] {
+        const order = getItem(SECTION_ORDER_KEY);
+        return Array.isArray(order) ? order : [];
+    },
+
+    saveSectionOrder(order: string[]): void {
+        setItem(SECTION_ORDER_KEY, order);
     },
 
     async loadAllDataAsync(): Promise<{ feeds: Feed[], articles: Article[], settings: AppSettings } | null> {

@@ -9,6 +9,7 @@ import { fetchRelatedArticles } from '../relatedArticlesService';
 import { TTSService, TTSController } from '../services/ttsService';
 import { getNewsreelState, subscribeToNewsreel, generateNewsreelInBackground, clearNewsreelCache } from '../services/newsreelService';
 import { scoreAndSortArticles, buildNewsreelScoringPrompt } from '../services/newsreelRankingService';
+import { cleanTextForTTS } from '../utils/ttsCleanUtils';
 import './Newsreel.css';
 
 interface NewsreelProps {
@@ -436,7 +437,7 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             return;
         }
 
-        const plainText = summary.replace(/[#*\[\]()]/g, '').replace(/\n+/g, ' ').trim();
+        const plainText = cleanTextForTTS(summary);
         if (!plainText) return;
 
         setIsReadingAloud(true);
@@ -503,6 +504,18 @@ export default function Newsreel({ articles, settings, onClose, onArticleClick, 
             const audio = new Audio(url);
             audio.playbackRate = playbackRate;
             audioRef.current = audio;
+
+            ttsControllerRef.current = {
+                pause: () => audio.pause(),
+                resume: () => audio.play().catch(e => console.warn('Audio resume error:', e)),
+                stop: () => {
+                    audio.pause();
+                    audioRef.current = null;
+                },
+                setRate: (rate: number) => {
+                    audio.playbackRate = rate;
+                }
+            };
 
             audio.onended = () => {
                 URL.revokeObjectURL(url);

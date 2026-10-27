@@ -656,32 +656,147 @@
     }
 }
 
-/* Category Styling */
+/* Sidebar Section & Drag & Drop Styling */
+.sidebar-section {
+    position: relative;
+    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.sidebar-section.dragging {
+    opacity: 0.35;
+    background: var(--bg-hover);
+    border-radius: 8px;
+}
+
+/* Glowing drop indicator lines */
+.sidebar-section.drop-target-before::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 8px;
+    right: 8px;
+    height: 3px;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    box-shadow: 0 0 10px var(--accent-primary);
+    z-index: 50;
+    pointer-events: none;
+    animation: dropLinePulse 1.2s infinite ease-in-out;
+}
+
+.sidebar-section.drop-target-after::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 8px;
+    right: 8px;
+    height: 3px;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    box-shadow: 0 0 10px var(--accent-primary);
+    z-index: 50;
+    pointer-events: none;
+    animation: dropLinePulse 1.2s infinite ease-in-out;
+}
+
+@keyframes dropLinePulse {
+    0%, 100% {
+        opacity: 0.85;
+        transform: scaleY(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scaleY(1.35);
+    }
+}
+
 .category-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 16px 6px 16px;
+    padding: 10px 12px 6px 12px;
     font-size: 0.75rem;
     font-weight: 700;
     color: var(--accent-primary);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    margin-top: 16px;
+    margin: 12px 4px 4px 4px;
+    border-radius: 6px;
     opacity: 0.9;
+    cursor: grab;
+    user-select: none;
+    position: relative;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.category-header:first-child {
-    margin-top: 0;
+.category-header:active {
+    cursor: grabbing;
+}
+
+.category-header:first-child,
+.smart-category-header {
+    margin-top: 4px;
 }
 
 .category-header:hover {
     background: var(--bg-hover);
+    opacity: 1;
+}
+
+.category-header.category-feed-drop-active {
+    background: var(--accent-light) !important;
+    color: var(--accent-primary) !important;
+    outline: 2px dashed var(--accent-primary);
+    outline-offset: -2px;
+}
+
+.category-header.collapsed {
+    opacity: 0.75;
+}
+
+.category-header svg:first-child {
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.section-drag-handle {
+    margin-left: auto;
+    color: var(--text-muted);
+    opacity: 0.35;
+    transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 4px;
     border-radius: 4px;
-    margin-left: 8px;
-    margin-right: 8px;
-    padding-left: 8px;
-    padding-right: 8px;
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.category-header:hover .section-drag-handle {
+    opacity: 0.85;
+}
+
+.section-drag-handle:hover {
+    opacity: 1 !important;
+    color: var(--accent-primary);
+    transform: scale(1.15);
+}
+
+.section-drag-handle:active {
+    cursor: grabbing;
+}
+
+.category-unread-count {
+    margin-left: auto;
+    margin-right: 6px;
+    position: static !important;
+    transform: none !important;
+}
+
+.feed-item.feed-dragging {
+    opacity: 0.35;
+    background: var(--bg-hover);
 }
 
 .category-rename-input {
@@ -705,7 +820,6 @@
     flex-direction: column;
     gap: 4px;
     min-width: 0;
-    /* Allow container to shrink */
     overflow: hidden;
 }
 
@@ -719,7 +833,6 @@
 .category-input {
     width: 100%;
     max-width: 180px;
-    /* Fixed max width for the input */
     background: var(--bg-primary);
     border: 1px solid var(--accent-primary);
     border-radius: 4px;
@@ -732,21 +845,6 @@
     outline: none;
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-}
-
-/* Collapsible Category Headers */
-.category-header {
-    cursor: pointer;
-    user-select: none;
-}
-
-.category-header.collapsed {
-    opacity: 0.7;
-}
-
-.category-header svg:first-child {
-    transition: transform 0.2s ease;
-    flex-shrink: 0;
 }
 
 /* ============================================
@@ -855,6 +953,16 @@
 }
 
 .sidebar.android .context-menu-item svg {
+    width: 18px;
+    height: 18px;
+}
+
+.sidebar.android .section-drag-handle {
+    opacity: 0.8;
+    padding: 6px;
+}
+
+.sidebar.android .section-drag-handle svg {
     width: 18px;
     height: 18px;
 }

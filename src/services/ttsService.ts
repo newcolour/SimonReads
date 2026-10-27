@@ -29,7 +29,9 @@ export interface TTSController {
 class TTSServiceClass {
     private currentAudio: HTMLAudioElement | null = null;
     private isPlaying: boolean = false;
+    private isPaused: boolean = false;
     private currentRate: number = 1.0;
+    private currentSessionId: number = 0;
 
     /**
      * Check if we're running on Electron
@@ -80,76 +82,86 @@ class TTSServiceClass {
     private async speakNative(
         text: string,
         language: string,
-        rate: number,
+        _rate: number,
         onEnd?: () => void,
         onError?: (error: Error) => void
     ): Promise<TTSController> {
+        const sessionId = ++this.currentSessionId;
         this.isPlaying = true;
+        this.isPaused = false;
         // Limit for Android TTS is often around 4000 chars. Use 3000 to be safe.
         const chunks = this.splitTextIntoChunks(text, 3000);
-        let active = true;
+        let currentChunkIndex = 0;
+        let isStopped = false;
 
-        // Process chunks sequentially
-        (async () => {
+        const runChunkLoop = async (startIndex: number) => {
             try {
-                for (let i = 0; i < chunks.length; i++) {
-                    if (!active || !this.isPlaying) break;
+                for (let i = startIndex; i < chunks.length; i++) {
+                    if (sessionId !== this.currentSessionId || !this.isPlaying || this.isPaused || isStopped) {
+                        return;
+                    }
+                    currentChunkIndex = i;
 
                     await TextToSpeech.speak({
                         text: chunks[i],
                         lang: language,
-                        rate: rate,
+                        rate: this.currentRate,
                         pitch: 1.0,
                         volume: 1.0,
                         category: 'playback',
                     });
                 }
 
-                if (active && this.isPlaying) {
+                if (sessionId === this.currentSessionId && this.isPlaying && !this.isPaused && !isStopped) {
                     this.isPlaying = false;
                     onEnd?.();
                 }
             } catch (error) {
-                if (active) {
+                if (sessionId === this.currentSessionId && !isStopped) {
                     this.isPlaying = false;
                     console.error('Native TTS error:', error);
                     onError?.(error instanceof Error ? error : new Error(String(error)));
                 }
             }
-        })();
+        };
+
+        // Start playing from beginning
+        runChunkLoop(0);
 
         return {
             pause: async () => {
-                // Capacitor TTS doesn't have pause, just stop
+                this.isPaused = true;
                 try {
-                    active = false;
                     await TextToSpeech.stop();
                 } catch (e) {
-                    console.warn('Failed to stop TTS:', e);
+                    console.warn('Failed to stop native TTS on pause:', e);
                 }
             },
             resume: () => {
-                // Not supported
-                console.warn('Resume not supported with native TTS');
+                if (this.isPaused && this.isPlaying && !isStopped) {
+                    this.isPaused = false;
+                    runChunkLoop(currentChunkIndex);
+                }
             },
             stop: async () => {
+                isStopped = true;
                 this.isPlaying = false;
-                active = false;
+                this.isPaused = false;
                 try {
                     await TextToSpeech.stop();
                 } catch (e) {
-                    console.warn('Failed to stop TTS:', e);
+                    console.warn('Failed to stop native TTS:', e);
                 }
             },
             setRate: (newRate: number) => {
                 this.currentRate = newRate;
-                // Rate change applies to next speak call/chunk
             }
         };
     }
 
     /**
-     * Electron TTS using google-tts-api via IPC
+     * Electron TTS using google-tts-api via IPC with streaming queue,
+     * instant pause/resume, and real-time playback speed control.
      */
     private async speakElectron(
         text: string,
@@ -163,45 +175,40 @@ class TTSServiceClass {
             throw new Error('IPC not available');
         }
 
+        const sessionId = ++this.currentSessionId;
         this.isPlaying = true;
+        this.isPaused = false;
+        this.currentRate = rate;
 
-        try {
-            // Split text into chunks for google-tts-api (max 200 chars per request)
-            const chunks = this.splitTextIntoChunks(text, 200);
-            const audioSegments: string[] = [];
+        // Split text into chunks for google-tts-api (max 200 chars per request)
+        const chunks = this.splitTextIntoChunks(text, 200);
+        const audioSegments: string[] = [];
+        let currentIndex = 0;
+        let isFetchingComplete = false;
 
-            // Fetch all audio segments
-            for (const chunk of chunks) {
-                const base64List: string[] = await ipcRenderer.invoke('fetch-tts', {
-                    text: chunk,
-                    lang: language
-                });
-                audioSegments.push(...base64List);
-            }
-
-            // Play segments sequentially
-            await this.playElectronSegments(audioSegments, 0, rate, onEnd, onError);
-        } catch (error) {
-            this.isPlaying = false;
-            throw error;
-        }
-
-        return {
+        const controller: TTSController = {
             pause: () => {
+                this.isPaused = true;
                 if (this.currentAudio) {
                     this.currentAudio.pause();
                 }
             },
             resume: () => {
+                this.isPaused = false;
                 if (this.currentAudio) {
-                    this.currentAudio.play();
+                    this.currentAudio.play().catch(e => console.warn('Audio resume error:', e));
+                } else if (this.isPlaying) {
+                    playNext();
                 }
             },
             stop: () => {
-                this.isPlaying = false;
-                if (this.currentAudio) {
-                    this.currentAudio.pause();
-                    this.currentAudio = null;
+                if (sessionId === this.currentSessionId) {
+                    this.isPlaying = false;
+                    this.isPaused = false;
+                    if (this.currentAudio) {
+                        this.currentAudio.pause();
+                        this.currentAudio = null;
+                    }
                 }
             },
             setRate: (newRate: number) => {
@@ -211,49 +218,102 @@ class TTSServiceClass {
                 }
             }
         };
-    }
 
-    /**
-     * Play audio segments from Electron TTS
-     */
-    private async playElectronSegments(
-        segments: string[],
-        index: number,
-        rate: number,
-        onEnd?: () => void,
-        onError?: (error: Error) => void
-    ): Promise<void> {
-        if (index >= segments.length || !this.isPlaying) {
-            this.isPlaying = false;
-            this.currentAudio = null;
-            onEnd?.();
-            return;
-        }
+        const playNext = () => {
+            if (sessionId !== this.currentSessionId || !this.isPlaying) {
+                return;
+            }
 
-        return new Promise((resolve) => {
-            const audio = new Audio(`data:audio/mp3;base64,${segments[index]}`);
-            audio.playbackRate = rate;
+            if (this.isPaused) {
+                return;
+            }
+
+            if (currentIndex >= audioSegments.length) {
+                if (isFetchingComplete) {
+                    this.isPlaying = false;
+                    this.currentAudio = null;
+                    onEnd?.();
+                }
+                return;
+            }
+
+            const segment = audioSegments[currentIndex];
+            currentIndex++;
+
+            const audio = new Audio(`data:audio/mp3;base64,${segment}`);
+            audio.playbackRate = this.currentRate;
             this.currentAudio = audio;
 
             audio.onended = () => {
-                this.playElectronSegments(segments, index + 1, this.currentRate, onEnd, onError)
-                    .then(resolve);
+                if (sessionId !== this.currentSessionId || !this.isPlaying) return;
+                this.currentAudio = null;
+                playNext();
             };
 
-            audio.onerror = () => {
-                if (!this.isPlaying) return resolve();
-                // Skip errored segment
-                this.playElectronSegments(segments, index + 1, this.currentRate, onEnd, onError)
-                    .then(resolve);
+            audio.onerror = (e) => {
+                console.warn('Audio segment error, skipping to next segment:', e);
+                if (sessionId !== this.currentSessionId || !this.isPlaying) return;
+                this.currentAudio = null;
+                playNext();
             };
 
-            audio.play().catch((e) => {
-                console.error('Audio play error:', e);
-                if (!this.isPlaying) return resolve();
-                this.playElectronSegments(segments, index + 1, this.currentRate, onEnd, onError)
-                    .then(resolve);
-            });
-        });
+            if (!this.isPaused) {
+                audio.play().catch((e) => {
+                    console.error('Audio play error:', e);
+                    if (sessionId !== this.currentSessionId || !this.isPlaying) return;
+                    this.currentAudio = null;
+                    playNext();
+                });
+            }
+        };
+
+        // Start fetching segments in background and begin playback as soon as first arrives
+        (async () => {
+            try {
+                for (let i = 0; i < chunks.length; i++) {
+                    if (sessionId !== this.currentSessionId || !this.isPlaying) {
+                        return;
+                    }
+
+                    const base64List: string[] = await ipcRenderer.invoke('fetch-tts', {
+                        text: chunks[i],
+                        lang: language
+                    });
+
+                    if (sessionId !== this.currentSessionId || !this.isPlaying) {
+                        return;
+                    }
+
+                    audioSegments.push(...base64List);
+
+                    // If not currently playing and not paused, kick off playback!
+                    if (!this.currentAudio && !this.isPaused) {
+                        playNext();
+                    }
+                }
+
+                isFetchingComplete = true;
+
+                // If finished fetching while no audio is playing
+                if (!this.currentAudio && !this.isPaused) {
+                    if (currentIndex < audioSegments.length) {
+                        playNext();
+                    } else if (currentIndex > 0) {
+                        this.isPlaying = false;
+                        onEnd?.();
+                    }
+                }
+            } catch (error) {
+                console.error('TTS fetch error:', error);
+                if (sessionId === this.currentSessionId) {
+                    this.isPlaying = false;
+                    onError?.(error instanceof Error ? error : new Error(String(error)));
+                }
+            }
+        })();
+
+        // Controller returned IMMEDIATELY so pause/resume/speed buttons work right away!
+        return controller;
     }
 
     /**
@@ -421,7 +481,9 @@ class TTSServiceClass {
      * Stop current TTS playback
      */
     async stopCurrent(): Promise<void> {
+        this.currentSessionId++;
         this.isPlaying = false;
+        this.isPaused = false;
 
         // Stop HTML5 Audio
         if (this.currentAudio) {

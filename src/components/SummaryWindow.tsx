@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AppSettings } from '../types';
 import { TTSService, TTSController } from '../services/ttsService';
+import { cleanTextForTTS } from '../utils/ttsCleanUtils';
 import '../index.css'; // Import theme variables
 import './SummaryWindow.css';
 
@@ -227,6 +228,18 @@ export default function SummaryWindow() {
         audio.playbackRate = playbackRate;
         audioRef.current = audio;
 
+        ttsControllerRef.current = {
+            pause: () => audio.pause(),
+            resume: () => audio.play().catch(e => console.warn('Audio resume error:', e)),
+            stop: () => {
+                audio.pause();
+                audioRef.current = null;
+            },
+            setRate: (rate: number) => {
+                audio.playbackRate = rate;
+            }
+        };
+
         audio.onended = () => {
             setIsReadingAloud(false);
             isReadingAloudRef.current = false;
@@ -283,7 +296,7 @@ export default function SummaryWindow() {
             return;
         }
 
-        const plainText = summaryData.summary.replace(/[#*\[\]()]/g, '').replace(/\n+/g, ' ').trim();
+        const plainText = cleanTextForTTS(summaryData.summary);
         if (!plainText) return;
 
         setIsReadingAloud(true);
