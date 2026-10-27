@@ -306,12 +306,88 @@ async function getRichArticleContent(article: Article): Promise<string> {
 }
 
 /**
+ * Detects whether a paragraph is pure conversational fluff, greeting, self-introduction,
+ * or meta-lead-in ("Ecco una sintesi...", "Dalle fonti disponibili emerge...")
+ */
+function isPreambleParagraph(para: string): boolean {
+    const trimmed = para.trim();
+    if (!trimmed) return true; // empty paragraph
+
+    // Markdown headers, bullet points, numbered lists, blockquotes, code blocks are substantive content
+    if (/^(#{1,6}\s|[-*+]\s|\d+\.\s|>|```)/.test(trimmed)) {
+        return false;
+    }
+
+    // Common greetings at start of paragraph
+    const greetingMatch = /^(?:ciao|salve|buongiorno|buonasera|hello|hi|hey)[!,\.\s]/i.test(trimmed);
+    const selfIntroMatch = /(?:sono|mi chiamo|i am|as an ai|in qualità di|in qualita di)\s+simonreads/i.test(trimmed);
+    const aiAssistantMatch = /simonreads\s+(?:library\s+ai|online\s+intelligence|ai\s+assistant|assistant)/i.test(trimmed);
+    const certMatch = /^(?:certamente|sicuramente|eccoci|certo|senza dubbio|sure|certainly|of course)[!,\.:\s]/i.test(trimmed);
+
+    if (greetingMatch || selfIntroMatch || aiAssistantMatch || certMatch) {
+        return true;
+    }
+
+    // Lead-ins / Meta-announcements like:
+    // "Dalle fonti disponibili, emerge un quadro..."
+    // "Ecco una sintesi completa e strutturata su..."
+    // "In base agli articoli trovati nella tua libreria, ecco l'analisi..."
+    // "Ecco cosa emerge dai feed:"
+    const leadInPattern = /^(?:dalle fonti(?: disponibili)?|in base a(?:gli|lle|i)?|sulla base d(?:i|elle|ei|agli)|dagli articoli(?: analizzati| disponibili| trovati)?|dall'analisi delle fonti|dall'analisi degli articoli|dai documenti disponibili|based on the (?:available )?sources|according to the (?:retrieved )?articles)[\s\S]*?(?:emerge|si evince|risulta|possiamo notare|mostra|tocca|evidenzia|delinea|ecco|di seguito|presento|riporto|trovi)/i;
+    const summaryAnnouncement = /^(?:ecco|di seguito|qui di seguito|ti presento|ti fornisco|ti propongo|here is|here are|below is)\s+(?:(?:un|una|il|la|i|le|l'|alcuni|alcune)?\s*(?:sintesi|riassunto|panoramica|quadro|analisi|approfondimento|resoconto|overview|summary|breakdown|dettagli|risposta)|cosa emerge|quanto emerge)[^:\n]*:?$/i;
+
+    if (leadInPattern.test(trimmed) || summaryAnnouncement.test(trimmed)) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Strips conversational preambles, greetings, self-introductions, and meta-filler
+ * so the answer goes directly to the substantive content.
+ */
+export function stripConversationalPreamble(text: string): string {
+    if (!text || typeof text !== 'string') return text;
+    let cleaned = text.trim();
+
+    // 1. Process paragraphs to eliminate leading preamble paragraphs
+    const paragraphs = cleaned.split(/\n\s*\n/);
+    let firstSubstantiveIdx = 0;
+
+    while (firstSubstantiveIdx < paragraphs.length) {
+        const para = paragraphs[firstSubstantiveIdx].trim();
+        if (isPreambleParagraph(para)) {
+            firstSubstantiveIdx++;
+        } else {
+            break;
+        }
+    }
+
+    if (firstSubstantiveIdx > 0 && firstSubstantiveIdx < paragraphs.length) {
+        cleaned = paragraphs.slice(firstSubstantiveIdx).join('\n\n').trim();
+    } else if (firstSubstantiveIdx >= paragraphs.length) {
+        // If everything was matched as preamble, fallback to original cleaned
+        cleaned = text.trim();
+    }
+
+    // 2. Strip any inline greeting / filler remaining at the start of the first paragraph
+    cleaned = cleaned
+        .replace(/^(?:(?:Ciao|Salve|Buongiorno|Buonasera|Hello|Hi|Hey|Certamente|Certainly|Sure)[!,\.\s]+)+(?:(?:Sono|Mi chiamo|I am)\s+SimonReads[^.!\n]*[.!\n]+)?\s*/i, '')
+        .replace(/^(?:(?:Ecco|Di seguito|Qui di seguito|Here is|Below is)\s+(?:un|una|il|la|i|le|l'|alcuni|alcune)?\s*(?:sintesi|riassunto|panoramica|quadro|analisi|approfondimento|overview|summary)[^:\n]*[:\.\n]+\s*)*/i, '')
+        .replace(/^---+\s*\n*/, '')
+        .trim();
+
+    return cleaned || text.trim();
+}
+
+/**
  * Unified AI call supporting Gemini, OpenAI, Claude, and Ollama
  */
 async function callAI(
     prompt: string,
     settings: AppSettings,
-    systemInstruction: string = 'You are SimonReads Library AI, an expert cross-source research analyst.'
+    systemInstruction: string = 'You are an expert research analyst. Deliver direct, high-density synthesis without conversational preambles, greetings, or self-introductions.'
 ): Promise<string> {
     const provider = settings.aiProvider || 'gemini';
 
@@ -357,7 +433,7 @@ async function callAI(
             fullText = parts.map((p: any) => p.text || '').join('');
         }
 
-        return fullText || 'Nessuna risposta generata da Gemini.';
+        return fullText ? stripConversationalPreamble(fullText) : 'Nessuna risposta generata da Gemini.';
     } else if (provider === 'openai') {
         const apiKey = settings.openaiApiKey;
         if (!apiKey) throw new Error('OpenAI API key is not configured in Settings → AI');
@@ -385,7 +461,8 @@ async function callAI(
             throw new Error(err.error?.message || 'OpenAI synthesis request failed');
         }
         const data = await response.json();
-        return data.choices?.[0]?.message?.content || 'Nessuna risposta generata da OpenAI.';
+        const content = data.choices?.[0]?.message?.content;
+        return content ? stripConversationalPreamble(content) : 'Nessuna risposta generata da OpenAI.';
     } else if (provider === 'claude') {
         const apiKey = settings.claudeApiKey;
         if (!apiKey) throw new Error('Claude API key is not configured in Settings → AI');
@@ -417,7 +494,7 @@ async function callAI(
             .filter((b: any) => b.type === 'text')
             .map((b: any) => b.text)
             .join('');
-        return textBlocks || 'Nessuna risposta generata da Claude.';
+        return textBlocks ? stripConversationalPreamble(textBlocks) : 'Nessuna risposta generata da Claude.';
     } else if (provider === 'ollama') {
         const baseUrl = (settings.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
         const model = settings.ollamaModel || 'llama3';
@@ -448,8 +525,8 @@ async function callAI(
         const content = data.message?.content?.trim();
         const thinking = data.message?.thinking?.trim();
 
-        if (content) return content;
-        if (thinking) return thinking;
+        if (content) return stripConversationalPreamble(content);
+        if (thinking) return stripConversationalPreamble(thinking);
 
         if (data.done_reason === 'length') {
             return 'Il modello Ollama ha raggiunto il limite massimo di lunghezza prima di completare la risposta.';
@@ -505,23 +582,29 @@ URL: ${article.link}
 Content: ${cleanContent}`;
     }).join('\n\n---\n\n');
 
-    const prompt = `You are SimonReads Library AI Assistant. You are analyzing articles from the user's personal RSS library to answer their question.
+    const prompt = `Analyze the following articles from the user's RSS library to answer their question directly.
 
 USER QUESTION: "${query}"
 
 AVAILABLE ARTICLES FROM LIBRARY:
 ${contextEntries}
 
-INSTRUCTIONS:
-1. Synthesize a comprehensive, authoritative, and well-structured answer in ${targetLanguage} (or match the language of the user question).
-2. Use citation markers [1], [2], [3] whenever referencing information from a specific source (matching [Source 1], [Source 2], etc.).
-3. Format with clean Markdown (bold headings, bullet points, executive takeaway).
-4. Highlight agreements or differing perspectives between different sources when applicable.
-5. If the articles do not contain complete information, state what is known from the library and note the gaps.
-6. Do NOT invent citations or references not provided in the articles above.
-7. Conclude your entire response completely without ending abruptly or leaving sections half-finished.`;
+CRITICAL RULES:
+1. NO GREETINGS OR PREAMBLE: Absolutely DO NOT include any greetings, self-introductions, polite pleasantries, or lead-in statements (e.g. NEVER say "Ciao!", "Sono SimonReads...", "Dalle fonti disponibili emerge...", "Ecco una sintesi...", "Certamente!"). Start DIRECTLY and IMMEDIATELY with the substantive answer or first Markdown section heading.
+2. Synthesize a comprehensive, authoritative, and well-structured answer in ${targetLanguage} (or match the language of the user question).
+3. Use citation markers [1], [2], [3] whenever referencing information from a specific source (matching [Source 1], [Source 2], etc.).
+4. Format with clean Markdown (bold headings, bullet points, executive takeaway).
+5. Highlight agreements or differing perspectives between different sources when applicable.
+6. If the articles do not contain complete information, state what is known from the library and note the gaps.
+7. Do NOT invent citations or references not provided in the articles above.
+8. Conclude your entire response completely without ending abruptly or leaving sections half-finished.`;
 
-    const answerText = await callAI(prompt, settings, 'You are SimonReads Library AI, an expert cross-source research analyst synthesising news and RSS content.');
+    const rawAnswer = await callAI(
+        prompt,
+        settings,
+        'You are an expert research analyst. Deliver direct, high-density synthesis without conversational preambles, greetings, or self-introductions.'
+    );
+    const answerText = stripConversationalPreamble(rawAnswer);
 
     return {
         answer: answerText,
@@ -585,8 +668,7 @@ ${rich}`;
         historyBlock = `PREVIOUS SYNTHESIS OVERVIEW:\n${previousAnswer.slice(0, 1500)}\n\n`;
     }
 
-    const prompt = `You are SimonReads Library AI Assistant conducting an investigative DEEP DIVE follow-up.
-The user is asking an in-depth question specifically about the news articles retrieved below.
+    const prompt = `Conduct an investigative DEEP DIVE follow-up answering the user's specific inquiry based on the news articles retrieved below.
 
 ${historyBlock}FOCUSED ARTICLES FOR THIS DEEP DIVE:
 ${articlesBlock}
@@ -594,16 +676,22 @@ ${articlesBlock}
 USER'S DEEP DIVE QUESTION:
 "${followUpQuery}"
 
-INVESTIGATIVE DEEP DIVE INSTRUCTIONS:
-1. Provide an exhaustive, detailed, and penetrating analysis specifically addressing the user's follow-up request.
-2. Unpack key details: specific figures, data points, quotes, chronological sequence, causes, context, and implications described in the articles.
-3. Reference the sources clearly using citation markers [1], [2], etc.
-4. Structure your response with clean Markdown headings, bullet points, and actionable insights.
-5. If the user asks about an angle not covered in the text, clearly distinguish between what the articles verify and what remains unmentioned.
-6. Conclude your entire deep dive analysis completely without ending abruptly or leaving sections half-finished.
-7. Respond in ${targetLanguage} (or in the language of the user's inquiry if Italian/English).`;
+CRITICAL RULES & INVESTIGATIVE INSTRUCTIONS:
+1. NO GREETINGS OR PREAMBLE: Absolutely DO NOT include any greetings, self-introductions, polite pleasantries, or lead-in statements (e.g. NEVER say "Ciao!", "Sono SimonReads...", "Ecco un approfondimento...", "Certamente!"). Start DIRECTLY and IMMEDIATELY with the substantive analysis or first Markdown section heading.
+2. Provide an exhaustive, detailed, and penetrating analysis specifically addressing the user's follow-up request.
+3. Unpack key details: specific figures, data points, quotes, chronological sequence, causes, context, and implications described in the articles.
+4. Reference the sources clearly using citation markers [1], [2], etc.
+5. Structure your response with clean Markdown headings, bullet points, and actionable insights.
+6. If the user asks about an angle not covered in the text, clearly distinguish between what the articles verify and what remains unmentioned.
+7. Conclude your entire deep dive analysis completely without ending abruptly or leaving sections half-finished.
+8. Respond in ${targetLanguage} (or in the language of the user's inquiry if Italian/English).`;
 
-    const answerText = await callAI(prompt, settings, 'You are SimonReads Library AI, an investigative journalist conducting deep dives on news stories.');
+    const rawAnswer = await callAI(
+        prompt,
+        settings,
+        'You are an investigative journalist. Deliver direct, high-density deep dives without conversational preambles, greetings, or self-introductions.'
+    );
+    const answerText = stripConversationalPreamble(rawAnswer);
 
     const retrievedItems: RetrievedArticle[] = articlesToUse.map((article, idx) => ({
         article,
@@ -728,8 +816,7 @@ Snippet: ${s.snippet}`).join('\n\n---\n\n');
         historyBlock = `PREVIOUS CONTEXT:\n${previousAnswer.slice(0, 1500)}\n\n`;
     }
 
-    const prompt = `You are SimonReads Online Intelligence Assistant.
-The user previously reviewed a news story from their RSS feeds and is now requesting an in-depth ONLINE DEEP DIVE using real-time web search results.
+    const prompt = `Conduct an in-depth ONLINE DEEP DIVE using real-time web search results to answer the user's specific inquiry.
 
 FOCUS NEWS TOPIC: "${targetArticle?.title || newsTopic}"
 ${historyBlock}
@@ -739,17 +826,23 @@ ${webSourcesBlock}
 USER'S ONLINE DEEP DIVE QUESTION:
 "${followUpQuery}"
 
-ONLINE INVESTIGATION INSTRUCTIONS:
-1. Provide an exhaustive, detailed, and up-to-date analysis answering the user's follow-up request.
-2. Unpack key details: specific figures, data points, quotes, chronological sequence, causes, context, and implications described in the online sources.
-3. Synthesize information from the live web sources above, connecting them with the original story context.
-4. Reference the online sources clearly using citation markers [1], [2], etc. matching [Web Source 1], [Web Source 2].
-5. Structure your response with clean Markdown headings, bullet points, and clear actionable takeaways.
-6. Clearly highlight what is newly reported or confirmed online versus remaining uncertainties.
-7. Conclude your entire response completely without ending abruptly or leaving sentences or sections unfinished.
-8. Respond in ${targetLanguage} (or match the user language).`;
+CRITICAL RULES & INVESTIGATION INSTRUCTIONS:
+1. NO GREETINGS OR PREAMBLE: Absolutely DO NOT include any greetings, self-introductions, polite pleasantries, or lead-in statements (e.g. NEVER say "Ciao!", "Sono SimonReads...", "Ecco quanto emerso dal web...", "Certamente!"). Start DIRECTLY and IMMEDIATELY with the substantive analysis or first Markdown section heading.
+2. Provide an exhaustive, detailed, and up-to-date analysis answering the user's follow-up request.
+3. Unpack key details: specific figures, data points, quotes, chronological sequence, causes, context, and implications described in the online sources.
+4. Synthesize information from the live web sources above, connecting them with the original story context.
+5. Reference the online sources clearly using citation markers [1], [2], etc. matching [Web Source 1], [Web Source 2].
+6. Structure your response with clean Markdown headings, bullet points, and clear actionable takeaways.
+7. Clearly highlight what is newly reported or confirmed online versus remaining uncertainties.
+8. Conclude your entire response completely without ending abruptly or leaving sentences or sections unfinished.
+9. Respond in ${targetLanguage} (or match the user language).`;
 
-    const answerText = await callAI(prompt, settings, 'You are SimonReads Online Intelligence Assistant, conducting live investigative web research.');
+    const rawAnswer = await callAI(
+        prompt,
+        settings,
+        'You are an investigative web intelligence analyst. Deliver direct, high-density analysis without conversational preambles, greetings, or self-introductions.'
+    );
+    const answerText = stripConversationalPreamble(rawAnswer);
 
     return {
         answer: answerText,
