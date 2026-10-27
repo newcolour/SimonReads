@@ -329,7 +329,7 @@ async function callAI(
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 generationConfig: {
                     temperature: 0.35,
-                    maxOutputTokens: 2500
+                    maxOutputTokens: 8192
                 }
             })
         });
@@ -339,7 +339,19 @@ async function callAI(
             throw new Error(err.error?.message || 'Gemini AI synthesis request failed');
         }
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
+        const candidate = data.candidates?.[0];
+        const parts = candidate?.content?.parts || [];
+        // Concatenate all text parts, filtering out thoughts/thinking tokens
+        const fullText = parts
+            .filter((p: any) => !p.thought && typeof p.text === 'string')
+            .map((p: any) => p.text)
+            .join('');
+
+        if (candidate?.finishReason === 'MAX_TOKENS') {
+            console.warn('Gemini reached MAX_TOKENS limit.');
+        }
+
+        return fullText || 'No response generated.';
     } else if (provider === 'openai') {
         const apiKey = settings.openaiApiKey;
         if (!apiKey) throw new Error('OpenAI API key is not configured in Settings → AI');
@@ -358,7 +370,7 @@ async function callAI(
                     { role: 'user', content: prompt }
                 ],
                 temperature: 0.35,
-                max_tokens: 2500
+                max_tokens: 4096
             })
         });
 
@@ -383,7 +395,7 @@ async function callAI(
             },
             body: JSON.stringify({
                 model,
-                max_tokens: 2500,
+                max_tokens: 4096,
                 temperature: 0.35,
                 system: systemInstruction,
                 messages: [{ role: 'user', content: prompt }]
@@ -395,7 +407,11 @@ async function callAI(
             throw new Error(err.error?.message || 'Claude synthesis request failed');
         }
         const data = await response.json();
-        return data.content?.[0]?.text || 'No response generated.';
+        const textBlocks = (data.content || [])
+            .filter((b: any) => b.type === 'text')
+            .map((b: any) => b.text)
+            .join('');
+        return textBlocks || 'No response generated.';
     } else if (provider === 'ollama') {
         const baseUrl = (settings.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
         const model = settings.ollamaModel || 'llama3';
@@ -406,6 +422,10 @@ async function callAI(
             body: JSON.stringify({
                 model,
                 stream: false,
+                options: {
+                    num_predict: 4096,
+                    temperature: 0.35
+                },
                 messages: [
                     { role: 'system', content: systemInstruction },
                     { role: 'user', content: prompt }
@@ -480,7 +500,8 @@ INSTRUCTIONS:
 3. Format with clean Markdown (bold headings, bullet points, executive takeaway).
 4. Highlight agreements or differing perspectives between different sources when applicable.
 5. If the articles do not contain complete information, state what is known from the library and note the gaps.
-6. Do NOT invent citations or references not provided in the articles above.`;
+6. Do NOT invent citations or references not provided in the articles above.
+7. Conclude your entire response completely without ending abruptly or leaving sections half-finished.`;
 
     const answerText = await callAI(prompt, settings, 'You are SimonReads Library AI, an expert cross-source research analyst synthesising news and RSS content.');
 
@@ -561,7 +582,8 @@ INVESTIGATIVE DEEP DIVE INSTRUCTIONS:
 3. Reference the sources clearly using citation markers [1], [2], etc.
 4. Structure your response with clean Markdown headings, bullet points, and actionable insights.
 5. If the user asks about an angle not covered in the text, clearly distinguish between what the articles verify and what remains unmentioned.
-6. Respond in ${targetLanguage} (or in the language of the user's inquiry if Italian/English).`;
+6. Conclude your entire deep dive analysis completely without ending abruptly or leaving sections half-finished.
+7. Respond in ${targetLanguage} (or in the language of the user's inquiry if Italian/English).`;
 
     const answerText = await callAI(prompt, settings, 'You are SimonReads Library AI, an investigative journalist conducting deep dives on news stories.');
 
@@ -706,7 +728,8 @@ ONLINE INVESTIGATION INSTRUCTIONS:
 4. Reference the online sources clearly using citation markers [1], [2], etc. matching [Web Source 1], [Web Source 2].
 5. Structure your response with clean Markdown headings, bullet points, and clear actionable takeaways.
 6. Clearly highlight what is newly reported or confirmed online versus remaining uncertainties.
-7. Respond in ${targetLanguage} (or match the user language).`;
+7. Conclude your entire response completely without ending abruptly or leaving sentences or sections unfinished.
+8. Respond in ${targetLanguage} (or match the user language).`;
 
     const answerText = await callAI(prompt, settings, 'You are SimonReads Online Intelligence Assistant, conducting live investigative web research.');
 
