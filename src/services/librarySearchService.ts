@@ -340,18 +340,24 @@ async function callAI(
         }
         const data = await response.json();
         const candidate = data.candidates?.[0];
+
+        if (candidate?.finishReason === 'SAFETY') {
+            return 'La risposta è stata bloccata dai filtri di sicurezza di Gemini.';
+        }
+
         const parts = candidate?.content?.parts || [];
         // Concatenate all text parts, filtering out thoughts/thinking tokens
-        const fullText = parts
+        let fullText = parts
             .filter((p: any) => !p.thought && typeof p.text === 'string')
             .map((p: any) => p.text)
             .join('');
 
-        if (candidate?.finishReason === 'MAX_TOKENS') {
-            console.warn('Gemini reached MAX_TOKENS limit.');
+        // Fallback: if fullText is empty, take any available text part
+        if (!fullText) {
+            fullText = parts.map((p: any) => p.text || '').join('');
         }
 
-        return fullText || 'No response generated.';
+        return fullText || 'Nessuna risposta generata da Gemini.';
     } else if (provider === 'openai') {
         const apiKey = settings.openaiApiKey;
         if (!apiKey) throw new Error('OpenAI API key is not configured in Settings → AI');
@@ -379,7 +385,7 @@ async function callAI(
             throw new Error(err.error?.message || 'OpenAI synthesis request failed');
         }
         const data = await response.json();
-        return data.choices?.[0]?.message?.content || 'No response generated.';
+        return data.choices?.[0]?.message?.content || 'Nessuna risposta generata da OpenAI.';
     } else if (provider === 'claude') {
         const apiKey = settings.claudeApiKey;
         if (!apiKey) throw new Error('Claude API key is not configured in Settings → AI');
@@ -411,7 +417,7 @@ async function callAI(
             .filter((b: any) => b.type === 'text')
             .map((b: any) => b.text)
             .join('');
-        return textBlocks || 'No response generated.';
+        return textBlocks || 'Nessuna risposta generata da Claude.';
     } else if (provider === 'ollama') {
         const baseUrl = (settings.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
         const model = settings.ollamaModel || 'llama3';
@@ -423,7 +429,8 @@ async function callAI(
                 model,
                 stream: false,
                 options: {
-                    num_predict: 4096,
+                    num_predict: -1, // Do not truncate output; allow full thinking and response
+                    num_ctx: 16384,  // Adequate context window for multi-article synthesis
                     temperature: 0.35
                 },
                 messages: [
@@ -434,10 +441,21 @@ async function callAI(
         });
 
         if (!response.ok) {
-            throw new Error(`Ollama request failed: ${response.status} ${response.statusText}`);
+            const err = await response.text().catch(() => '');
+            throw new Error(`Richiesta Ollama fallita (${response.status}): ${err || response.statusText}`);
         }
         const data = await response.json();
-        return data.message?.content || 'No response generated.';
+        const content = data.message?.content?.trim();
+        const thinking = data.message?.thinking?.trim();
+
+        if (content) return content;
+        if (thinking) return thinking;
+
+        if (data.done_reason === 'length') {
+            return 'Il modello Ollama ha raggiunto il limite massimo di lunghezza prima di completare la risposta.';
+        }
+
+        return 'Nessuna risposta generata dal modello Ollama.';
     }
 
     throw new Error(`Unsupported AI provider: ${provider}`);
@@ -477,7 +495,7 @@ export async function askLibraryAI(
             .replace(/<[^>]+>/g, ' ')
             .replace(/\s+/g, ' ')
             .trim()
-            .slice(0, 3000);
+            .slice(0, 1800);
 
         return `[Source ${index}]
 Title: ${article.title}
