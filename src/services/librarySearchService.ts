@@ -1,5 +1,6 @@
 import { Article, Feed, AppSettings } from '../types';
 import { safeFetch } from '../utils/fetchUtils';
+import { searchDuckDuckGo } from '../webSearchService';
 
 export interface LibraryQueryOptions {
     timeRange?: 'all' | 'last24h' | 'last7d' | 'last30d';
@@ -17,13 +18,23 @@ export interface RetrievedArticle {
     index: number;
 }
 
+export interface OnlineSource {
+    index: number;
+    title: string;
+    snippet: string;
+    url: string;
+    domain: string;
+}
+
 export interface LibraryAnswer {
     answer: string;
     retrievedArticles: RetrievedArticle[];
+    onlineSources?: OnlineSource[];
     query: string;
     generatedAt: string;
     provider: string;
     isFollowUp?: boolean;
+    isOnline?: boolean;
     targetArticleTitle?: string;
 }
 
@@ -33,6 +44,15 @@ export interface DeepDiveOptions {
     previousAnswer?: string;
     conversationHistory?: { role: 'user' | 'assistant'; text: string }[];
     specificArticleId?: string;
+}
+
+export interface OnlineDeepDiveOptions {
+    followUpQuery: string;
+    targetArticles: Article[];
+    previousAnswer?: string;
+    conversationHistory?: { role: 'user' | 'assistant'; text: string }[];
+    specificArticleId?: string;
+    initialQuery?: string;
 }
 
 const STOP_WORDS = new Set([
@@ -562,3 +582,144 @@ INVESTIGATIVE DEEP DIVE INSTRUCTIONS:
         targetArticleTitle
     };
 }
+
+function extractDomain(urlStr: string): string {
+    try {
+        const u = new URL(urlStr);
+        return u.hostname.replace(/^www\./, '');
+    } catch {
+        return 'web';
+    }
+}
+
+function cleanNewsTitle(title: string): string {
+    return title
+        .replace(/\s*[-–—|:]\s*(ANSA|Corriere|Repubblica|BBC|CNN|Reuters|Il Sole 24 Ore|Sky TG24|The Verge|TechCrunch|Wired|Sole 24 Ore|TGCOM24|La Stampa|HuffPost|Il Post|AGI).*$/i, '')
+        .replace(/\s*[-–—|]\s*[^–—|-]{2,25}$/, '')
+        .trim();
+}
+
+/**
+ * Conducts an in-depth follow-up investigation / Deep Dive searching online sources on the Web
+ */
+export async function onlineDeepDiveLibraryAI(
+    options: OnlineDeepDiveOptions,
+    settings: AppSettings
+): Promise<LibraryAnswer> {
+    const provider = settings.aiProvider || 'gemini';
+    const targetLanguage = settings.summaryLanguage || 'Italian';
+    const {
+        followUpQuery,
+        targetArticles = [],
+        previousAnswer,
+        conversationHistory,
+        specificArticleId,
+        initialQuery
+    } = options;
+
+    let targetArticle: Article | undefined;
+    if (specificArticleId && specificArticleId !== 'all') {
+        targetArticle = targetArticles.find(a => a.id === specificArticleId);
+    }
+    if (!targetArticle && targetArticles.length > 0) {
+        targetArticle = targetArticles[0];
+    }
+
+    const newsTopic = targetArticle ? cleanNewsTitle(targetArticle.title) : (initialQuery || '');
+    
+    // Construct focused search queries for web search
+    const cleanFollowUp = followUpQuery.replace(/[?!.]/g, '').trim();
+    const primarySearchQuery = newsTopic ? `${newsTopic} ${cleanFollowUp}`.slice(0, 160) : cleanFollowUp;
+
+    let webResults = await searchDuckDuckGo(primarySearchQuery, 6);
+
+    // Fallback search strategies if initial web query returns few or no results
+    if (webResults.length < 2 && newsTopic) {
+        const fallbackResults = await searchDuckDuckGo(newsTopic, 5);
+        if (fallbackResults.length > 0) {
+            webResults = [...webResults, ...fallbackResults];
+        }
+    }
+    if (webResults.length === 0 && cleanFollowUp) {
+        webResults = await searchDuckDuckGo(cleanFollowUp, 5);
+    }
+
+    // Deduplicate results by URL
+    const seenUrls = new Set<string>();
+    const uniqueResults = webResults.filter(r => {
+        if (!r.url || seenUrls.has(r.url)) return false;
+        seenUrls.add(r.url);
+        return true;
+    }).slice(0, 6);
+
+    const onlineSources: OnlineSource[] = uniqueResults.map((r, idx) => ({
+        index: idx + 1,
+        title: r.title,
+        snippet: r.snippet,
+        url: r.url,
+        domain: extractDomain(r.url)
+    }));
+
+    if (onlineSources.length === 0) {
+        return {
+            answer: `Non è stato possibile reperire fonti web pertinenti in questo momento per "${followUpQuery}". Prova a riformulare la richiesta o a verificare la connessione di rete.`,
+            retrievedArticles: [],
+            onlineSources: [],
+            query: followUpQuery,
+            generatedAt: new Date().toISOString(),
+            provider,
+            isFollowUp: true,
+            isOnline: true,
+            targetArticleTitle: targetArticle?.title
+        };
+    }
+
+    const webSourcesBlock = onlineSources.map(s => `[Web Source ${s.index}]
+Title: ${s.title}
+Domain: ${s.domain}
+URL: ${s.url}
+Snippet: ${s.snippet}`).join('\n\n---\n\n');
+
+    let historyBlock = '';
+    if (conversationHistory && conversationHistory.length > 0) {
+        historyBlock = 'PREVIOUS CONVERSATION CONTEXT:\n' +
+            conversationHistory.slice(-4).map(h => `${h.role.toUpperCase()}: ${h.text}`).join('\n\n') + '\n\n';
+    } else if (previousAnswer) {
+        historyBlock = `PREVIOUS CONTEXT:\n${previousAnswer.slice(0, 1500)}\n\n`;
+    }
+
+    const prompt = `You are SimonReads Online Intelligence Assistant.
+The user previously reviewed a news story from their RSS feeds and is now requesting an in-depth ONLINE DEEP DIVE using real-time web search results.
+
+FOCUS NEWS TOPIC: "${targetArticle?.title || newsTopic}"
+${historyBlock}
+LIVE WEB SEARCH RESULTS:
+${webSourcesBlock}
+
+USER'S ONLINE DEEP DIVE QUESTION:
+"${followUpQuery}"
+
+ONLINE INVESTIGATION INSTRUCTIONS:
+1. Provide an exhaustive, detailed, and up-to-date analysis answering the user's follow-up request.
+2. Unpack key details: specific figures, data points, quotes, chronological sequence, causes, context, and implications described in the online sources.
+3. Synthesize information from the live web sources above, connecting them with the original story context.
+4. Reference the online sources clearly using citation markers [1], [2], etc. matching [Web Source 1], [Web Source 2].
+5. Structure your response with clean Markdown headings, bullet points, and clear actionable takeaways.
+6. Clearly highlight what is newly reported or confirmed online versus remaining uncertainties.
+7. Respond in ${targetLanguage} (or match the user language).`;
+
+    const answerText = await callAI(prompt, settings, 'You are SimonReads Online Intelligence Assistant, conducting live investigative web research.');
+
+    return {
+        answer: answerText,
+        retrievedArticles: [],
+        onlineSources,
+        query: followUpQuery,
+        generatedAt: new Date().toISOString(),
+        provider,
+        isFollowUp: true,
+        isOnline: true,
+        targetArticleTitle: targetArticle?.title
+    };
+}
+

@@ -4,16 +4,19 @@ import remarkGfm from 'remark-gfm';
 import {
     Sparkles, X, Search, Clock, Bookmark, Filter, Copy, Check,
     ExternalLink, RefreshCw, AlertCircle, FileText, Target,
-    RotateCcw, Globe, Compass, CornerDownRight
+    RotateCcw, Globe, CornerDownRight, Layers, Compass
 } from 'lucide-react';
 import { Article, Feed, AppSettings } from '../types';
 import {
     askLibraryAI,
     deepDiveLibraryAI,
+    onlineDeepDiveLibraryAI,
     RetrievedArticle,
+    OnlineSource,
     LibraryQueryOptions
 } from '../services/librarySearchService';
 import { downloadFile } from '../exportService';
+import { openExternalUrl } from '../utils/platform';
 import './AskLibrary.css';
 
 interface AskLibraryProps {
@@ -24,12 +27,15 @@ interface AskLibraryProps {
     onSelectArticle: (article: Article) => void;
 }
 
+export type SearchMode = 'follow_up' | 'online_deep_dive' | 'new_topic';
+
 export interface ChatTurn {
     id: string;
-    type: 'global_search' | 'deep_dive';
+    type: 'global_search' | 'deep_dive' | 'online_deep_dive';
     query: string;
     answer: string;
     retrievedArticles: RetrievedArticle[];
+    onlineSources?: OnlineSource[];
     targetTitle?: string;
     provider: string;
     timestamp: string;
@@ -56,7 +62,7 @@ export default function AskLibrary({
     
     // Conversation turns
     const [turns, setTurns] = useState<ChatTurn[]>([]);
-    const [activeMode, setActiveMode] = useState<'follow_up' | 'new_topic'>('new_topic');
+    const [activeMode, setActiveMode] = useState<SearchMode>('new_topic');
     const [selectedArticleId, setSelectedArticleId] = useState<string>('all');
     
     const [isLoading, setIsLoading] = useState(false);
@@ -82,11 +88,12 @@ export default function AskLibrary({
         inputRef.current?.focus();
     }, [activeMode]);
 
-    // The most recent sources available for follow-up
+    // Find the most recent turn that contained retrieved library articles for anchoring follow-ups
+    const lastTurnWithArticles = [...turns].reverse().find(t => t.retrievedArticles && t.retrievedArticles.length > 0);
+    const availableSources = lastTurnWithArticles?.retrievedArticles || [];
     const latestTurn = turns.length > 0 ? turns[turns.length - 1] : null;
-    const availableSources = latestTurn?.retrievedArticles || [];
 
-    const handleSearch = async (forcedQuery?: string, forcedMode?: 'follow_up' | 'new_topic') => {
+    const handleSearch = async (forcedQuery?: string, forcedMode?: SearchMode) => {
         const textToSearch = (forcedQuery !== undefined ? forcedQuery : query).trim();
         if (!textToSearch) return;
 
@@ -97,12 +104,53 @@ export default function AskLibrary({
         setQuery('');
 
         try {
-            if (modeToUse === 'follow_up' && latestTurn && availableSources.length > 0) {
-                // Execute Follow-up / Deep Dive on specific news
+            if (modeToUse === 'online_deep_dive' && turns.length > 0) {
+                // Execute Online Deep Dive on the web
+                setLoadingMessage(
+                    selectedArticleId !== 'all'
+                        ? 'Ricerca online e analisi approfondita sul Web...'
+                        : 'Ricerca fonti web aggiornate e sintesi online in corso...'
+                );
+
+                const targetArticlesList = availableSources.map(s => s.article);
+                const conversationHistory = turns.flatMap(t => [
+                    { role: 'user' as const, text: t.query },
+                    { role: 'assistant' as const, text: t.answer }
+                ]);
+                const initialQuery = turns[0]?.query || '';
+
+                const onlineResult = await onlineDeepDiveLibraryAI(
+                    {
+                        followUpQuery: textToSearch,
+                        targetArticles: targetArticlesList,
+                        previousAnswer: latestTurn?.answer,
+                        conversationHistory,
+                        specificArticleId: selectedArticleId !== 'all' ? selectedArticleId : undefined,
+                        initialQuery
+                    },
+                    settings
+                );
+
+                const newTurn: ChatTurn = {
+                    id: 'turn-' + Date.now(),
+                    type: 'online_deep_dive',
+                    query: textToSearch,
+                    answer: onlineResult.answer,
+                    retrievedArticles: [],
+                    onlineSources: onlineResult.onlineSources || [],
+                    targetTitle: onlineResult.targetArticleTitle,
+                    provider: onlineResult.provider,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+
+                setTurns(prev => [...prev, newTurn]);
+                setActiveMode('online_deep_dive');
+            } else if (modeToUse === 'follow_up' && turns.length > 0 && availableSources.length > 0) {
+                // Execute Follow-up / Deep Dive on specific library news
                 setLoadingMessage(
                     selectedArticleId !== 'all'
                         ? 'Analisi approfondita (Deep Dive) sulla notizia selezionata...'
-                        : 'Elaborazione del follow-up e deep dive sulle fonti collegate...'
+                        : 'Elaborazione del follow-up e deep dive sulle fonti della libreria...'
                 );
 
                 const targetArticlesList = availableSources.map(s => s.article);
@@ -115,7 +163,7 @@ export default function AskLibrary({
                     {
                         followUpQuery: textToSearch,
                         targetArticles: targetArticlesList,
-                        previousAnswer: latestTurn.answer,
+                        previousAnswer: latestTurn?.answer,
                         conversationHistory,
                         specificArticleId: selectedArticleId !== 'all' ? selectedArticleId : undefined
                     },
@@ -159,13 +207,13 @@ export default function AskLibrary({
                 };
 
                 setTurns(prev => [...prev, newTurn]);
-                // Switch to follow-up mode by default after answering!
+                // Default to follow-up mode once initial search completes
                 setActiveMode('follow_up');
                 setSelectedArticleId('all');
             }
         } catch (err: any) {
             console.error('AskLibrary error:', err);
-            setError(err?.message || 'Analisi degli articoli fallita. Verifica le impostazioni dell\'API AI.');
+            setError(err?.message || 'Analisi fallita. Verifica la connessione di rete e le impostazioni dell\'API AI.');
         } finally {
             setIsLoading(false);
         }
@@ -181,6 +229,14 @@ export default function AskLibrary({
     const handleQuickDeepDiveOnSource = (article: Article) => {
         setSelectedArticleId(article.id);
         setActiveMode('follow_up');
+        setQuery(`Approfondisci i dettagli chiave e le cause di "${article.title.slice(0, 50)}"`);
+        inputRef.current?.focus();
+    };
+
+    const handleQuickOnlineDeepDiveOnSource = (article: Article) => {
+        setSelectedArticleId(article.id);
+        setActiveMode('online_deep_dive');
+        setQuery(`Quali sono gli ultimi sviluppi e approfondimenti online su "${article.title.slice(0, 50)}"?`);
         inputRef.current?.focus();
     };
 
@@ -195,9 +251,15 @@ export default function AskLibrary({
 
     const handleCopy = async (turn: ChatTurn) => {
         let text = `# ${turn.query}\n\n${turn.answer}\n\n## Fonti citate\n`;
-        turn.retrievedArticles.forEach(item => {
-            text += `[${item.index}] ${item.article.title} (${item.article.link})\n`;
-        });
+        if (turn.onlineSources && turn.onlineSources.length > 0) {
+            turn.onlineSources.forEach(s => {
+                text += `[${s.index}] ${s.title} (${s.url}) — ${s.domain}\n`;
+            });
+        } else {
+            turn.retrievedArticles.forEach(item => {
+                text += `[${item.index}] ${item.article.title} (${item.article.link})\n`;
+            });
+        }
 
         await navigator.clipboard.writeText(text);
         setCopiedTurnId(turn.id);
@@ -206,14 +268,26 @@ export default function AskLibrary({
 
     const handleExportMarkdown = (turn: ChatTurn) => {
         const today = new Date().toISOString().split('T')[0];
-        let md = `# SimonReads Library AI: ${turn.query}\n`;
-        md += `*Tipo: ${turn.type === 'deep_dive' ? 'Deep Dive Follow-up' : 'Ricerca Globale'} | Generato il ${today} (${turn.provider.toUpperCase()})*\n\n`;
+        const typeLabel = turn.type === 'online_deep_dive'
+            ? 'Approfondimento Online (Web)'
+            : turn.type === 'deep_dive'
+                ? 'Deep Dive Follow-up (Libreria)'
+                : 'Ricerca Globale (Libreria)';
+
+        let md = `# SimonReads AI: ${turn.query}\n`;
+        md += `*Tipo: ${typeLabel} | Generato il ${today} (${turn.provider.toUpperCase()})*\n\n`;
         if (turn.targetTitle) {
             md += `> **Focus notizia:** ${turn.targetTitle}\n\n`;
         }
         md += `## Sintesi / Risposta\n\n${turn.answer}\n\n`;
-        if (turn.retrievedArticles.length > 0) {
-            md += `## Fonti Citate\n\n`;
+
+        if (turn.onlineSources && turn.onlineSources.length > 0) {
+            md += `## Fonti Web Citate\n\n`;
+            turn.onlineSources.forEach(s => {
+                md += `- **[${s.index}]** [${s.title}](${s.url}) — *${s.domain}*\n`;
+            });
+        } else if (turn.retrievedArticles.length > 0) {
+            md += `## Fonti Libreria Citate\n\n`;
             turn.retrievedArticles.forEach(item => {
                 const source = item.article.feedTitle || item.article.creator || 'RSS';
                 md += `- **[${item.index}]** [${item.article.title}](${item.article.link}) — *${source}*\n`;
@@ -221,7 +295,7 @@ export default function AskLibrary({
         }
 
         const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
-        downloadFile(blob, `SimonReads_Library_${today}.md`, 'text/markdown');
+        downloadFile(blob, `SimonReads_Research_${today}.md`, 'text/markdown');
     };
 
     return (
@@ -343,15 +417,21 @@ export default function AskLibrary({
                                     {/* User Question Bubble */}
                                     <div className="turn-user-box">
                                         <div className="turn-header-line">
-                                            {turn.type === 'deep_dive' ? (
+                                            {turn.type === 'online_deep_dive' ? (
+                                                <span className="mode-badge online-deep-dive">
+                                                    <Globe size={13} />
+                                                    Approfondimento Online (Web)
+                                                    {turn.targetTitle && ` • ${turn.targetTitle.slice(0, 35)}...`}
+                                                </span>
+                                            ) : turn.type === 'deep_dive' ? (
                                                 <span className="mode-badge deep-dive">
                                                     <Target size={13} />
-                                                    Deep Dive
-                                                    {turn.targetTitle && ` • ${turn.targetTitle.slice(0, 40)}...`}
+                                                    Deep Dive Libreria
+                                                    {turn.targetTitle && ` • ${turn.targetTitle.slice(0, 35)}...`}
                                                 </span>
                                             ) : (
                                                 <span className="mode-badge global">
-                                                    <Globe size={13} />
+                                                    <Layers size={13} />
                                                     Ricerca Globale
                                                 </span>
                                             )}
@@ -393,12 +473,48 @@ export default function AskLibrary({
                                             </ReactMarkdown>
                                         </div>
 
-                                        {/* Cited Sources for this turn */}
-                                        {turn.retrievedArticles.length > 0 && (
+                                        {/* Web Sources for Online Deep Dive */}
+                                        {turn.onlineSources && turn.onlineSources.length > 0 && (
+                                            <div className="turn-sources-box online">
+                                                <div className="sources-header">
+                                                    <span>🌐 Fonti Web online ({turn.onlineSources.length})</span>
+                                                    <span className="sources-hint">Risultati verificati online • Clicca per aprire il link</span>
+                                                </div>
+                                                <div className="turn-sources-grid">
+                                                    {turn.onlineSources.map(source => (
+                                                        <div
+                                                            key={`${source.index}-${source.url}`}
+                                                            className="source-mini-card online-card"
+                                                            onClick={() => openExternalUrl(source.url)}
+                                                            title={`Apri ${source.url}`}
+                                                        >
+                                                            <div className="source-clickable-content">
+                                                                <span className="source-num online-num">[{source.index}]</span>
+                                                                <div className="source-texts">
+                                                                    <div className="source-title-row">
+                                                                        <h5 className="source-title">{source.title}</h5>
+                                                                        <ExternalLink size={13} className="ext-icon" />
+                                                                    </div>
+                                                                    <div className="source-sub">
+                                                                        <span className="online-domain-badge">{source.domain}</span>
+                                                                        {source.snippet && (
+                                                                            <span className="source-snippet-text"> • {source.snippet.slice(0, 95)}...</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Library Sources for Local Search / Local Deep Dive */}
+                                        {turn.retrievedArticles && turn.retrievedArticles.length > 0 && (
                                             <div className="turn-sources-box">
                                                 <div className="sources-header">
-                                                    <span>📚 Fonti collegate ({turn.retrievedArticles.length})</span>
-                                                    <span className="sources-hint">Clicca per aprire l'articolo o fai un Deep Dive mirato</span>
+                                                    <span>📚 Fonti libreria collegate ({turn.retrievedArticles.length})</span>
+                                                    <span className="sources-hint">Clicca per aprire l'articolo o approfondisci in locale o sul Web</span>
                                                 </div>
                                                 <div className="turn-sources-grid">
                                                     {turn.retrievedArticles.map(item => (
@@ -429,14 +545,24 @@ export default function AskLibrary({
                                                                 </div>
                                                             </div>
 
-                                                            <button
-                                                                className="source-deep-dive-btn"
-                                                                onClick={() => handleQuickDeepDiveOnSource(item.article)}
-                                                                title="Approfondisci specificamente questa notizia"
-                                                            >
-                                                                <Target size={13} />
-                                                                <span>Deep Dive</span>
-                                                            </button>
+                                                            <div className="source-actions-group">
+                                                                <button
+                                                                    className="source-deep-dive-btn"
+                                                                    onClick={() => handleQuickDeepDiveOnSource(item.article)}
+                                                                    title="Approfondisci questa notizia nella libreria"
+                                                                >
+                                                                    <Target size={13} />
+                                                                    <span>Deep Dive</span>
+                                                                </button>
+                                                                <button
+                                                                    className="source-online-dive-btn"
+                                                                    onClick={() => handleQuickOnlineDeepDiveOnSource(item.article)}
+                                                                    title="Cerca un approfondimento online sul Web per questa notizia"
+                                                                >
+                                                                    <Globe size={13} />
+                                                                    <span>Web Dive</span>
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -457,7 +583,7 @@ export default function AskLibrary({
                             </div>
                             <div className="loading-texts">
                                 <h4>{loadingMessage}</h4>
-                                <p>L'AI sta analizzando i contenuti della tua libreria...</p>
+                                <p>L'AI sta analizzando i contenuti...</p>
                             </div>
                         </div>
                     )}
@@ -480,30 +606,40 @@ export default function AskLibrary({
                     {turns.length > 0 && (
                         <div className="ask-mode-tabs">
                             <button
-                                className={`mode-tab-btn ${activeMode === 'follow_up' ? 'active' : ''}`}
+                                className={`mode-tab-btn mode-tab-followup ${activeMode === 'follow_up' ? 'active' : ''}`}
                                 onClick={() => setActiveMode('follow_up')}
                                 disabled={isLoading}
                             >
                                 <Target size={15} />
-                                <span>🎯 Follow-up / Deep Dive (notizia specifica)</span>
+                                <span>🎯 Deep Dive (Libreria)</span>
                             </button>
                             <button
-                                className={`mode-tab-btn ${activeMode === 'new_topic' ? 'active' : ''}`}
-                                onClick={() => setActiveMode('new_topic')}
+                                className={`mode-tab-btn mode-tab-online ${activeMode === 'online_deep_dive' ? 'active' : ''}`}
+                                onClick={() => setActiveMode('online_deep_dive')}
                                 disabled={isLoading}
                             >
                                 <Globe size={15} />
-                                <span>🌐 Nuovo argomento (ricerca globale)</span>
+                                <span>🌐 Approfondimento Online (Web)</span>
+                            </button>
+                            <button
+                                className={`mode-tab-btn mode-tab-newtopic ${activeMode === 'new_topic' ? 'active' : ''}`}
+                                onClick={() => setActiveMode('new_topic')}
+                                disabled={isLoading}
+                            >
+                                <Layers size={15} />
+                                <span>🔄 Nuovo argomento</span>
                             </button>
                         </div>
                     )}
 
-                    {/* Follow-up Target Selector (When in follow-up mode) */}
-                    {turns.length > 0 && activeMode === 'follow_up' && availableSources.length > 0 && (
-                        <div className="deep-dive-context-bar">
+                    {/* Follow-up / Online Target Selector */}
+                    {turns.length > 0 && (activeMode === 'follow_up' || activeMode === 'online_deep_dive') && availableSources.length > 0 && (
+                        <div className={`deep-dive-context-bar ${activeMode === 'online_deep_dive' ? 'online-bar' : ''}`}>
                             <span className="context-label">
                                 <CornerDownRight size={14} />
-                                <strong>Focus Deep Dive:</strong>
+                                <strong>
+                                    {activeMode === 'online_deep_dive' ? 'Notizia da approfondire online:' : 'Focus Deep Dive:'}
+                                </strong>
                             </span>
                             <select
                                 className="deep-dive-target-select"
@@ -526,7 +662,9 @@ export default function AskLibrary({
                     {/* Input Field and Action Button */}
                     <div className="ask-input-box">
                         <div className="input-icon-slot">
-                            {activeMode === 'follow_up' && turns.length > 0 ? (
+                            {activeMode === 'online_deep_dive' && turns.length > 0 ? (
+                                <Globe size={18} className="online-input-icon" />
+                            ) : activeMode === 'follow_up' && turns.length > 0 ? (
                                 <Target size={18} className="target-input-icon" />
                             ) : (
                                 <Search size={18} className="search-input-icon" />
@@ -539,21 +677,36 @@ export default function AskLibrary({
                             onChange={e => setQuery(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder={
-                                activeMode === 'follow_up' && turns.length > 0
+                                activeMode === 'online_deep_dive' && turns.length > 0
                                     ? selectedArticleId !== 'all'
-                                        ? "Fai un deep dive su questo articolo (es. 'Spiega le cause', 'Quali sono i dati chiave?')..."
-                                        : "Chiedi un approfondimento sulla notizia (es. 'Confronta i punti di vista', 'Cosa accadrà dopo?')..."
-                                    : "Fai una domanda sui tuoi feed (es. 'Novità sulla fusione nucleare', 'Cosa dicono i mercati?')..."
+                                        ? "Fai una domanda di approfondimento online su questa notizia (es. 'Cosa dicono i media internazionali?')..."
+                                        : "Chiedi un approfondimento online sul Web (es. 'Quali sono gli ultimi sviluppi oggi?')..."
+                                    : activeMode === 'follow_up' && turns.length > 0
+                                        ? selectedArticleId !== 'all'
+                                            ? "Fai un deep dive su questo articolo (es. 'Spiega le cause', 'Quali sono i dati chiave?')..."
+                                            : "Chiedi un approfondimento sulla notizia (es. 'Confronta i punti di vista', 'Cosa accadrà dopo?')..."
+                                        : "Fai una domanda sui tuoi feed (es. 'Novità sulla fusione nucleare', 'Cosa dicono i mercati?')..."
                             }
                             disabled={isLoading}
                         />
                         <button
-                            className={`ask-action-submit-btn ${activeMode === 'follow_up' && turns.length > 0 ? 'deep-dive-btn' : 'global-search-btn'}`}
+                            className={`ask-action-submit-btn ${
+                                activeMode === 'online_deep_dive' && turns.length > 0
+                                    ? 'online-dive-btn'
+                                    : activeMode === 'follow_up' && turns.length > 0
+                                        ? 'deep-dive-btn'
+                                        : 'global-search-btn'
+                            }`}
                             onClick={() => handleSearch()}
                             disabled={!query.trim() || isLoading}
                         >
                             {isLoading ? (
                                 <RefreshCw size={17} className="spin-icon" />
+                            ) : activeMode === 'online_deep_dive' && turns.length > 0 ? (
+                                <>
+                                    <Globe size={16} />
+                                    <span>Cerca Online</span>
+                                </>
                             ) : activeMode === 'follow_up' && turns.length > 0 ? (
                                 <>
                                     <Target size={16} />
